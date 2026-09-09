@@ -1,0 +1,469 @@
+schema_version: 1
+scope: v1_software_component_boundaries
+provenance: Specialist Step 04 Software / Solution Architect
+namespace:
+  python_import: dirty_data_to_olap
+  proposed_package_root: src/dirty_data_to_olap/
+  implementation_created_in_step04: false
+components:
+  - component_id: domain.contracts
+    name: Project-owned domain contracts
+    layer: domain/contracts
+    ownership: Dirty Data to OLAP
+    responsibilities: [stable IDs, provenance, evidence, decisions, canonical and analytical contract shapes]
+    input_contracts: [none]
+    output_contracts: [project-owned contracts]
+    depends_on: []
+    implemented_by: deferred to Step 05
+    side_effect_class: none
+    persistence_access: none
+    optional: false
+    failure_behavior: invalid contract is rejected before execution
+  - component_id: application.run_manager
+    name: Run Manager
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [create run, pin configuration, request resume, manage RunStatus]
+    input_contracts: [RunRequest, ResumeRequest]
+    output_contracts: [RunManifest, RunStatus]
+    depends_on: [application.stage_orchestrator, domain.contracts]
+    ports_used: [ControlStorePort, CapabilityRegistryPort]
+    implemented_by: deferred to Step 05
+    side_effect_class: control_metadata
+    persistence_access: ControlStorePort
+    optional: false
+    failure_behavior: explicit FAILED or BLOCKED state with retained evidence
+  - component_id: application.stage_orchestrator
+    name: Stage Orchestrator
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [resolve DAG, create attempts, checkpoint cancellation, coordinate stages]
+    input_contracts: [RunManifest, StageGraph]
+    output_contracts: [StageAttempt, RunTransition]
+    depends_on: [domain.contracts]
+    ports_used: [StageExecutorPort, ControlStorePort, ArtifactStorePort, CapabilityRegistryPort]
+    implemented_by: deferred to Step 05
+    side_effect_class: control_metadata
+    persistence_access: ControlStorePort and ArtifactStorePort through ports
+    optional: false
+    failure_behavior: preserve attempt evidence and apply lifecycle transition rules
+  - component_id: application.review_policy
+    name: Review and Policy Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [record decisions, validate replay compatibility, expose review state]
+    input_contracts: [ReviewDecision, CompatibilityContext]
+    output_contracts: [DecisionArtifact, ReviewStatus]
+    depends_on: [domain.contracts]
+    ports_used: [ControlStorePort, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: control_metadata
+    persistence_access: ControlStorePort and ArtifactStorePort through ports
+    optional: false
+    failure_behavior: incompatible replay becomes NEEDS_REVIEW
+  - component_id: application.source_registry
+    name: Source Registry
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [source metadata, inclusion rules, sampling policy, read-only profile references]
+    input_contracts: [SourceDescriptor, SourceSelection]
+    output_contracts: [SourceRegistryRecord]
+    depends_on: [domain.contracts]
+    ports_used: [ControlStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: control_metadata
+    persistence_access: ControlStorePort
+    optional: false
+    failure_behavior: invalid or unsafe source profile is rejected
+  - component_id: application.source_snapshot
+    name: Source Snapshot Coordinator
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [bounded snapshot coordination, immutable source references, staging requests]
+    input_contracts: [SourceSelection, SamplingPolicy]
+    output_contracts: [SourceSnapshot, BatchReference, SourceRecordReference]
+    depends_on: [application.source_registry, domain.contracts]
+    ports_used: [SourceAdapter, ArtifactStorePort, ControlStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: read_only_source_and_artifact
+    persistence_access: ArtifactStorePort and ControlStorePort through ports
+    optional: false
+    failure_behavior: access failure BLOCKED; extraction failure FAILED
+  - component_id: application.discovery
+    name: Source Discovery Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [catalog tables, columns, types and declared constraints]
+    input_contracts: [SourceSnapshot]
+    output_contracts: [SourceCatalog]
+    depends_on: [application.source_snapshot, domain.contracts]
+    ports_used: [SourceAdapter, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: stage FAILED without guessed catalog
+  - component_id: application.profiling
+    name: Profiling Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [profile columns and tables with observation scope]
+    input_contracts: [SourceCatalog, SourceSnapshot]
+    output_contracts: [ColumnProfile, TableProfile]
+    depends_on: [application.discovery, domain.contracts]
+    ports_used: [ProfilingAdapter, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: item failures preserved; stage NEEDS_REVIEW or FAILED
+  - component_id: application.dependency_discovery
+    name: Dependency Discovery Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [candidate keys, FDs, INDs and relationship hypotheses]
+    input_contracts: [SourceCatalog, ColumnProfile]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence]
+    depends_on: [application.discovery, domain.contracts]
+    ports_used: [DependencyDiscoveryAdapter, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: FAILED or NEEDS_REVIEW; never emits confirmed FK by default
+  - component_id: application.schema_matching
+    name: Schema Matching Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [generate ranked cross-source mapping candidates]
+    input_contracts: [SourceCatalog, ColumnProfile]
+    output_contracts: [SchemaMatchCandidate]
+    depends_on: [application.discovery, domain.contracts]
+    ports_used: [SchemaMatchingAdapter, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: explicit failure or conditional SKIPPED; no canonical mutation
+  - component_id: application.quality
+    name: Quality Analysis Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [classify observations, issues, repair proposals and quarantine requirements]
+    input_contracts: [SourceCatalog, ColumnProfile, DependencyEvidence]
+    output_contracts: [QualityIssue, RepairProposal]
+    depends_on: [application.discovery, application.profiling, domain.contracts]
+    ports_used: [ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: preserve issue evidence; unresolved semantics become NEEDS_REVIEW
+  - component_id: application.semantic_evidence
+    name: Optional Semantic Evidence Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [request bounded semantic suggestions and preserve provenance]
+    input_contracts: [SemanticEvidenceRequest]
+    output_contracts: [LLMEvidence]
+    depends_on: [domain.contracts]
+    ports_used: [OptionalSemanticEvidenceAdapter, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: external_optional_and_artifact
+    persistence_access: ArtifactStorePort
+    optional: true
+    failure_behavior: SKIPPED when optional and unavailable; BLOCKED when required
+  - component_id: application.evidence_fusion
+    name: Evidence Fusion Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [combine evidence, preserve conflicts, emit decisions and hypotheses]
+    input_contracts: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, LLMEvidence]
+    output_contracts: [RelationshipDecision, SemanticMappingDecision, Conflict]
+    depends_on: [application.profiling, application.dependency_discovery, application.schema_matching, application.quality, domain.contracts]
+    ports_used: [ArtifactStorePort, ControlStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort and ControlStorePort through ports
+    optional: false
+    failure_behavior: conflict remains REVIEW_REQUIRED; no score-as-truth
+  - component_id: application.canonical_hypotheses
+    name: Canonical Hypothesis Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [entity type hypotheses, attributes, identity candidates, ER specifications]
+    input_contracts: [RelationshipDecision, SemanticMappingDecision, DomainAssertion]
+    output_contracts: [CanonicalModelHypothesis, EntityResolutionSpec]
+    depends_on: [application.evidence_fusion, application.review_policy, domain.contracts]
+    ports_used: [ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: unresolved identity remains REVIEW_REQUIRED
+  - component_id: application.entity_resolution
+    name: Entity Resolution Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [run selected entity-family linkage and retain source mappings]
+    input_contracts: [EntityResolutionSpec, SourceRecordReference]
+    output_contracts: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    depends_on: [application.canonical_hypotheses, domain.contracts]
+    ports_used: [EntityResolutionAdapter, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: true
+    failure_behavior: affected family FAILED or NEEDS_REVIEW; no source deletion
+  - component_id: application.canonical_finalization
+    name: Canonical Finalization Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [accepted canonical instances, mappings, survivorship and conflicts]
+    input_contracts: [CanonicalModelHypothesis, EntityResolutionOutput, ReviewDecision]
+    output_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]
+    depends_on: [application.canonical_hypotheses, application.entity_resolution, application.review_policy, domain.contracts]
+    ports_used: [ArtifactStorePort, ControlStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort and ControlStorePort through ports
+    optional: false
+    failure_behavior: unresolved or conflicted identity remains NEEDS_REVIEW
+  - component_id: application.analytical_planner
+    name: Analytical Planner
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [facts, dimensions, grain, measures, keys and mappings]
+    input_contracts: [CanonicalModel, RelationshipDecision, DomainAssertion]
+    output_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
+    depends_on: [application.canonical_finalization, domain.contracts]
+    ports_used: [ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: ambiguous grain or semantics becomes NEEDS_REVIEW
+  - component_id: application.compiler
+    name: Compiler
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [compile approved analytical plan into execution artifacts]
+    input_contracts: [AnalyticalPlan, ReviewDecision]
+    output_contracts: [CompiledPlan, GeneratedSQL]
+    depends_on: [application.analytical_planner, application.review_policy, domain.contracts]
+    ports_used: [ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: compilation failure is FAILED; no execution occurs
+  - component_id: application.materializer
+    name: Materializer Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [execute approved compiled plan into controlled target]
+    input_contracts: [CompiledPlan, ReviewDecision]
+    output_contracts: [MaterializationArtifact]
+    depends_on: [application.compiler, application.review_policy, domain.contracts]
+    ports_used: [MaterializerPort, ArtifactStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: controlled_target_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: incomplete target is non-consumable and stage FAILED
+  - component_id: application.validation
+    name: Validation and Reconciliation Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [validate target, grain, relationships, measures and record accounting]
+    input_contracts: [AnalyticalPlan, MaterializationArtifact, RecordAccounting, Lineage]
+    output_contracts: [ValidationReport, ReconciliationResult]
+    depends_on: [application.materializer, application.analytical_planner, domain.contracts]
+    ports_used: [ArtifactStorePort, ControlStorePort]
+    implemented_by: deferred to Step 05
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort and ControlStorePort through ports
+    optional: false
+    failure_behavior: failed validation makes run FAILED and target non-accepted
+  - component_id: adapters.source
+    name: Source Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize SQL/file source behavior]
+    input_contracts: [SourceSelection]
+    output_contracts: [SourceDescriptor, SourceSnapshot, BatchReference]
+    depends_on: [domain.contracts]
+    extension_port: SourceAdapter
+    side_effect_class: read_only_source
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: explicit access/extraction failure
+  - component_id: adapters.profiling
+    name: Profiling Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize profiler output]
+    input_contracts: [ProfileRequest]
+    output_contracts: [ColumnProfile, TableProfile]
+    depends_on: [domain.contracts]
+    extension_port: ProfilingAdapter
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: explicit item/stage failure
+  - component_id: adapters.dependencies
+    name: Dependency Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize dependency engine evidence]
+    input_contracts: [DependencyRequest]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence]
+    depends_on: [domain.contracts]
+    extension_port: DependencyDiscoveryAdapter
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: explicit stage failure
+  - component_id: adapters.matching
+    name: Schema Matching Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize matcher candidates and raw score semantics]
+    input_contracts: [SchemaMatchRequest]
+    output_contracts: [SchemaMatchCandidate]
+    depends_on: [domain.contracts]
+    extension_port: SchemaMatchingAdapter
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: explicit failure or optional absence
+  - component_id: adapters.entity_resolution
+    name: Entity Resolution Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize linkage output]
+    input_contracts: [EntityResolutionSpec, SourceRecordReference]
+    output_contracts: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    depends_on: [domain.contracts]
+    extension_port: EntityResolutionAdapter
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: true
+    failure_behavior: affected family failure
+  - component_id: adapters.semantic
+    name: Semantic Evidence Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize optional provider evidence]
+    input_contracts: [SemanticEvidenceRequest]
+    output_contracts: [LLMEvidence]
+    depends_on: [domain.contracts]
+    extension_port: OptionalSemanticEvidenceAdapter
+    side_effect_class: optional_external
+    persistence_access: ArtifactStorePort
+    optional: true
+    failure_behavior: SKIPPED or BLOCKED according to plan
+  - component_id: adapters.materialization
+    name: Materialization Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize target-engine execution]
+    input_contracts: [CompiledPlan]
+    output_contracts: [MaterializationArtifact]
+    depends_on: [domain.contracts]
+    extension_port: MaterializerPort
+    side_effect_class: controlled_target_write
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: incomplete target and FAILED attempt
+  - component_id: persistence.control_store
+    name: Control Store Implementation Boundary
+    layer: persistence
+    ownership: infrastructure implementation
+    responsibilities: [persist control metadata behind repository port]
+    input_contracts: [ControlMetadata]
+    output_contracts: [ControlMetadata]
+    depends_on: [domain.contracts]
+    extension_port: ControlStorePort
+    side_effect_class: control_metadata
+    persistence_access: SQLite in V1; implementation deferred
+    optional: false
+    failure_behavior: transactional persistence failure
+  - component_id: persistence.artifact_store
+    name: Artifact Store Implementation Boundary
+    layer: persistence
+    ownership: infrastructure implementation
+    responsibilities: [persist and publish artifact-plane objects behind repository port]
+    input_contracts: [ArtifactEnvelope, ArtifactPayload]
+    output_contracts: [ArtifactReference]
+    depends_on: [domain.contracts]
+    extension_port: ArtifactStorePort
+    side_effect_class: artifact_write
+    persistence_access: project-local filesystem in V1; implementation deferred
+    optional: false
+    failure_behavior: non-consumable artifact and retained error
+  - component_id: runtime.stage_executor
+    name: Local Stage Executor Boundary
+    layer: runtime
+    ownership: infrastructure implementation
+    responsibilities: [execute heavy stages locally behind executor port]
+    input_contracts: [StageRequest]
+    output_contracts: [StageAttemptResult]
+    depends_on: [domain.contracts]
+    extension_port: StageExecutorPort
+    side_effect_class: controlled_process
+    persistence_access: ControlStorePort and ArtifactStorePort through ports
+    optional: false
+    failure_behavior: explicit attempt result
+  - component_id: runtime.capability_registry
+    name: Capability Registry Boundary
+    layer: runtime
+    ownership: infrastructure implementation
+    responsibilities: [detect versions, availability and contract support]
+    input_contracts: [CapabilityQuery]
+    output_contracts: [CapabilityRecord]
+    depends_on: [domain.contracts]
+    extension_port: CapabilityRegistryPort
+    side_effect_class: none
+    persistence_access: ControlStorePort through port
+    optional: false
+    failure_behavior: unavailable capability record, not import-time crash
+  - component_id: entrypoints.cli
+    name: CLI Entry Point
+    layer: entrypoints
+    ownership: transport boundary
+    responsibilities: [parse local commands and invoke application requests]
+    input_contracts: [CLIRequest]
+    output_contracts: [RunReference, StatusView]
+    depends_on: [application.run_manager, application.review_policy]
+    implemented_by: deferred to Step 05
+    side_effect_class: control_request
+    persistence_access: application services only
+    optional: false
+    failure_behavior: explicit command error
+  - component_id: entrypoints.api
+    name: API Entry Point
+    layer: entrypoints
+    ownership: transport boundary
+    responsibilities: [future API transport over application services]
+    input_contracts: [APIRequest]
+    output_contracts: [APIResponse]
+    depends_on: [application.run_manager, application.review_policy]
+    implemented_by: deferred to Step 05
+    side_effect_class: control_request
+    persistence_access: application services only
+    optional: true
+    failure_behavior: explicit transport/application error
+  - component_id: composition.root
+    name: Composition Root
+    layer: composition
+    ownership: Dirty Data to OLAP
+    responsibilities: [resolve config, capabilities and concrete implementations per run]
+    input_contracts: [RuntimeConfiguration, CapabilityRecord]
+    output_contracts: [WiredApplication]
+    depends_on: [entrypoints.cli, entrypoints.api, persistence.control_store, persistence.artifact_store, runtime.stage_executor, runtime.capability_registry, adapters.source, adapters.profiling, adapters.dependencies, adapters.matching, adapters.entity_resolution, adapters.semantic, adapters.materialization]
+    implemented_by: deferred to Step 05
+    side_effect_class: wiring_only
+    persistence_access: none
+    optional: false
+    failure_behavior: invalid wiring fails before run creation

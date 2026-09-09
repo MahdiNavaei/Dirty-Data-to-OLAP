@@ -1,0 +1,168 @@
+schema_version: 1
+scope: v1_runtime_stage_dag
+provenance: Specialist Step 04 Software / Solution Architect
+acyclic: true
+stages:
+  - stage_id: SOURCE_DISCOVERY
+    required: true
+    dependencies: []
+    optional_dependencies: []
+    input_artifact_types: [SourceSelection]
+    output_artifact_types: [SourceCatalog]
+    failure_consequence: run BLOCKED or FAILED according to access/extraction cause
+    cacheable: true
+    idempotency: pinned source/configuration
+    review_boundary: source inclusion/exclusion
+  - stage_id: SOURCE_SNAPSHOT_STAGE
+    required: true
+    dependencies: [SOURCE_DISCOVERY]
+    optional_dependencies: []
+    input_artifact_types: [SourceCatalog, SamplingPolicy]
+    output_artifact_types: [SourceSnapshot, BatchReference, SourceRecordReference]
+    failure_consequence: run BLOCKED or FAILED
+    cacheable: true
+    idempotency: immutable snapshot identity
+    review_boundary: source scope and sampling policy
+  - stage_id: PROFILING
+    required: true
+    dependencies: [SOURCE_SNAPSHOT_STAGE]
+    optional_dependencies: []
+    input_artifact_types: [SourceSnapshot, BatchReference]
+    output_artifact_types: [ColumnProfile, TableProfile]
+    failure_consequence: NEEDS_REVIEW or FAILED
+    cacheable: true
+    idempotency: pinned scope/configuration/adapter
+    review_boundary: observation scope
+  - stage_id: DEPENDENCY_DISCOVERY
+    required: true
+    dependencies: [SOURCE_SNAPSHOT_STAGE]
+    optional_dependencies: [PROFILING]
+    input_artifact_types: [SourceCatalog, SourceSnapshot, ColumnProfile]
+    output_artifact_types: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence]
+    failure_consequence: FAILED; no guessed relationships
+    cacheable: true
+    idempotency: pinned inputs/configuration/adapter
+    review_boundary: candidate evidence
+  - stage_id: SCHEMA_MATCHING
+    required: true
+    dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
+    optional_dependencies: []
+    input_artifact_types: [SourceCatalog, ColumnProfile]
+    output_artifact_types: [SchemaMatchCandidate]
+    failure_consequence: FAILED or explicit plan-level SKIPPED only when allowed
+    cacheable: true
+    idempotency: pinned inputs/configuration/adapter
+    review_boundary: candidate mapping
+  - stage_id: QUALITY_ANALYSIS
+    required: true
+    dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
+    optional_dependencies: [DEPENDENCY_DISCOVERY]
+    input_artifact_types: [SourceCatalog, ColumnProfile, DependencyEvidence]
+    output_artifact_types: [QualityIssue, RepairProposal]
+    failure_consequence: NEEDS_REVIEW or FAILED
+    cacheable: true
+    idempotency: pinned inputs/configuration
+    review_boundary: repair/quarantine proposal
+  - stage_id: OPTIONAL_SEMANTIC_EVIDENCE
+    required: false
+    conditional: true
+    dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
+    optional_dependencies: []
+    input_artifact_types: [SemanticEvidenceRequest]
+    output_artifact_types: [LLMEvidence]
+    failure_consequence: SKIPPED if optional; BLOCKED if required and unavailable
+    cacheable: true
+    idempotency: pinned prompt/configuration/provider
+    review_boundary: semantic hypothesis
+  - stage_id: EVIDENCE_FUSION
+    required: true
+    dependencies: [PROFILING, DEPENDENCY_DISCOVERY, SCHEMA_MATCHING, QUALITY_ANALYSIS]
+    optional_dependencies: [OPTIONAL_SEMANTIC_EVIDENCE]
+    input_artifact_types: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue]
+    output_artifact_types: [RelationshipDecision, SemanticMappingDecision, Conflict]
+    failure_consequence: FAILED; conflicts remain REVIEW_REQUIRED
+    cacheable: true
+    idempotency: pinned evidence/policy
+    review_boundary: accepted/review/rejected decisions
+  - stage_id: REVIEW_DECISIONS
+    required: true
+    dependencies: [EVIDENCE_FUSION]
+    optional_dependencies: []
+    input_artifact_types: [DecisionCandidates, Conflict]
+    output_artifact_types: [ReviewDecision]
+    failure_consequence: NEEDS_REVIEW
+    cacheable: false
+    idempotency: decision identity and compatibility
+    review_boundary: human/domain review
+  - stage_id: CANONICAL_HYPOTHESES
+    required: true
+    dependencies: [REVIEW_DECISIONS]
+    optional_dependencies: []
+    input_artifact_types: [ReviewDecision, DomainAssertion]
+    output_artifact_types: [CanonicalModelHypothesis, EntityResolutionSpec]
+    failure_consequence: NEEDS_REVIEW
+    cacheable: true
+    idempotency: pinned decisions/policy
+    review_boundary: entity and identity hypothesis
+  - stage_id: ENTITY_RESOLUTION
+    required: false
+    conditional: true
+    dependencies: [CANONICAL_HYPOTHESES]
+    optional_dependencies: []
+    input_artifact_types: [EntityResolutionSpec, SourceRecordReference]
+    output_artifact_types: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    failure_consequence: affected family FAILED or NEEDS_REVIEW
+    cacheable: true
+    idempotency: pinned spec/input/adapter
+    review_boundary: linkage review
+    skip_semantics: SKIPPED when policy does not require entity resolution; no fake identity links are produced
+  - stage_id: CANONICAL_FINALIZATION
+    required: true
+    dependencies: [CANONICAL_HYPOTHESES]
+    optional_dependencies: [ENTITY_RESOLUTION]
+    input_artifact_types: [CanonicalModelHypothesis, EntityResolutionOutput, ReviewDecision]
+    output_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]
+    failure_consequence: NEEDS_REVIEW
+    cacheable: true
+    idempotency: pinned identity decisions/policy
+    review_boundary: canonical survivor and conflict state
+  - stage_id: ANALYTICAL_PLANNING
+    required: true
+    dependencies: [CANONICAL_FINALIZATION]
+    optional_dependencies: []
+    input_artifact_types: [CanonicalModel, RelationshipDecision, DomainAssertion]
+    output_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
+    failure_consequence: NEEDS_REVIEW
+    cacheable: true
+    idempotency: pinned plan/policy
+    review_boundary: grain and measure acceptance
+  - stage_id: COMPILATION
+    required: true
+    dependencies: [ANALYTICAL_PLANNING, REVIEW_DECISIONS]
+    optional_dependencies: []
+    input_artifact_types: [AnalyticalPlan, ReviewDecision]
+    output_artifact_types: [CompiledPlan, GeneratedSQL]
+    failure_consequence: FAILED
+    cacheable: true
+    idempotency: plan/configuration/compiler version
+    review_boundary: compiled plan approval
+  - stage_id: MATERIALIZATION
+    required: true
+    dependencies: [COMPILATION]
+    optional_dependencies: []
+    input_artifact_types: [CompiledPlan]
+    output_artifact_types: [MaterializationArtifact]
+    failure_consequence: FAILED
+    cacheable: false
+    idempotency: attempt-scoped target publication
+    review_boundary: controlled target write
+  - stage_id: VALIDATION_RECONCILIATION
+    required: true
+    dependencies: [MATERIALIZATION, ANALYTICAL_PLANNING, CANONICAL_FINALIZATION]
+    optional_dependencies: []
+    input_artifact_types: [MaterializationArtifact, AnalyticalPlan, RecordAccounting, Lineage]
+    output_artifact_types: [ValidationReport, ReconciliationResult]
+    failure_consequence: run FAILED; target not accepted
+    cacheable: true
+    idempotency: pinned target/hash/validation policy
+    review_boundary: final acceptance

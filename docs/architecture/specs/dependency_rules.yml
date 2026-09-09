@@ -1,0 +1,72 @@
+schema_version: 1
+scope: v1_project_owned_dependency_direction
+provenance: Specialist Step 04 Software / Solution Architect
+layers:
+  domain: domain/contracts
+  ports: ports
+  application: application
+  adapters: adapters
+  persistence: persistence
+  runtime: runtime
+  entrypoints: entrypoints
+  composition: composition
+allowed_edges:
+  - from: entrypoints
+    to: application
+  - from: application
+    to: application
+  - from: application
+    to: domain/contracts
+  - from: application
+    to: ports
+  - from: ports
+    to: domain/contracts
+  - from: adapters
+    to: ports
+  - from: adapters
+    to: domain/contracts
+  - from: persistence
+    to: ports
+  - from: persistence
+    to: domain/contracts
+  - from: runtime
+    to: ports
+  - from: runtime
+    to: domain/contracts
+  - from: composition
+    to: entrypoints
+  - from: composition
+    to: application
+  - from: composition
+    to: adapters
+  - from: composition
+    to: persistence
+  - from: composition
+    to: runtime
+forbidden_edges:
+  - from: domain/contracts
+    to: adapters
+  - from: domain/contracts
+    to: persistence
+  - from: domain/contracts
+    to: entrypoints
+  - from: application
+    to: adapters
+  - from: application
+    to: persistence
+  - from: application
+    to: external_engine_native_types
+  - from: entrypoints
+    to: external_engine_native_types
+  - from: runtime
+    to: research/oss
+rules:
+  no_dependency_cycles: true
+  core_must_use_project_owned_contracts: true
+  adapters_must_normalize_external_types: true
+  native_objects_persisted: false
+  pickle_contract_transport: false
+  composition_is_only_concrete_wiring_boundary: true
+  compiler_executes_source_cleaning: false
+  materializer_redefines_model_semantics: false
+  validation_mutates_sources: false

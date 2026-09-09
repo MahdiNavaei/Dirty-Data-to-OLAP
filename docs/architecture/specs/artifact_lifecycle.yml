@@ -1,0 +1,52 @@
+schema_version: 1
+scope: v1_artifact_publication_and_consumption
+provenance: Specialist Step 04 Software / Solution Architect
+statuses: [WRITING, COMPLETE, INVALIDATED, SUPERSEDED]
+consumable_statuses: [COMPLETE]
+transitions:
+  - from: WRITING
+    to: [COMPLETE, INVALIDATED]
+    guard: COMPLETE requires serialization, schema validation, metadata validation, content hash and atomic registration
+  - from: COMPLETE
+    to: [INVALIDATED, SUPERSEDED]
+    guard: explicit upstream invalidation, validation failure or accepted replacement
+  - from: INVALIDATED
+    to: []
+    guard: create a new artifact/attempt; never revive
+  - from: SUPERSEDED
+    to: []
+    guard: retain history; never revive
+publication_guards:
+  schema_valid: true
+  metadata_complete: true
+  content_hash_required: true
+  atomic_registration_required: true
+  incomplete_not_consumable: true
+  filesystem_existence_does_not_imply_complete: true
+envelope_fields:
+  - artifact_id
+  - artifact_type
+  - schema_version
+  - run_id
+  - stage_id
+  - attempt_id
+  - status
+  - created_at
+  - producer
+  - content_hash
+  - config_hash
+  - upstream_artifact_refs
+  - upstream_artifact_hashes
+  - source_snapshot_refs
+  - provenance
+  - logical_location
+  - size
+invalidation_triggers:
+  - source_schema_fingerprint_change
+  - sample_policy_change
+  - adapter_version_change
+  - accepted_semantic_mapping_change
+  - entity_resolution_policy_change
+  - fact_grain_decision_change
+  - validation_failure
+supersession_rule: newer compatible COMPLETE artifact replaces an older artifact without deleting history

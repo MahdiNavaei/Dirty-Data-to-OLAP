@@ -1,0 +1,54 @@
+schema_version: 1
+scope: v1_run_status_state_machine
+provenance: Specialist Step 04 Software / Solution Architect
+states:
+  - CREATED
+  - RUNNING
+  - NEEDS_REVIEW
+  - BLOCKED
+  - FAILED
+  - CANCELLED
+  - SUCCEEDED
+terminal_states: [CANCELLED, SUCCEEDED]
+resumable_states: [NEEDS_REVIEW, BLOCKED, FAILED]
+stage_names_are_run_states: false
+undefined_states: [PARTIAL]
+transitions:
+  - from: CREATED
+    to: [RUNNING, CANCELLED]
+    guard: run manifest is valid; cancellation may occur before execution
+  - from: RUNNING
+    to: [NEEDS_REVIEW, BLOCKED, FAILED, CANCELLED, SUCCEEDED]
+    guard: SUCCEEDED requires final validation and all success guards
+  - from: NEEDS_REVIEW
+    to: [RUNNING, BLOCKED, CANCELLED]
+    guard: resume requires compatible human/domain decision
+  - from: BLOCKED
+    to: [RUNNING, CANCELLED, FAILED]
+    guard: resume requires recorded prerequisite resolution
+  - from: FAILED
+    to: [RUNNING, CANCELLED]
+    guard: resume creates a new attempt and retains failure evidence
+  - from: CANCELLED
+    to: []
+    guard: terminal; no silent resume
+  - from: SUCCEEDED
+    to: []
+    guard: terminal; no silent transition back to RUNNING
+success_guards:
+  all_required_stages_acceptable: true
+  required_review_decisions_resolved: true
+  materialization_complete: true
+  validation_reconciliation_pass: true
+  required_unresolved_record_count: 0
+  no_required_artifact_invalidated_or_incomplete: true
+resume_rules:
+  NEEDS_REVIEW: compatible decision required
+  BLOCKED: prerequisite or required capability resolution required
+  FAILED: new attempt; prior evidence retained
+  CANCELLED: prohibited
+  SUCCEEDED: prohibited
+semantics:
+  NEEDS_REVIEW: evidence exists but a human/domain decision is required
+  BLOCKED: prerequisite, access or required capability is unavailable
+  FAILED: attempted operation failed or validation proved output invalid

@@ -1,504 +1,83 @@
 # 03 — System Architecture Report
 
-## 1. Architectural objective
+## Status and scope
 
-Dirty Data to OLAP V1 must integrate several specialized engines without becoming a tightly coupled pipeline. The architecture is therefore organized around **stable internal artifacts** and a staged control plane.
+This report is the synchronized system-level summary of the v1 Software / Solution Architecture. It freezes boundaries and contracts only; it does not create application code or satisfy Gate G2. The proposed implementation namespace is `dirty_data_to_olap`, under `src/dirty_data_to_olap/` when implementation is authorized. The package tree is architectural only at this step.
 
-The most important design decision is:
+## Architectural contract
 
-> Every stage reads and writes Dirty Data to OLAP contracts. No stage depends directly on another stage's third-party library types.
-
----
-
-## 2. High-level architecture
+The system is a local-first, staged batch product. Project-owned domain contracts, ports, and application services are stable. Entrypoints call application orchestration; adapters and persistence implementations depend inward; concrete wiring is isolated at the composition boundary. Third-party models and native driver types are translated at the boundary and never become core or persisted contracts.
 
 ```text
-                ┌────────────────────────────┐
-                │       SOURCE SYSTEMS       │
-                │ SQL DBs / CSV / Parquet    │
-                └─────────────┬──────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │ Source Adapters   │
-                    │       dlt         │
-                    └─────────┬─────────┘
-                              │
-                    Source Catalog + Samples
-                              │
-        ┌─────────────────────┼──────────────────────┐
-        │                     │                      │
-┌───────▼────────┐  ┌────────▼─────────┐  ┌────────▼──────────┐
-│ Profiling      │  │ Dependency       │  │ Declared metadata │
-│ DataProfiler   │  │ Desbordante      │  │ PK/FK/types       │
-└───────┬────────┘  └────────┬─────────┘  └────────┬──────────┘
-        │                     │                      │
-        └──────────────┬──────┴──────────────┬──────┘
-                       │                     │
-               ┌───────▼─────────┐   ┌──────▼──────────┐
-               │ Schema Matching │   │ Quality Engine   │
-               │ Valentine       │   │ Dirty Data to OLAP      │
-               └───────┬─────────┘   └──────┬──────────┘
-                       │                     │
-                       └──────────┬──────────┘
-                                  │
-                      ┌───────────▼────────────┐
-                      │ Evidence Fusion Engine │
-                      │     Dirty Data to OLAP Core   │
-                      └───────────┬────────────┘
-                                  │
-                     Relationship/Mapping Decisions
-                                  │
-                      ┌───────────▼────────────┐
-                      │ Canonical Model Engine │
-                      └───────────┬────────────┘
-                                  │
-                 ┌────────────────┴────────────────┐
-                 │                                 │
-        ┌────────▼─────────┐              ┌────────▼─────────┐
-        │ Entity Resolution│              │ Analytical Planner│
-        │ Splink            │              │ Fact/Dim/Grain    │
-        └────────┬──────────┘              └────────┬──────────┘
-                 │                                  │
-                 └────────────────┬─────────────────┘
-                                  │
-                     ┌────────────▼─────────────┐
-                     │ Transform/SQL Compiler   │
-                     └────────────┬─────────────┘
-                                  │
-                            DuckDB target
-                                  │
-                     ┌────────────▼─────────────┐
-                     │ Validation & Reconcile   │
-                     └──────────────────────────┘
+entrypoints -> application/orchestration -> domain contracts and ports
+                                      ^                 ^
+                              adapters/persistence -----+
+                                      ^
+                              composition / wiring
 ```
 
----
+## Logical zones and components
 
-## 3. Control plane vs data plane
+- **Domain and contracts:** source identities, observations, hypotheses, decisions, canonical entities, analytical plans, artifacts, validation results, run/stage status, and policies.
+- **Application services:** run manager, stage planner, evidence fusion, review/policy, canonical hypothesis/finalization, analytical planning, compilation, materialization, validation, resume, and cancellation.
+- **Adapters:** source, profiling, dependency discovery, schema matching, optional semantic evidence, and entity resolution providers. Each implements a project-owned port.
+- **Persistence:** Control Store repositories and Artifact/Data Plane stores. Control holds metadata, indexes, state, decisions, and artifact references; large or immutable data stays in the Artifact/Data Plane.
+- **Runtime and entrypoints:** StageExecutor, capability registry, CLI/API, and composition root.
 
-### Control plane
+The authoritative component list and dependency graph are in [components.yml](architecture/specs/components.yml) and [COMPONENT_MODEL.md](architecture/COMPONENT_MODEL.md).
 
-Stores decisions and metadata:
-
-- run manifests;
-- profiles;
-- candidates;
-- evidence;
-- review decisions;
-- canonical model;
-- analytical plan;
-- validation results.
-
-Recommended V1 control-store options:
-
-- SQLite for local simplicity, or
-- PostgreSQL if the UI/API requires concurrent access.
-
-Recommendation: start with SQLite and design repositories/interfaces so PostgreSQL can replace it later.
-
-### Data plane
-
-Contains actual source samples and transformed analytical data:
-
-- source DB streaming/chunks;
-- Parquet staging;
-- DuckDB analytical target.
-
-Large raw datasets should **not** be copied into the control database.
-
----
-
-## 4. Major components
-
-### 4.1 Run Manager
-
-Responsibilities:
-
-- create `run_id`;
-- pin configuration;
-- track stage status;
-- store start/end times;
-- record failures;
-- support restart from a completed stage.
-
-Run states:
+## Runtime stage DAG
 
 ```text
-CREATED
-DISCOVERING
-PROFILING
-DISCOVERING_RELATIONSHIPS
-MATCHING_SCHEMAS
-FUSING_EVIDENCE
-RESOLVING_ENTITIES
-BUILDING_CANONICAL_MODEL
-PLANNING_ANALYTICAL_MODEL
-MATERIALIZING
-VALIDATING
-SUCCEEDED
-FAILED
-NEEDS_REVIEW
+SOURCE_DISCOVERY -> SOURCE_SNAPSHOT_STAGE -> {PROFILING, DEPENDENCY_DISCOVERY,
+SCHEMA_MATCHING, QUALITY_ANALYSIS} -> EVIDENCE_FUSION -> REVIEW_DECISIONS
+-> CANONICAL_HYPOTHESES -> [ENTITY_RESOLUTION] -> CANONICAL_FINALIZATION
+-> ANALYTICAL_PLANNING -> COMPILATION -> MATERIALIZATION
+-> VALIDATION_RECONCILIATION
 ```
 
-A stage failure is explicit; it must not silently produce partial “success”.
+Optional semantic evidence is a declared branch into evidence fusion. Entity resolution is conditional: it runs only when the canonical hypothesis and policy require it. The graph is acyclic and all stage outputs are typed project-owned artifacts.
 
-### 4.2 Source Registry
+## Run and stage lifecycle
 
-Stores connection metadata **without raw credentials in artifacts**.
+Run states are `CREATED`, `RUNNING`, `NEEDS_REVIEW`, `BLOCKED`, `FAILED`, `CANCELLED`, and `SUCCEEDED`. `PARTIAL` is explicitly rejected as a run state. Stage states are separate and include `PENDING`, `RUNNING`, `SUCCEEDED`, `NEEDS_REVIEW`, `BLOCKED`, `FAILED`, `CANCELLED`, `INVALIDATED`, and `SKIPPED`.
 
-Each source has:
+Every execution has a stage attempt with pinned inputs, upstream hashes, configuration, adapter version, error/cancellation details, and output references. Retries create a new attempt. A run can become `SUCCEEDED` only after final validation passes, required work is complete, required unresolved conditions are zero, and complete required artifacts are published.
 
-- stable source ID;
-- source type;
-- logical name;
-- connection profile reference;
-- inclusion/exclusion rules;
-- sampling policy.
+The canonical path is deliberately two phase: evidence produces canonical hypotheses; optional entity resolution attaches or revises identity links; review and policy validation allow canonical finalization. Hypotheses are not silently treated as final records.
 
-### 4.3 Discovery Engine
+## Control plane and Artifact/Data Plane
 
-Uses source adapters to build a normalized catalog.
+The Control Store contains run, stage, attempt, capability, configuration, index, decision, and artifact-reference metadata. It does not contain raw rows or large analytical tables. The Artifact/Data Plane contains source snapshots, samples, profiles, evidence, decisions, canonical outputs, plans, compiled SQL, materialized targets, manifests, and validation reports. Artifacts are content-hashed and published atomically; only `COMPLETE` artifacts are consumable.
 
-Output:
+## Caching, replay, and failure semantics
 
-- tables;
-- columns;
-- types;
-- declared keys;
-- row estimates;
-- source fingerprints.
+Cache identity includes stage/version, upstream artifact references and hashes, source schema and sample fingerprints, configuration, adapter version, domain/policy version, and deterministic seed. Schema, grain, policy, adapter, configuration, or upstream changes invalidate descendants. Decisions retain the exact input and artifact references needed for replay. Required capability absence is `BLOCKED`; optional capability absence is an explicit skip with a reason. There is no fake fallback for missing evidence. External failures are isolated by stage/attempt and do not overwrite a valid prior artifact.
 
-### 4.4 Profiling Engine
+## Runtime topology and safety
 
-Produces deterministic/statistical profiles on configurable samples or full columns when feasible.
+The reference topology is one local coordinator with a Control Store, filesystem/Parquet Artifact/Data Plane, optional DuckDB analytical target, bounded workers, and optional external engines behind adapters. Source access is read-only by policy. Secrets remain outside committed artifacts, raw rows are not logged by default, and implementation is deferred until later specialist gates authorize it.
 
-Sampling metadata must be stored so users can distinguish:
+## Extension model
 
-```text
-full-table observation
-```
+New source, profiler, dependency, matching, semantic, entity-resolution, materialization, or persistence providers implement the relevant project-owned port, register a capability, and pass contract/compatibility checks. New stages require a graph/spec/contract update and explicit invalidation semantics. No extension may add a direct adapter-to-adapter dependency or leak a provider-native type.
 
-from:
+## Authoritative artifacts
 
-```text
-sample-based estimate
-```
+- [Software architecture contract](architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md)
+- [Component model](architecture/COMPONENT_MODEL.md)
+- [Dependency rules](architecture/DEPENDENCY_RULES.md)
+- [Engine interfaces](architecture/ENGINE_INTERFACES.md)
+- [Run and stage lifecycle](architecture/RUN_AND_STAGE_LIFECYCLE.md)
+- [Artifact and cache lifecycle](architecture/ARTIFACT_AND_CACHE_LIFECYCLE.md)
+- [Persistence boundaries](architecture/PERSISTENCE_BOUNDARIES.md)
+- [Failure, retry, and idempotency](architecture/FAILURE_RETRY_IDEMPOTENCY.md)
+- [Runtime topology](architecture/RUNTIME_TOPOLOGY.md)
+- [Extension points](architecture/EXTENSION_POINTS.md)
+- [Machine-readable specifications](architecture/specs/components.yml)
+- [Architecture decisions](adr/ADR-0001_PROJECT_OWNED_CONTRACTS.md)
+- [Two-phase canonicalization ADR](adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md)
 
-### 4.5 Dependency Discovery Engine
+## Deferred implementation
 
-Discovers candidate:
-
-- functional dependencies;
-- inclusion dependencies;
-- candidate keys.
-
-This stage may be expensive. It must support candidate pruning based on types, cardinalities and table sizes.
-
-### 4.6 Schema Matching Engine
-
-Generates ranked candidate column equivalences across tables/sources.
-
-It does **not** directly mutate canonical schemas.
-
-### 4.7 Quality Engine
-
-Converts raw observations into normalized quality issues.
-
-Example:
-
-```text
-profile: null_ratio = 0.14
-column role hypothesis: required customer identifier
-             ↓
-quality issue:
-MISSING_REQUIRED_IDENTIFIER
-severity = HIGH
-```
-
-This distinction prevents a generic profiler from deciding business severity.
-
-### 4.8 Evidence Fusion Engine
-
-This is a core proprietary/portfolio component.
-
-Input:
-
-- profile evidence;
-- structural dependencies;
-- declared constraints;
-- schema matcher outputs;
-- naming semantics;
-- value overlaps;
-- reviewer knowledge.
-
-Output:
-
-- relationship decisions;
-- mapping decisions;
-- semantic hypotheses;
-- uncertainty/conflict states.
-
-Detailed design is in report 05.
-
-### 4.9 Review/Policy Engine
-
-Controls whether a decision is:
-
-- auto-accepted;
-- suggested;
-- blocked pending review;
-- rejected.
-
-Human overrides are first-class artifacts and are replayed on future runs unless invalidated by schema changes.
-
-### 4.10 Canonical Model Engine
-
-Builds business concepts independent of source naming.
-
-Example:
-
-```text
-crm.customer
-sales.client
-website.user
-      ↓
-CanonicalEntity(type=CUSTOMER)
-```
-
-It also records source attribute mappings and conflict policies.
-
-### 4.11 Entity Resolution Engine
-
-Runs only after canonical identity fields are known.
-
-Output is a mapping from source records to canonical IDs, not destructive source deduplication.
-
-### 4.12 Analytical Model Planner
-
-Produces:
-
-- facts;
-- dimensions;
-- grain;
-- measures;
-- keys;
-- source lineage;
-- transform plan.
-
-Planner output must be a typed contract before SQL is generated.
-
-### 4.13 Compiler/Materializer
-
-Converts approved analytical plans into executable SQL and builds the target.
-
-V1 reference target:
-
-- DuckDB.
-
-Optional later:
-
-- ClickHouse;
-- PostgreSQL analytical schema;
-- dbt project generation.
-
-### 4.14 Validation Engine
-
-Runs after materialization and determines final success/failure.
-
-It checks:
-
-- structural constraints;
-- reconciliation;
-- data loss;
-- key integrity;
-- semantic invariants defined by the plan.
-
----
-
-## 5. Storage architecture
-
-Recommended V1 filesystem:
-
-```text
-workspace/
-└── runs/
-    └── <run_id>/
-        ├── manifest.json
-        ├── catalog/
-        ├── samples/
-        ├── profiles/
-        ├── evidence/
-        ├── decisions/
-        ├── canonical/
-        ├── analytical/
-        ├── generated_sql/
-        ├── target.duckdb
-        └── validation/
-```
-
-Intermediate tabular artifacts should prefer Parquet for compactness and typed interchange.
-
-JSON/YAML should be used for metadata and plans, not for large row datasets.
-
----
-
-## 6. Execution model
-
-V1 is a staged batch pipeline.
-
-```text
-Discover
-  ↓
-Sample/Profile
-  ↓
-Find structural dependencies
-  ↓
-Generate schema matches
-  ↓
-Fuse evidence
-  ↓
-Review uncertain decisions
-  ↓
-Build canonical model
-  ↓
-Resolve selected entity families
-  ↓
-Plan analytical model
-  ↓
-Dry-run / compile
-  ↓
-Materialize
-  ↓
-Validate
-```
-
-Stages must be restartable from persisted artifacts.
-
-Example:
-
-If entity-resolution settings change, the user should not be forced to repeat database profiling unless relevant source fingerprints changed.
-
----
-
-## 7. Caching and invalidation
-
-Each stage output should depend on fingerprints of:
-
-- upstream artifact IDs/hashes;
-- source schema fingerprint;
-- sample fingerprint;
-- algorithm config;
-- adapter version.
-
-If any dependency changes, downstream cached artifacts are invalidated.
-
-This prevents dangerous reuse of old inference after a source schema changed.
-
----
-
-## 8. LLM placement
-
-LLM use is optional and tightly bounded.
-
-Permitted uses:
-
-- generate semantic label candidates;
-- explain a relationship in readable language;
-- suggest business entity names;
-- propose candidate fact/dimension roles;
-- rank ambiguous mappings as one additional signal.
-
-Not permitted as sole authority for:
-
-- key discovery;
-- FK acceptance;
-- entity merge;
-- destructive cleaning;
-- numeric reconciliation;
-- final model validation.
-
-LLM responses must be serialized as `LLMEvidence`, including model ID and prompt/version metadata if used.
-
----
-
-## 9. Error isolation
-
-External engines can fail independently.
-
-Example policies:
-
-- profiling failure for one column → mark column profile failed, continue other columns, run ends `PARTIAL/NEEDS_REVIEW` rather than silent success;
-- Desbordante worker crash → relationship discovery stage fails, no guessed fallback;
-- Valentine unavailable → declared relationships and structural evidence remain usable, but semantic mapping stage is incomplete;
-- Splink failure → analytical modeling may proceed only for models not dependent on deduplicated entity keys.
-
----
-
-## 10. Suggested Python package structure
-
-```text
-src/dirty-data-to-olap/
-├── api/
-├── cli/
-├── domain/
-│   ├── contracts/
-│   ├── enums.py
-│   └── policies.py
-├── adapters/
-│   ├── sources/dlt_sql.py
-│   ├── profiling/dataprofiler.py
-│   ├── dependencies/desbordante.py
-│   ├── matching/valentine.py
-│   └── entity_resolution/splink.py
-├── discovery/
-├── profiling/
-├── quality/
-├── evidence/
-├── canonical/
-├── entity_resolution/
-├── analytical/
-├── compiler/
-├── validation/
-├── persistence/
-└── runs/
-```
-
----
-
-## 11. Security/safety baseline
-
-Even as a portfolio project:
-
-- source connection roles should be read-only;
-- secrets must come from environment/secret files ignored by Git;
-- samples may contain PII and should not be committed;
-- generated demo datasets should use synthetic identities;
-- logs must avoid dumping entire source rows by default.
-
----
-
-## 12. Critical review applied before approval
-
-### Problem A — Original pipeline was too linear
-
-Some stages can fail or be rerun independently. A direct function chain would be fragile.
-
-**Correction:** persistent stage artifacts + run manager + restartable execution.
-
-### Problem B — External libraries could leak types everywhere
-
-**Correction:** all external engines are adapters into Dirty Data to OLAP contracts.
-
-### Problem C — Profiling full enterprise tables could exhaust memory
-
-**Correction:** sampling/chunking is a first-class policy and sample provenance is stored.
-
-### Problem D — Canonical model and entity resolution order was ambiguous
-
-**Correction:** first form canonical entity hypotheses/identity fields, then run entity resolution, then finalize canonical instances and analytical mapping.
-
-### Problem E — “Successful SQL generation” could be mistaken for success
-
-**Correction:** only post-materialization validation can mark a run `SUCCEEDED`.
-
-**Status: APPROVED AS V1 REFERENCE ARCHITECTURE.**
+No `src/` tree, concrete adapters, drivers, services, generated data, or research/OSS clone is created by this report. G2 remains `PENDING`; the next handoff is Step 05 — Technical Lead / Engineering Lead.

@@ -1,0 +1,125 @@
+schema_version: 1
+scope: v1_project_owned_engine_and_repository_ports
+provenance: Specialist Step 04 Software / Solution Architect
+interfaces:
+  - interface_id: SourceAdapter
+    purpose: Read-only source discovery and bounded snapshot extraction.
+    input_contracts: [SourceSelection, SamplingPolicy]
+    output_contracts: [SourceDescriptor, TableDescriptor, ColumnDescriptor, DeclaredConstraint, SourceSnapshot, BatchReference]
+    side_effects: [read_source, write_attempt_artifacts]
+    idempotency: pinned source/configuration produces stable snapshot identity or explicit changed-snapshot result
+    optional: false
+    capability_id: source.adapter
+    failure_mode: access failure BLOCKED; extraction failure FAILED
+    adapter_component: adapters.source
+    forbidden_behavior: [source writes, native dlt objects in project contracts]
+  - interface_id: ProfilingAdapter
+    purpose: Scoped column and table observations.
+    input_contracts: [SourceSnapshot, ProfileRequest]
+    output_contracts: [ColumnProfile, TableProfile, ValuePatternSummary]
+    side_effects: [write_artifacts]
+    idempotency: pinned inputs/configuration/adapter version
+    optional: false
+    capability_id: profiling.adapter
+    failure_mode: item failure retained; stage NEEDS_REVIEW or FAILED
+    adapter_component: adapters.profiling
+    forbidden_behavior: [native DataProfiler objects, business truth decisions]
+  - interface_id: DependencyDiscoveryAdapter
+    purpose: Key, FD and IND evidence generation.
+    input_contracts: [SourceCatalog, Profiles, DependencyRequest]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
+    side_effects: [write_artifacts]
+    idempotency: pinned inputs/configuration/adapter version
+    optional: false
+    capability_id: dependencies.adapter
+    failure_mode: stage FAILED or NEEDS_REVIEW; no guessed relationship
+    adapter_component: adapters.dependencies
+    forbidden_behavior: [native Desbordante objects, confirmed FK without project decision]
+  - interface_id: SchemaMatchingAdapter
+    purpose: Ranked cross-source mapping candidates.
+    input_contracts: [SourceCatalog, Profiles, SchemaMatchRequest]
+    output_contracts: [SchemaMatchCandidate]
+    side_effects: [write_artifacts]
+    idempotency: pinned inputs/configuration/adapter version
+    optional: false
+    capability_id: matching.adapter
+    failure_mode: explicit failure or optional SKIPPED
+    adapter_component: adapters.matching
+    forbidden_behavior: [native Valentine objects, score-as-probability, canonical mutation]
+  - interface_id: EntityResolutionAdapter
+    purpose: Selected entity-family linkage.
+    input_contracts: [EntityResolutionSpec, SourceRecordReference]
+    output_contracts: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    side_effects: [write_artifacts]
+    idempotency: pinned inputs/configuration/adapter version
+    optional: true
+    capability_id: entity_resolution.adapter
+    failure_mode: affected family FAILED or NEEDS_REVIEW
+    adapter_component: adapters.entity_resolution
+    forbidden_behavior: [native Splink objects, source deletion, automatic canonical ID assignment]
+  - interface_id: OptionalSemanticEvidenceAdapter
+    purpose: Bounded semantic evidence.
+    input_contracts: [SemanticEvidenceRequest, EvidenceReferences]
+    output_contracts: [LLMEvidence]
+    side_effects: [optional_provider_call, write_artifacts]
+    idempotency: provider repeatability recorded, not assumed
+    optional: true
+    capability_id: semantic.optional
+    failure_mode: optional SKIPPED; required BLOCKED
+    adapter_component: adapters.semantic
+    forbidden_behavior: [sole authority, native provider object, silent fallback]
+  - interface_id: MaterializerPort
+    purpose: Execute an approved compiled plan into a controlled target.
+    input_contracts: [CompiledPlan, ApprovedPlanReference]
+    output_contracts: [MaterializationArtifact, ExecutionEvidence]
+    side_effects: [write_controlled_target, write_artifacts]
+    idempotency: attempt-scoped target and atomic publication
+    optional: false
+    capability_id: target.materializer
+    failure_mode: incomplete target non-consumable; stage FAILED
+    adapter_component: adapters.materialization
+    forbidden_behavior: [source writes, grain redefinition, measure redefinition]
+  - interface_id: ControlStorePort
+    purpose: Transactional control metadata and lifecycle repository.
+    input_contracts: [RunMetadata, StageAttempt, ArtifactMetadata, Decision, ValidationStatus]
+    output_contracts: [ControlMetadata, StateTransitionResult]
+    side_effects: [write_control_metadata]
+    idempotency: compare-and-record transitions
+    optional: false
+    capability_id: persistence.control_store
+    failure_mode: explicit persistence failure
+    adapter_component: persistence.control_store
+    forbidden_behavior: [raw large row storage, opaque third-party objects]
+  - interface_id: ArtifactStorePort
+    purpose: Artifact-plane allocation, publication, verification and invalidation.
+    input_contracts: [ArtifactEnvelope, ArtifactPayload]
+    output_contracts: [ArtifactReference, ArtifactMetadata]
+    side_effects: [write_artifacts]
+    idempotency: content-hash/identity keyed atomic publication
+    optional: false
+    capability_id: persistence.artifact_store
+    failure_mode: non-consumable artifact and retained failure
+    adapter_component: persistence.artifact_store
+    forbidden_behavior: [incomplete consumption, uncontrolled path access]
+  - interface_id: StageExecutorPort
+    purpose: Execute heavy stages locally or behind a future worker boundary.
+    input_contracts: [StageRequest, AttemptContext, CancellationRequest]
+    output_contracts: [StageAttemptResult, ArtifactReference]
+    side_effects: [controlled_execution]
+    idempotency: never overwrites a prior attempt
+    optional: false
+    capability_id: runtime.stage_executor
+    failure_mode: explicit item/stage/run lifecycle outcome
+    adapter_component: runtime.stage_executor
+    forbidden_behavior: [implicit retry, global mutable state, queue implementation required in V1]
+  - interface_id: CapabilityRegistryPort
+    purpose: Detect capability availability and compatibility.
+    input_contracts: [CapabilityQuery]
+    output_contracts: [CapabilityRecord]
+    side_effects: [read_runtime_metadata]
+    idempotency: deterministic for pinned environment
+    optional: false
+    capability_id: runtime.capability_registry
+    failure_mode: unavailable record; no import-time crash
+    adapter_component: runtime.capability_registry
+    forbidden_behavior: [fake capability output, silent provider substitution]
