@@ -7,8 +7,8 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
 - execution_step: `bootstrap`
 - role_id: `repository_bootstrap`
 - specialist_file: `none`
-- status: `IN_PROGRESS`
-- commit_sha: `PENDING_COMMIT`
+- status: `PASS`
+- commit_sha: `b270c57ef4725572e86946c5d477a3ee43974edb`
 - inputs_reviewed:
   - `docs/00_README.md`
   - `docs/01_PROJECT_SCOPE_AND_REQUIREMENTS.md`
@@ -36,8 +36,20 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
   - `docs/execution/`
   - `docs/oss/REUSE_RESEARCH_LEDGER.md`
   - `research/oss/README.md`
-- tests_run: `pending final bootstrap validation`
-- tests_passed: `pending final bootstrap validation`
+- tests_run:
+  - `python` YAML/JSON parse check
+  - `python` knowledge-base manifest file/hash check
+  - PowerShell gate skeleton count/status check
+  - `rg` secret-like file scan
+  - PowerShell project-root boundary check
+  - `git diff --cached --check` on bootstrap-owned paths
+- tests_passed:
+  - `YAML and JSON parse: PASS`
+  - `Manifest entries/hash: PASS (56 files)`
+  - `Gate skeletons: PASS (16 pending gates)`
+  - `Secret-like file scan: PASS (no candidate files)`
+  - `Project-root boundary check: PASS`
+  - `Bootstrap-owned staged files diff check: PASS`
 - known_limitations:
   - `Application implementation has not started.`
 - blocking_issues: `none known`

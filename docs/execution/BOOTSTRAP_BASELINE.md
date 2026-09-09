@@ -25,6 +25,23 @@ Bootstrap / Prompt 0 establishes a controlled repository baseline. It does not e
 - G0: `PENDING`
 - All later gates: `PENDING`
 
+## Executed validation
+
+- YAML and JSON parse: `PASS`.
+- Knowledge-base manifest file and SHA-256 check: `PASS` for 56 entries.
+- Specialist playbook count: `PASS` for 41 files.
+- Gate skeleton check: `PASS` for 16 pending gates.
+- Secret-like file scan: `PASS`; no candidate files detected.
+- Project-root boundary check: `PASS`.
+- Bootstrap-owned staged diff check: `PASS`.
+- Full staged diff check reported two pre-existing Markdown hard-break trailing-space lines in the preserved `00_README.md` reports; those authoritative reports were not modified.
+- No application test suite was run because application implementation has not started.
+
+## Commits
+
+- Bootstrap content commit: `b270c57ef4725572e86946c5d477a3ee43974edb`.
+- A follow-up metadata commit records the verified bootstrap-content SHA in execution state.
+
 ## Boundary and reuse policy
 
 Project-owned runtime state is intended to remain inside the project root. Later OSS research clones belong only under `research/oss/`, are ignored by Git except for its README, and must never be runtime dependencies. The provenance ledger is intentionally empty because Bootstrap did not inspect or clone an external project.
