@@ -1,0 +1,285 @@
+{
+  "project": "Dirty Data to OLAP",
+  "files": [
+    {
+      "path": "00_README.md",
+      "bytes": 2552,
+      "sha256": "565aebdc1c1134992a23fa718889a3bb613de4651bed04292173b36327ef3ed7"
+    },
+    {
+      "path": "01_SPECIALIST_ROUTING_MATRIX.md",
+      "bytes": 8473,
+      "sha256": "c8540a15696f2d0707452f8ed73d759dc550799bc5e92ba4d2736994f41dab27"
+    },
+    {
+      "path": "02_GLOBAL_CODEX_EXECUTION_PROTOCOL.md",
+      "bytes": 3513,
+      "sha256": "fdfce22fc9a3b5de891ea066758147414a5ea655b734b19c33abc6fde074041c"
+    },
+    {
+      "path": "03_SHARED_PROJECT_INVARIANTS.md",
+      "bytes": 2357,
+      "sha256": "c0c9d54f8b43c5bd4ad23188e7986eb19e56c0285a2c6fb3f26ca18d7c58ecc2"
+    },
+    {
+      "path": "04_SPECIALIST_ACTIVATION_TEMPLATE.md",
+      "bytes": 1679,
+      "sha256": "3465e5ba0e688d88514a912b2cfceb99a583e7f80daf5b39b756666aff482cb0"
+    },
+    {
+      "path": "99_REVIEW_AND_QUALITY_AUDIT.md",
+      "bytes": 3282,
+      "sha256": "46b95f58c791431c52c26afb765b2f3b1d42199167e9f26fe96f4e227fbbaf16"
+    },
+    {
+      "path": "base_reports/00_README.md",
+      "bytes": 2582,
+      "sha256": "a5c7a4315aeb27ca31646e95e2402b808ab9478e333a2b1415f4e8828ee146bc"
+    },
+    {
+      "path": "base_reports/01_PROJECT_SCOPE_AND_REQUIREMENTS.md",
+      "bytes": 11787,
+      "sha256": "062c5c23db6111382249af1a62ada50f3080497d88fb6aa694a9d82a1ec3bf7f"
+    },
+    {
+      "path": "base_reports/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md",
+      "bytes": 14815,
+      "sha256": "da828677746c543bfc6c70a6243ee965911ade6d59a6fd35fdef057b939af372"
+    },
+    {
+      "path": "base_reports/03_SYSTEM_ARCHITECTURE.md",
+      "bytes": 14197,
+      "sha256": "5f377ac2cc2837b7c59f1353410cf4c4d87de656baa4aca508422b6580283979"
+    },
+    {
+      "path": "base_reports/04_INTERNAL_DATA_CONTRACTS.md",
+      "bytes": 9404,
+      "sha256": "1bb15a55c01ed91b3d1416da982c99fcb378c81157e3c69c4469b7403a1b99b4"
+    },
+    {
+      "path": "base_reports/05_EVIDENCE_AND_CONFIDENCE_MODEL.md",
+      "bytes": 10865,
+      "sha256": "e111064deee3e7c9d311764205ddc3aa4ea76fc9c175095e2e24a2f38eddb379"
+    },
+    {
+      "path": "base_reports/06_DATA_QUALITY_AND_CLEANING_TAXONOMY.md",
+      "bytes": 9458,
+      "sha256": "5dd86f4749ed0ce71b6ad299e714cced399f86bb2d51e482a9b34e10ebbdd6aa"
+    },
+    {
+      "path": "base_reports/07_CANONICAL_AND_OLAP_MODELING_STRATEGY.md",
+      "bytes": 9457,
+      "sha256": "caf4c9863a55c5087abb27b6915ac039dbbfc028e0c40fec3cc4e44f501d38d4"
+    },
+    {
+      "path": "base_reports/08_BENCHMARK_AND_VALIDATION_PLAN.md",
+      "bytes": 11065,
+      "sha256": "5f84c4c3a3015d61f543bdf2de7e5fb780c15e40515ff9ae361f6698cad29e3a"
+    },
+    {
+      "path": "specialists/01_TECHNICAL_LEAD.md",
+      "bytes": 10006,
+      "sha256": "855a0f0920f2d8eb29599a8b11bff11ec767f87536b2f8ccb977e1c850dd3125"
+    },
+    {
+      "path": "specialists/02_PRODUCT_OWNER.md",
+      "bytes": 9728,
+      "sha256": "0900edfbe19aee3efa218f433e3627e1ce69f66654a1356aae657bb2b41f295b"
+    },
+    {
+      "path": "specialists/03_PRINCIPAL_DATA_ARCHITECT.md",
+      "bytes": 9722,
+      "sha256": "b6a14774b1075c4389b734548fda50d23d1656bff9516a9ddf70f7bf995d3656"
+    },
+    {
+      "path": "specialists/04_SOLUTION_ARCHITECT.md",
+      "bytes": 9549,
+      "sha256": "2ca564dbe50ce7d0740ebc658b2c7f9a859e84fb472d31af85267ef58b1c5281"
+    },
+    {
+      "path": "specialists/05_SENIOR_DATA_ENGINEER.md",
+      "bytes": 9277,
+      "sha256": "e14c6d39ad2d29c507b99bb7738d9df56cdc12a8b807cbf1a380674553c439e2"
+    },
+    {
+      "path": "specialists/06_OLAP_ENGINEER.md",
+      "bytes": 9161,
+      "sha256": "179207cd4fad3e1e204f08210eca4273deeb7b928715bcd9a02f732b0a23e4fd"
+    },
+    {
+      "path": "specialists/07_DATABASE_ENGINEER_DBA.md",
+      "bytes": 9099,
+      "sha256": "0cb9b684549e5437a14dc76de054f24899ef7e600d216b40872c42242c7f7783"
+    },
+    {
+      "path": "specialists/08_DATA_PROFILING_SPECIALIST.md",
+      "bytes": 9066,
+      "sha256": "4e8c675dc88809f6003b1c6e9096d8d5a57110b3a721fdfff6b20ca16739a2a9"
+    },
+    {
+      "path": "specialists/09_DATA_QUALITY_ENGINEER.md",
+      "bytes": 9028,
+      "sha256": "3308c039b10746e65235847801741fca494dd614b9ca16ec6bda6f2489f80357"
+    },
+    {
+      "path": "specialists/10_SCHEMA_MATCHING_ENGINEER.md",
+      "bytes": 9217,
+      "sha256": "b09d859ead50d196b9e6e1339980b2acc591c7bb6036795717af78d52cad8196"
+    },
+    {
+      "path": "specialists/11_DEPENDENCY_DISCOVERY_ENGINEER.md",
+      "bytes": 9179,
+      "sha256": "5c223249469a03ae2edad2e9b6e007fd91549c91011c532ab0332df972ce5edb"
+    },
+    {
+      "path": "specialists/12_ENTITY_RESOLUTION_ENGINEER.md",
+      "bytes": 9207,
+      "sha256": "0f44eee3cb22b40d038a78da7e15ebcfe58d48f391403fc4d4bc8e51d9c0c647"
+    },
+    {
+      "path": "specialists/13_APPLIED_ML_ENGINEER.md",
+      "bytes": 9190,
+      "sha256": "27b3337b1f2e0265a90cf2e1b4372f8bd40bf0fa590feea163c0820723b17374"
+    },
+    {
+      "path": "specialists/14_LLM_SEMANTIC_AI_ENGINEER.md",
+      "bytes": 9287,
+      "sha256": "9c38da041be13b2873a8a2cfed7d72ad7bb929438e5f684c6bd54086e7a2e68d"
+    },
+    {
+      "path": "specialists/15_EVIDENCE_FUSION_ENGINEER.md",
+      "bytes": 9341,
+      "sha256": "d50f3f1ec8e6ad2d7deddc8ced40605937007f2bca9fe1428fa431bc6479d3c4"
+    },
+    {
+      "path": "specialists/16_CANONICAL_DATA_MODEL_ENGINEER.md",
+      "bytes": 9110,
+      "sha256": "67da772920108bb31b25a645585e710cdaa7f2155da1ffaa1d4ceb8dd11acba5"
+    },
+    {
+      "path": "specialists/17_ANALYTICAL_SEMANTIC_LAYER_ENGINEER.md",
+      "bytes": 8975,
+      "sha256": "54bfe056585fe03b1d9cc02294a2c81a44d41e00b2104b33d50ec73905e5f032"
+    },
+    {
+      "path": "specialists/18_SENIOR_BACKEND_ENGINEER.md",
+      "bytes": 8875,
+      "sha256": "5a54cbcfe07682ab4eb047a86086463d66116db2e5ad91dbb0fd99e4d8050859"
+    },
+    {
+      "path": "specialists/19_DISTRIBUTED_JOB_PROCESSING_ENGINEER.md",
+      "bytes": 8917,
+      "sha256": "8bacd18ff60a9779d559b798aa4a7ba7d3ba19a034e8befc0bafb131e7041e49"
+    },
+    {
+      "path": "specialists/20_FRONTEND_ENGINEER.md",
+      "bytes": 8829,
+      "sha256": "3617d299ded51aafa5cac2ce7e3619572ab539f95a8c8255dcd1303751718cbc"
+    },
+    {
+      "path": "specialists/21_UX_PRODUCT_DESIGNER.md",
+      "bytes": 8934,
+      "sha256": "5ecee0106a96f8e59ff711cb3500c96b48fc79a404ff9a5114796e1ae9bd4615"
+    },
+    {
+      "path": "specialists/22_DATA_VISUALIZATION_ENGINEER.md",
+      "bytes": 8771,
+      "sha256": "26652e9608024230852981450c8b5d174708f9d8a54eee0fffd29e80a1b4f723"
+    },
+    {
+      "path": "specialists/23_QA_AUTOMATION_ENGINEER.md",
+      "bytes": 8734,
+      "sha256": "3eaa5c4d1a6f7687c335c94708853c870bf7f5477d9d3942daa31832e9214891"
+    },
+    {
+      "path": "specialists/24_DATA_QA_ENGINEER.md",
+      "bytes": 8880,
+      "sha256": "79d310688a5d6895e6e4d6ac35653782ec35ad0ff7a109fedd03273258d8284d"
+    },
+    {
+      "path": "specialists/25_ML_EVALUATION_ENGINEER.md",
+      "bytes": 8889,
+      "sha256": "2e9b12d8292607ae572431ef5991d29c97f3ac040c62665765007644ffda2e89"
+    },
+    {
+      "path": "specialists/26_PERFORMANCE_ENGINEER.md",
+      "bytes": 8714,
+      "sha256": "6bb654b187ac5ae70c5d94b96e8b8601d685e4b305fe268d1454301137154beb"
+    },
+    {
+      "path": "specialists/27_LOAD_STRESS_TEST_ENGINEER.md",
+      "bytes": 8617,
+      "sha256": "137029300c393c04599132eae7a372d2ace3cb8d73911ebd9efe5f3356f73dbe"
+    },
+    {
+      "path": "specialists/28_APPLICATION_SECURITY_ENGINEER.md",
+      "bytes": 8885,
+      "sha256": "cfe2728dcffd4c330b3d1815b1221ea4861d85360d94d1e99c7e33519f4a6941"
+    },
+    {
+      "path": "specialists/29_DATA_SECURITY_PRIVACY_ENGINEER.md",
+      "bytes": 8900,
+      "sha256": "e22743ba0b6bb62bb9e0e2b142665a260d2c0268b26b697683c644201d1b7fb3"
+    },
+    {
+      "path": "specialists/30_DATABASE_SECURITY_SPECIALIST.md",
+      "bytes": 8746,
+      "sha256": "430c5556fcfba697cb9cf0c54934959f7f2946c753fd71a39228baf6a83a5621"
+    },
+    {
+      "path": "specialists/31_PENETRATION_TESTER_RED_TEAM.md",
+      "bytes": 8727,
+      "sha256": "60115230657b1c33a038f99659b5c33880d51a69e35cf4183c81909cb32929fe"
+    },
+    {
+      "path": "specialists/32_DEVOPS_ENGINEER.md",
+      "bytes": 8552,
+      "sha256": "25cc6f1ccd88058f1a8c23450490c63b0fdef0f19b0709d21077c9a7becc0b9f"
+    },
+    {
+      "path": "specialists/33_SRE.md",
+      "bytes": 8620,
+      "sha256": "310b2f06631817835a537dd98ab40d2ff7339252e45fee3c92af89f732426bf3"
+    },
+    {
+      "path": "specialists/34_OBSERVABILITY_ENGINEER.md",
+      "bytes": 8572,
+      "sha256": "3e0317413c407bf500c4e47b1a4dda6060915444a9deea5e745e309be5640ef8"
+    },
+    {
+      "path": "specialists/35_DATA_PLATFORM_ENGINEER.md",
+      "bytes": 8741,
+      "sha256": "a0a7a72bea43578c943bce78ffbed143799d102f6dce8eb0e9d1923d8501a0a0"
+    },
+    {
+      "path": "specialists/36_DISTRIBUTED_DATA_ENGINEER.md",
+      "bytes": 8674,
+      "sha256": "a35330c51562a1e9a5bc0442ca3a8fc26a54c526fb386bb6b2eb7f3adfb18e24"
+    },
+    {
+      "path": "specialists/37_CHAOS_RESILIENCE_ENGINEER.md",
+      "bytes": 8654,
+      "sha256": "c44aba3bacf08ab5a4701e39e4d5faf36f871f40ad1f0084e744b983d51bd8ca"
+    },
+    {
+      "path": "specialists/38_COMPATIBILITY_TEST_ENGINEER.md",
+      "bytes": 8625,
+      "sha256": "01c7c2aa4e78974e203cb4e367958e04ab01d545cd26b7be5002bdcd5a353a90"
+    },
+    {
+      "path": "specialists/39_TECHNICAL_WRITER.md",
+      "bytes": 8609,
+      "sha256": "88209c51c6b7b0a4479c8821f74b6ca009910c4051314219cc5262b589cb8614"
+    },
+    {
+      "path": "specialists/40_DEVELOPER_EXPERIENCE_ENGINEER.md",
+      "bytes": 8708,
+      "sha256": "06f6b05d3d603a5403a3c2f0a1dfb181e300d6ac4343eed23f99dc4e21b2016a"
+    },
+    {
+      "path": "specialists/41_BUSINESS_DOMAIN_DATA_EXPERT.md",
+      "bytes": 9140,
+      "sha256": "7432b3973ec9ef0df0591bba6f8c8a9edfc1098b7fcc4971670c4d37f5d8650b"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+project: "Dirty Data to OLAP"
+sequence_version: "1.0"
+bootstrap:
+  status: "IN_PROGRESS"
+  scope: "Repository bootstrap / Prompt 0 only"
+  completed_specialist_steps: []
+specialist_execution:
+  current_step: 1
+  current_role: "product_owner"
+  current_specialist: "Step 01 — Product Manager / Technical Product Owner"
+  last_completed_step: null
+  last_completed_role: null
+  next_step: "Step 01 — Product Manager / Technical Product Owner"
+gates:
+  G0_PRODUCT_CONTRACT: "PENDING"
+  G1_DOMAIN_TRUTH: "PENDING"
+  G2_ARCHITECTURE_READY: "PENDING"
+  G3_SOURCE_SAFETY: "PENDING"
+  G4_BOUNDED_INTELLIGENCE: "PENDING"
+  G5_INFERENCE_VALIDITY: "PENDING"
+  G6_DATA_CORRECTNESS: "PENDING"
+  G7_END_TO_END_PRODUCT: "PENDING"
+  G8_REPRODUCIBLE_BUILD: "PENDING"
+  G9_FUNCTIONAL_SUPPORT: "PENDING"
+  G10_APPLICATION_SECURITY: "PENDING"
+  G11_RESILIENCE: "PENDING"
+  G12_CAPACITY: "PENDING"
+  G13_ADVERSARIAL_SECURITY: "PENDING"
+  G14_USABILITY: "PENDING"
+  G15_RELEASE: "PENDING"
+repository:
+  root: 'D:\Projects\Dirty-Data-to-OLAP'
+  branch: "main"
+  remote_name: "origin"
+  remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
+  initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
+  last_verified_commit: null
+filesystem_boundary:
+  project_root: 'D:\Projects\Dirty-Data-to-OLAP'
+  research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'
+  external_project_dependencies_allowed: false
+blocked: false
