@@ -16,7 +16,8 @@ The component model is a set of small project-owned services connected through p
 - Stage Orchestrator resolves the stage DAG, creates attempts, checkpoints cancellation and coordinates StageExecutor.
 - Review / Policy Service is the one reusable semantic authority for presenting and recording stage-scoped review requests, binding decisions to exact artifacts, checking replay compatibility, invalidating incompatible decisions and exposing unresolved checkpoint state. `REVIEW_EVIDENCE_DECISIONS`, `REVIEW_CANONICAL_IDENTITY`, `REVIEW_ANALYTICAL_PLAN` and `REVIEW_MATERIALIZATION_PLAN` are runtime checkpoints that delegate to this service; they are not four independent policy engines.
 - Source Registry manages source metadata, inclusion rules and read-only connection-profile references.
-- Source Snapshot Coordinator requests bounded snapshots and stages immutable source references.
+- Source Discovery consumes source selection/registry metadata, uses the discovery operation of `SourceAdapter`, and produces `SourceCatalog` without requiring a snapshot.
+- Source Snapshot Coordinator consumes `SourceCatalog` plus `SamplingPolicy`, uses the bounded-snapshot operation of `SourceAdapter`, and stages immutable `SourceSnapshot`, `BatchReference` and `SourceRecordReference` artifacts.
 - Stage services own one semantic responsibility: discovery, profiling, dependency discovery, schema matching, quality analysis, optional semantic evidence, evidence fusion, canonical hypotheses, linkage-evidence-only entity resolution, canonical finalization, analytical planning, compilation, materialization and validation/reconciliation.
 - Entity Resolution owns `EntityMatchEdge` and `EntityCluster` linkage evidence only. Canonical Finalization owns accepted canonical identity and `SourceRecordCanonicalMap` after policy, review, conflict and provenance checks.
 
@@ -31,6 +32,8 @@ The component model is a set of small project-owned services connected through p
 ### Adapters
 
 Adapters normalize dlt, DataProfiler, Desbordante, Valentine, Splink, optional semantic providers and DuckDB behavior into project-owned inputs and outputs. Their native objects never cross the adapter boundary.
+
+The source lifecycle is `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog -> SOURCE_SNAPSHOT_STAGE -> SourceSnapshot/BatchReference/SourceRecordReference`. Discovery and snapshot responsibilities are not interchangeable.
 
 ## 2. Ownership and side effects
 

@@ -11,6 +11,11 @@ sequence_authority:
   first_implementation_role: "Step06 Database Engineer / DBA"
   current_handoff: "Step06 Database Engineer / DBA"
 
+component_ownership_policy:
+  source: docs/engineering/specs/ownership_map.yml
+  status: PLANNED
+  consistency_rule: "Every component implementation_owner, implementation_step and implementation_status must match the architecture component spec and ownership map."
+
 specialist_sequence:
   - {step: 1, role: Product Owner, phase: completed_governance}
   - {step: 2, role: Domain Expert, phase: completed_governance}
@@ -56,7 +61,7 @@ specialist_sequence:
 
 work_packages:
   - {package_id: WP01, steps: [1, 2, 3, 4, 5], objective: "Freeze product, domain, data, software and engineering contracts", entry: "G0/G1 PASS", exit: "G2 PASS and no implementation", gate: G2}
-  - {package_id: WP02, steps: [6], objective: "Create minimal namespace, persistence schemas, contract serialization and test skeleton", entry: "G2 PASS", exit: "importable contract package and persistence contract tests", gate: G2}
+  - {package_id: WP02, steps: [6], objective: "Establish the database-access and introspection foundation with only the minimum package/test scaffold", entry: "G2 PASS", exit: "tested read-only database access/introspection substrate handed to Step07", gate: G2}
   - {package_id: WP03, steps: [7, 8, 9, 10, 11], objective: "Implement source, snapshot, profiling, quality and safety foundations", entry: "WP02 contracts", exit: "read-only adapters, bounded profiling and privacy/security evidence", gate: G3}
   - {package_id: WP04, steps: [12, 13, 14, 15, 16, 17], objective: "Implement evidence producers, replaceable adapters, bounded semantic assistance and fusion", entry: "G3 PASS", exit: "normalized evidence and conflict-preserving decisions", gate: G4}
   - {package_id: WP05, steps: [18], objective: "Evaluate evidence, schema matching and entity resolution without overstating scores", entry: "WP04 outputs", exit: "calibration/evaluation report and failure fixtures", gate: G5}
@@ -71,7 +76,15 @@ work_packages:
 
 first_implementation_slice:
   step: 6
-  allowed_paths: [src/dirty_data_to_olap/, tests/unit/, tests/contract/, pyproject.toml, migrations/]
-  required_outputs: ["contract package", "ControlStore schema", "migration policy", "test harness", "import boundary checks"]
-  forbidden_outputs: ["business-stage implementation", "OSS clone", "benchmark generator", "source write path", "production workflow"]
-  handoff_to_step_7: ["versioned contracts", "persistence ports", "read-only source boundary", "green Step06 tests"]
+  allowed_paths: [src/dirty_data_to_olap/adapters/sources/sql/, src/dirty_data_to_olap/domain/, tests/unit/, tests/contract/, tests/integration/, pyproject.toml]
+  required_outputs:
+    - "minimum namespace and test scaffold required by the Step06 slice"
+    - "read-only database connection substrate and external connection-profile reference contract"
+    - "normalized database capability description and normalized database failure representation"
+    - "safe metadata introspection boundary with identifier/schema qualification rules"
+    - "transaction/isolation, timeout, pooling, cleanup and bounded sampling semantics"
+    - "SQLite local integration fixture where useful"
+  handoff_to_step_7: ["tested database access/introspection foundations", "read-only policy", "safe sampling/query policy", "normalized DB errors", "Step07 SourceAdapter boundary inputs"]
+  tests_required: ["read-only negative", "metadata introspection", "timeout", "connection failure normalization", "identifier/schema edge cases", "bounded sampling", "architecture/import boundary"]
+  forbidden_outputs: ["business-stage implementation", "OSS clone", "benchmark generator", "source write path", "production workflow", "dlt integration", "complete SourceAdapter ingestion", "canonical/ER/OLAP semantics"]
+  non_ownership: ["business semantics", "entity resolution", "canonical semantics", "OLAP semantics", "all future domain contract families", "dlt/full SourceAdapter implementation"]

@@ -16,9 +16,10 @@ directly.
 
 ## SourceAdapter
 
-- Purpose: discover and read a bounded source snapshot using read-only access.
-- Input: SourceSelection, connection-profile reference, sampling/chunk policy.
-- Output: project-owned SourceDescriptor, catalog descriptors, declared constraints, SourceSnapshot and batch/source-record references.
+- Purpose: expose two explicit read-only operations: `discover_source` and `create_bounded_snapshot`.
+- `discover_source(SourceSelection, SourceRegistryRecord, ConnectionProfileReference)` returns project-owned SourceDescriptor, TableDescriptor, ColumnDescriptor and DeclaredConstraint values for the Discovery service to assemble into SourceCatalog.
+- `create_bounded_snapshot(SourceCatalog, SamplingPolicy, ConnectionProfileReference)` returns SourceSnapshot, BatchReference and SourceRecordReference values for the Source Snapshot service.
+- Discovery does not require SourceSnapshot; snapshot creation does not re-run catalog ownership.
 - Side effects: source reads and project-local attempt artifacts only.
 - Idempotency: same pinned source/configuration produces the same snapshot identity or an explicit changed-snapshot result.
 - Optionality: required for a selected source.

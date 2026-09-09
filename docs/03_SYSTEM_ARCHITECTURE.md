@@ -26,6 +26,8 @@ entrypoints -> application/orchestration -> domain contracts and ports
 
 The authoritative component list and dependency graph are in [components.yml](/docs/architecture/specs/components.yml) and [COMPONENT_MODEL.md](/docs/architecture/COMPONENT_MODEL.md).
 
+Source access is ordered as `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog -> SOURCE_SNAPSHOT_STAGE -> SourceSnapshot/BatchReference/SourceRecordReference`. `SourceAdapter.discover_source` returns project-owned catalog descriptors; `SourceAdapter.create_bounded_snapshot` consumes the catalog and sampling policy. Discovery does not require a snapshot.
+
 ## Runtime stage DAG
 
 ```text
@@ -86,4 +88,4 @@ New source, profiler, dependency, matching, semantic, entity-resolution, materia
 
 ## Deferred implementation
 
-No `src/` tree, concrete adapters, drivers, services, generated data, or research/OSS clone is created by this report. G2 remains `PENDING`; the next handoff is Step 05 — Technical Lead / Engineering Lead.
+No `src/` tree, concrete adapters, drivers, services, generated data, or research/OSS clone is created by this report. At Step04 completion, G2 remained `PENDING`; current execution and gate state is authoritatively tracked in `docs/execution/MASTER_EXECUTION_STATE.yml`.

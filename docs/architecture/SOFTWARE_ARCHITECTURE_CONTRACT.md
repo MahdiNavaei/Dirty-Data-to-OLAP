@@ -46,6 +46,8 @@ The Artifact/Data Plane stores source snapshots or references, samples, large pr
 
 Run status is coarse and separate from stage status. Stages own execution details, attempts and artifacts. A run can be RUNNING, NEEDS_REVIEW, BLOCKED or FAILED while individual stage artifacts remain available for restart. SUCCEEDED is reserved for a final validated product result.
 
+Source access has an explicit two-operation boundary. Discovery introspects the selected source and produces `SourceCatalog`; bounded snapshot creation consumes that catalog and `SamplingPolicy` to produce immutable snapshot/batch/source-record references. No source snapshot is required to discover the catalog, and neither operation permits source writes.
+
 An artifact is consumable only when its lifecycle status is COMPLETE, its schema and metadata validate, its content hash exists and it has been atomically registered. A materialized DuckDB file is evidence of materialization, not by itself a validated product.
 
 ## 6. Stage-scoped review checkpoints

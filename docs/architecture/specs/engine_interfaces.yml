@@ -4,8 +4,19 @@ provenance: Specialist Step 04 Software / Solution Architect
 interfaces:
   - interface_id: SourceAdapter
     purpose: Read-only source discovery and bounded snapshot extraction.
-    input_contracts: [SourceSelection, SamplingPolicy]
-    output_contracts: [SourceDescriptor, TableDescriptor, ColumnDescriptor, DeclaredConstraint, SourceSnapshot, BatchReference]
+    input_contracts: [SourceSelection, SourceRegistryRecord, SourceCatalog, SamplingPolicy, ConnectionProfileReference]
+    output_contracts: [SourceDescriptor, TableDescriptor, ColumnDescriptor, DeclaredConstraint, SourceCatalog, SourceSnapshot, BatchReference, SourceRecordReference]
+    operations:
+      - operation_id: discover_source
+        inputs: [SourceSelection, SourceRegistryRecord, ConnectionProfileReference]
+        outputs: [SourceDescriptor, TableDescriptor, ColumnDescriptor, DeclaredConstraint]
+        application_assembler: application.discovery
+        source_write: false
+      - operation_id: create_bounded_snapshot
+        inputs: [SourceCatalog, SamplingPolicy, ConnectionProfileReference]
+        outputs: [SourceSnapshot, BatchReference, SourceRecordReference]
+        application_assembler: application.source_snapshot
+        source_write: false
     side_effects: [read_source, write_attempt_artifacts]
     idempotency: pinned source/configuration produces stable snapshot identity or explicit changed-snapshot result
     optional: false

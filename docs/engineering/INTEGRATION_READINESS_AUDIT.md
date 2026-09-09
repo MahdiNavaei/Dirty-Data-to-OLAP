@@ -1,12 +1,17 @@
 # Integration Readiness Audit
 
-Status: PASS for G2 readiness; runtime implementation remains future work.
+Status: PASS for repaired G2 readiness; runtime implementation remains future work.
 
 The 19-stage graph has one owner and test strategy per stage in `specs/ownership_map.yml` and `specs/test_matrix.yml`. The 11 declared ports have one owner and contract-test requirement each. The material contract matrix identifies producer, consumer, producing stage, persistence plane, review guard, invalidators and future owner for source, evidence, review, canonical, analytical, compilation, materialization, validation and accounting artifacts.
 
 Readiness decisions:
 
 - PASS: product MUST requirements are mapped to implementation owners, tests and gates in the traceability mapping in `tools/validate_engineering_plan.py`.
+- PASS: independent repair reconciled the source lifecycle across component, stage, adapter and integration-matrix contracts. Discovery precedes snapshot and the matrix has the matching producer/consumer topology.
+- PASS: explicit SourceAdapter discovery and bounded-snapshot operations prevent descriptor/snapshot ambiguity.
+- PASS: component implementation ownership, Step06 scope, semantic family ownership, composition bootstrap scope and ControlStore bootstrap/platform split are consistent.
+- PASS: formal gate names, after-step ownership and evidence classes match the Master Sequence.
+- PASS: risk fields and post-gate receipt evidence are machine-validated.
 - PASS: evidence producers precede fusion; fusion/evaluation precede canonical finalization; canonical precedes OLAP; correctness precedes performance; AppSec precedes Red Team; Technical Writer is final.
 - PASS: ER is conditional and evidence-only. `SourceRecordCanonicalMap` has one producer: `application.canonical_finalization`.
 - PASS: fact implementation is blocked until grain is explicit; source interaction is read-only; research/OSS content is not runtime.

@@ -48,8 +48,8 @@
     },
     {
       "path": "base_reports/03_SYSTEM_ARCHITECTURE.md",
-      "bytes": 8799,
-      "sha256": "2d567d68766896acdc3032dcf02ef00d37b934f00d7305dde82383358748d16d"
+      "bytes": 9224,
+      "sha256": "48f84f610701450fdc5005463f09451bf4e5f16f35b1a058607fc4d7e9d29971"
     },
     {
       "path": "base_reports/04_INTERNAL_DATA_CONTRACTS.md",

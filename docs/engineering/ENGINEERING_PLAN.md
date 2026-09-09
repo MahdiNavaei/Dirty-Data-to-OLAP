@@ -2,7 +2,7 @@
 
 Status: G2 PASS. This document freezes implementation governance; it does not claim that product implementation exists.
 
-The implementation starts at Specialist Step 06. The first slice is deliberately small: establish the `dirty_data_to_olap` namespace, versioned project-owned contracts, persistence ports/schemas and a test harness. Source adapters and pipeline stages follow the frozen 41-step sequence.
+The implementation starts at Specialist Step 06. Its substantive first slice is the database-access and introspection foundation required by the Master Sequence: read-only connections, external connection-profile references, normalized capabilities/errors, metadata introspection, transactions/isolation, timeouts, pooling, safe sampling, identifier qualification, cleanup and bounded-query behavior. Only the minimum package/test scaffold needed for that slice is allowed. Step 07 then owns SourceAdapter ingestion and staging.
 
 ## Architectural commitments
 
@@ -12,6 +12,8 @@ The implementation starts at Specialist Step 06. The first slice is deliberately
 - Operational sources are read-only. ControlStore holds metadata, lifecycle and decisions; ArtifactStore holds large immutable evidence and output artifacts.
 - Review decisions are stage-scoped, hash-bound and invalidated by incompatible subject or policy changes.
 - Every transformation boundary preserves lineage and one terminal record disposition per input record.
+- `domain.contracts` has Step05 governance ownership and Step06 bootstrap ownership only; semantic contract families remain owned by their later specialists.
+- ControlStore may receive a minimal early metadata schema/port, but Step23 owns comprehensive platform hardening.
 
 ## Execution method
 

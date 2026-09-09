@@ -175,8 +175,14 @@ def check_components(data: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], i
         by_id[component_id] = component
         require(required <= set(component), f"component {component_id} is missing required fields")
         require(
-            component.get("implemented_by") or component.get("extension_port"),
-            f"component {component_id} needs implemented_by or extension_port",
+            component.get("implemented_by")
+            or component.get("extension_port")
+            or (
+                component.get("implementation_owner")
+                and component.get("implementation_step")
+                and component.get("implementation_status")
+            ),
+            f"component {component_id} needs implementation ownership or extension_port",
         )
         blob = strings(component).lower()
         require("research/oss" not in blob and "research\\oss" not in blob, f"component {component_id} references research/OSS")
@@ -565,6 +571,27 @@ def check_optionality_consistency(interfaces: dict[str, dict[str, Any]], compone
         require(stage.get("capability_required_for_v1") is capability_required, f"{stage_id} capability requirement is inconsistent")
 
 
+def check_source_lifecycle(interfaces: dict[str, dict[str, Any]], components: dict[str, dict[str, Any]], stages: dict[str, dict[str, Any]]) -> None:
+    source = interfaces["SourceAdapter"]
+    operations = {item.get("operation_id"): item for item in source.get("operations", [])}
+    require(set(operations) == {"discover_source", "create_bounded_snapshot"}, "SourceAdapter operations must distinguish discovery and bounded snapshot")
+    discover = operations.get("discover_source", {})
+    snapshot = operations.get("create_bounded_snapshot", {})
+    require({"SourceDescriptor", "TableDescriptor", "ColumnDescriptor", "DeclaredConstraint"}.issubset(set(discover.get("outputs", []))), "discover_source must return descriptors")
+    require({"SourceCatalog", "SamplingPolicy"}.issubset(set(snapshot.get("inputs", []))), "create_bounded_snapshot must consume catalog and sampling policy")
+    require({"SourceSnapshot", "BatchReference", "SourceRecordReference"}.issubset(set(snapshot.get("outputs", []))), "create_bounded_snapshot must return snapshot references")
+    discovery = components["application.discovery"]
+    source_snapshot = components["application.source_snapshot"]
+    require("SourceSnapshot" not in discovery.get("input_contracts", []), "application.discovery must not require SourceSnapshot")
+    require("application.source_snapshot" not in discovery.get("depends_on", []), "application.discovery must not depend on source snapshot")
+    require({"SourceSelection", "SourceRegistryRecord"}.issubset(set(discovery.get("input_contracts", []))), "discovery must consume source selection/registry metadata")
+    require({"SourceCatalog", "SamplingPolicy"}.issubset(set(source_snapshot.get("input_contracts", []))), "source snapshot must consume catalog and sampling policy")
+    require("application.discovery" in source_snapshot.get("depends_on", []), "source snapshot must depend on discovery")
+    require(stages["SOURCE_DISCOVERY"].get("output_artifact_types") == ["SourceCatalog"], "SOURCE_DISCOVERY must produce SourceCatalog")
+    require(stages["SOURCE_SNAPSHOT_STAGE"].get("dependencies") == ["SOURCE_DISCOVERY"], "SOURCE_SNAPSHOT_STAGE must follow SOURCE_DISCOVERY")
+    require(stages["SOURCE_SNAPSHOT_STAGE"].get("input_artifact_types", [])[0] == "SourceCatalog", "snapshot stage must consume SourceCatalog")
+
+
 def entity_resolution_rejects(proposal: dict[str, Any]) -> bool:
     if proposal.get("er_outputs_mapping") or proposal.get("er_assigns_canonical_id"):
         return True
@@ -847,6 +874,11 @@ def main() -> int:
     checkpoint_count, topological_stage_count = check_review_checkpoints(loaded["review_checkpoints.yml"], loaded["stage_graph.yml"])
     require(topological_stage_count == stage_count, "review topology did not cover every stage")
     check_optionality_consistency(
+        {item["interface_id"]: item for item in loaded["engine_interfaces.yml"].get("interfaces", [])},
+        components,
+        {item["stage_id"]: item for item in loaded["stage_graph.yml"].get("stages", [])},
+    )
+    check_source_lifecycle(
         {item["interface_id"]: item for item in loaded["engine_interfaces.yml"].get("interfaces", [])},
         components,
         {item["stage_id"]: item for item in loaded["stage_graph.yml"].get("stages", [])},

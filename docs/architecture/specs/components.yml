@@ -14,7 +14,10 @@ components:
     input_contracts: [none]
     output_contracts: [project-owned contracts]
     depends_on: []
-    implemented_by: deferred to Step 05
+    implementation_owner: Step06 Database Engineer / DBA
+    implementation_step: 6
+    implementation_status: PLANNED
+    ownership_scope: bootstrap-only; semantic contract families remain separately owned
     side_effect_class: none
     persistence_access: none
     optional: false
@@ -28,7 +31,9 @@ components:
     output_contracts: [RunManifest, RunStatus]
     depends_on: [application.stage_orchestrator, domain.contracts]
     ports_used: [ControlStorePort, CapabilityRegistryPort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step27 Backend Engineer
+    implementation_step: 27
+    implementation_status: PLANNED
     side_effect_class: control_metadata
     persistence_access: ControlStorePort
     optional: false
@@ -42,7 +47,9 @@ components:
     output_contracts: [StageAttempt, RunTransition]
     depends_on: [domain.contracts]
     ports_used: [StageExecutorPort, ControlStorePort, ArtifactStorePort, CapabilityRegistryPort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step28 Distributed Systems / Jobs Engineer
+    implementation_step: 28
+    implementation_status: PLANNED
     side_effect_class: control_metadata
     persistence_access: ControlStorePort and ArtifactStorePort through ports
     optional: false
@@ -56,7 +63,9 @@ components:
     output_contracts: [ReviewDecision, ReviewCheckpointStatus, ReviewStatus]
     depends_on: [domain.contracts]
     ports_used: [ControlStorePort, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step27 Backend Engineer
+    implementation_step: 27
+    implementation_status: PLANNED
     side_effect_class: control_metadata
     persistence_access: ControlStorePort and ArtifactStorePort through ports
     optional: false
@@ -70,7 +79,9 @@ components:
     output_contracts: [SourceRegistryRecord]
     depends_on: [domain.contracts]
     ports_used: [ControlStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step07 Senior Data Engineer
+    implementation_step: 7
+    implementation_status: PLANNED
     side_effect_class: control_metadata
     persistence_access: ControlStorePort
     optional: false
@@ -80,11 +91,13 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [bounded snapshot coordination, immutable source references, staging requests]
-    input_contracts: [SourceSelection, SamplingPolicy]
+    input_contracts: [SourceCatalog, SamplingPolicy]
     output_contracts: [SourceSnapshot, BatchReference, SourceRecordReference]
-    depends_on: [application.source_registry, domain.contracts]
+    depends_on: [application.discovery, application.source_registry, domain.contracts]
     ports_used: [SourceAdapter, ArtifactStorePort, ControlStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step07 Senior Data Engineer
+    implementation_step: 7
+    implementation_status: PLANNED
     side_effect_class: read_only_source_and_artifact
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
@@ -94,11 +107,13 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [catalog tables, columns, types and declared constraints]
-    input_contracts: [SourceSnapshot]
+    input_contracts: [SourceSelection, SourceRegistryRecord]
     output_contracts: [SourceCatalog]
-    depends_on: [application.source_snapshot, domain.contracts]
+    depends_on: [application.source_registry, domain.contracts]
     ports_used: [SourceAdapter, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step07 Senior Data Engineer
+    implementation_step: 7
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -112,7 +127,9 @@ components:
     output_contracts: [ColumnProfile, TableProfile]
     depends_on: [application.discovery, domain.contracts]
     ports_used: [ProfilingAdapter, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step08 Data Profiling Specialist
+    implementation_step: 8
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -126,7 +143,9 @@ components:
     output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
     depends_on: [application.discovery, domain.contracts]
     ports_used: [DependencyDiscoveryAdapter, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step12 Dependency Discovery Engineer
+    implementation_step: 12
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -140,7 +159,9 @@ components:
     output_contracts: [SchemaMatchCandidate]
     depends_on: [application.discovery, domain.contracts]
     ports_used: [SchemaMatchingAdapter, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step13 Schema Matching Engineer
+    implementation_step: 13
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -154,7 +175,9 @@ components:
     output_contracts: [QualityIssue, RepairProposal]
     depends_on: [application.discovery, application.profiling, domain.contracts]
     ports_used: [ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step09 Data Quality Engineer
+    implementation_step: 9
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -168,7 +191,9 @@ components:
     output_contracts: [LLMEvidence]
     depends_on: [domain.contracts]
     ports_used: [OptionalSemanticEvidenceAdapter, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step16 LLM / Semantic AI Engineer
+    implementation_step: 16
+    implementation_status: PLANNED
     side_effect_class: external_optional_and_artifact
     persistence_access: ArtifactStorePort
     optional: true
@@ -187,7 +212,9 @@ components:
         requires: complete SchemaMatchCandidate artifact
         otherwise: absent or policy-recorded SKIPPED matching is allowed
     ports_used: [ArtifactStorePort, ControlStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step17 Evidence Fusion Engineer
+    implementation_step: 17
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
@@ -201,7 +228,9 @@ components:
     output_contracts: [CanonicalModelHypothesis, EntityResolutionSpec]
     depends_on: [application.evidence_fusion, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step19 Canonical Model Engineer
+    implementation_step: 19
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -215,7 +244,9 @@ components:
     output_contracts: [EntityMatchEdge, EntityCluster]
     depends_on: [application.canonical_hypotheses, domain.contracts]
     ports_used: [EntityResolutionAdapter, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step14 Entity Resolution Engineer
+    implementation_step: 14
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: true
@@ -242,7 +273,9 @@ components:
         requires: ER may be absent or policy-recorded SKIPPED
         on_success: finalization may proceed when all other guards hold
     ports_used: [ArtifactStorePort, ControlStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step19 Canonical Model Engineer
+    implementation_step: 19
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
@@ -256,7 +289,9 @@ components:
     output_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
     depends_on: [application.canonical_finalization, domain.contracts]
     ports_used: [ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step20 OLAP Engineer
+    implementation_step: 20
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -270,7 +305,9 @@ components:
     output_contracts: [CompiledPlan, GeneratedSQL]
     depends_on: [application.analytical_planner, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step20 OLAP Engineer
+    implementation_step: 20
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -284,7 +321,9 @@ components:
     output_contracts: [MaterializationArtifact]
     depends_on: [application.compiler, application.review_policy, domain.contracts]
     ports_used: [MaterializerPort, ArtifactStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step20 OLAP Engineer
+    implementation_step: 20
+    implementation_status: PLANNED
     side_effect_class: controlled_target_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -298,7 +337,9 @@ components:
     output_contracts: [ValidationReport, ReconciliationResult]
     depends_on: [application.materializer, application.analytical_planner, domain.contracts]
     ports_used: [ArtifactStorePort, ControlStorePort]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step22 Data QA Engineer
+    implementation_step: 22
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
@@ -308,10 +349,13 @@ components:
     layer: adapters
     ownership: adapter implementation
     responsibilities: [normalize SQL/file source behavior]
-    input_contracts: [SourceSelection]
-    output_contracts: [SourceDescriptor, SourceSnapshot, BatchReference]
+    input_contracts: [SourceSelection, SourceRegistryRecord, SourceCatalog, SamplingPolicy, ConnectionProfileReference]
+    output_contracts: [SourceDescriptor, TableDescriptor, ColumnDescriptor, DeclaredConstraint, SourceSnapshot, BatchReference, SourceRecordReference]
     depends_on: [domain.contracts]
     extension_port: SourceAdapter
+    implementation_owner: Step07 Senior Data Engineer
+    implementation_step: 7
+    implementation_status: PLANNED
     side_effect_class: read_only_source
     persistence_access: ArtifactStorePort
     optional: false
@@ -325,6 +369,9 @@ components:
     output_contracts: [ColumnProfile, TableProfile]
     depends_on: [domain.contracts]
     extension_port: ProfilingAdapter
+    implementation_owner: Step08 Data Profiling Specialist
+    implementation_step: 8
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -338,6 +385,9 @@ components:
     output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
     depends_on: [domain.contracts]
     extension_port: DependencyDiscoveryAdapter
+    implementation_owner: Step12 Dependency Discovery Engineer
+    implementation_step: 12
+    implementation_status: PLANNED
     capability_required_for_v1: true
     runtime_stage_conditional: false
     side_effect_class: artifact_write
@@ -353,6 +403,9 @@ components:
     output_contracts: [SchemaMatchCandidate]
     depends_on: [domain.contracts]
     extension_port: SchemaMatchingAdapter
+    implementation_owner: Step13 Schema Matching Engineer
+    implementation_step: 13
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -368,6 +421,9 @@ components:
     output_contracts: [EntityMatchEdge, EntityCluster]
     depends_on: [domain.contracts]
     extension_port: EntityResolutionAdapter
+    implementation_owner: Step14 Entity Resolution Engineer
+    implementation_step: 14
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: true
@@ -383,6 +439,9 @@ components:
     output_contracts: [LLMEvidence]
     depends_on: [domain.contracts]
     extension_port: OptionalSemanticEvidenceAdapter
+    implementation_owner: Step16 LLM / Semantic AI Engineer
+    implementation_step: 16
+    implementation_status: PLANNED
     capability_required_for_v1: false
     runtime_stage_conditional: true
     side_effect_class: optional_external
@@ -398,6 +457,9 @@ components:
     output_contracts: [MaterializationArtifact]
     depends_on: [domain.contracts]
     extension_port: MaterializerPort
+    implementation_owner: Step20 OLAP Engineer
+    implementation_step: 20
+    implementation_status: PLANNED
     side_effect_class: controlled_target_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -411,6 +473,10 @@ components:
     output_contracts: [ControlMetadata]
     depends_on: [domain.contracts]
     extension_port: ControlStorePort
+    implementation_owner: Step06 Database Engineer / DBA
+    implementation_step: 6
+    implementation_status: PLANNED
+    ownership_scope: bootstrap-only; comprehensive platform ownership remains Step23
     side_effect_class: control_metadata
     persistence_access: SQLite in V1; implementation deferred
     optional: false
@@ -424,6 +490,9 @@ components:
     output_contracts: [ArtifactReference]
     depends_on: [domain.contracts]
     extension_port: ArtifactStorePort
+    implementation_owner: Step23 Data Platform Engineer
+    implementation_step: 23
+    implementation_status: PLANNED
     side_effect_class: artifact_write
     persistence_access: project-local filesystem in V1; implementation deferred
     optional: false
@@ -437,6 +506,9 @@ components:
     output_contracts: [StageAttemptResult]
     depends_on: [domain.contracts]
     extension_port: StageExecutorPort
+    implementation_owner: Step28 Distributed Systems / Jobs Engineer
+    implementation_step: 28
+    implementation_status: PLANNED
     side_effect_class: controlled_process
     persistence_access: ControlStorePort and ArtifactStorePort through ports
     optional: false
@@ -450,6 +522,9 @@ components:
     output_contracts: [CapabilityRecord]
     depends_on: [domain.contracts]
     extension_port: CapabilityRegistryPort
+    implementation_owner: Step23 Data Platform Engineer
+    implementation_step: 23
+    implementation_status: PLANNED
     side_effect_class: none
     persistence_access: ControlStorePort through port
     optional: false
@@ -462,7 +537,9 @@ components:
     input_contracts: [CLIRequest]
     output_contracts: [RunReference, StatusView]
     depends_on: [application.run_manager, application.review_policy]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step27 Backend Engineer
+    implementation_step: 27
+    implementation_status: PLANNED
     side_effect_class: control_request
     persistence_access: application services only
     optional: false
@@ -475,7 +552,9 @@ components:
     input_contracts: [APIRequest]
     output_contracts: [APIResponse]
     depends_on: [application.run_manager, application.review_policy]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step27 Backend Engineer
+    implementation_step: 27
+    implementation_status: PLANNED
     side_effect_class: control_request
     persistence_access: application services only
     optional: true
@@ -488,7 +567,10 @@ components:
     input_contracts: [RuntimeConfiguration, CapabilityRecord]
     output_contracts: [WiredApplication]
     depends_on: [entrypoints.cli, entrypoints.api, persistence.control_store, persistence.artifact_store, runtime.stage_executor, runtime.capability_registry, adapters.source, adapters.profiling, adapters.dependencies, adapters.matching, adapters.entity_resolution, adapters.semantic, adapters.materialization]
-    implemented_by: deferred to Step 05
+    implementation_owner: Step06 Database Engineer / DBA
+    implementation_step: 6
+    implementation_status: PLANNED
+    ownership_scope: bootstrap-only; ongoing wiring ownership follows Step23/27/28 runtime concerns
     side_effect_class: wiring_only
     persistence_access: none
     optional: false

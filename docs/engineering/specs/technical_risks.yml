@@ -1,0 +1,22 @@
+schema_version: "1.0"
+scope: "Step 05 technical risk register for implementation and release readiness"
+provenance:
+  authority: "Step 05 Technical Lead audit, product/domain/data/software contracts, Master Sequence gates"
+  status: "open implementation risks; no numeric probabilities are asserted"
+
+risks:
+  - {risk_id: R-01, description: "Contract drift between product/domain/data/software layers", likelihood: MEDIUM, impact: HIGH, detection: "cross-spec validator", mitigation: "integration matrix and synchronized validators", owner: Step05, future_step: 6, gate_relevance: G2, status: OPEN}
+  - {risk_id: R-02, description: "ER output accidentally becomes canonical truth", likelihood: MEDIUM, impact: HIGH, detection: "ER output negative test", mitigation: "evidence-only ER contract and review guard", owner: Step14/19, future_step: 14, gate_relevance: G5/G6, status: OPEN}
+  - {risk_id: R-03, description: "Source writes through an adapter", likelihood: LOW, impact: CRITICAL, detection: "write-attempt negative test", mitigation: "read-only credentials and policy enforcement", owner: Step11, future_step: 11, gate_relevance: G3, status: OPEN}
+  - {risk_id: R-04, description: "Heuristic scores presented as probability", likelihood: MEDIUM, impact: HIGH, detection: "claim/calibration audit", mitigation: "explicit score semantics and calibration gate", owner: Step18, future_step: 18, gate_relevance: G5, status: OPEN}
+  - {risk_id: R-05, description: "Ambiguous fact grain produces incorrect aggregates", likelihood: MEDIUM, impact: HIGH, detection: "GrainSpec uniqueness test", mitigation: "block compilation until grain is validated", owner: Step20/22, future_step: 20, gate_relevance: G6, status: OPEN}
+  - {risk_id: R-06, description: "Record loss hidden by output-row counts", likelihood: MEDIUM, impact: CRITICAL, detection: "boundary accounting reconciliation", mitigation: "one terminal disposition and contributor references", owner: Step22, future_step: 22, gate_relevance: G6, status: OPEN}
+  - {risk_id: R-07, description: "ControlStore receives raw rows", likelihood: LOW, impact: HIGH, detection: "persistence boundary scan", mitigation: "metadata-only store and negative tests", owner: Step06/10, future_step: 6, gate_relevance: G2/G3, status: OPEN}
+  - {risk_id: R-08, description: "Vendor API drift changes normalized results", likelihood: HIGH, impact: MEDIUM, detection: "adapter contract and compatibility tests", mitigation: "pinned versions and replacement tests", owner: adapter_owners, future_step: 12, gate_relevance: G4/G9, status: OPEN}
+  - {risk_id: R-09, description: "Optional semantic provider outage blocks deterministic work", likelihood: MEDIUM, impact: MEDIUM, detection: "provider failure fixture", mitigation: "explicit SKIPPED/BLOCKED semantics", owner: Step16, future_step: 16, gate_relevance: G4, status: OPEN}
+  - {risk_id: R-10, description: "Unbounded Python memory fails large sources", likelihood: MEDIUM, impact: HIGH, detection: "stage memory measurement", mitigation: "chunking, sampling and bounded query policy", owner: Step37, future_step: 37, gate_relevance: G12, status: OPEN}
+  - {risk_id: R-11, description: "Stale review decision is replayed after subject change", likelihood: MEDIUM, impact: HIGH, detection: "compatibility fingerprint test", mitigation: "invalidate incompatible decisions", owner: Step27, future_step: 27, gate_relevance: G7, status: OPEN}
+  - {risk_id: R-12, description: "Research clone becomes hidden runtime dependency", likelihood: LOW, impact: HIGH, detection: "deletion/import allowlist test", mitigation: "adapter-only OSS use and clone deletion test", owner: Step12, future_step: 12, gate_relevance: G4, status: OPEN}
+  - {risk_id: R-13, description: "Review UI/API bypasses stage guard", likelihood: LOW, impact: CRITICAL, detection: "lifecycle integration test", mitigation: "state-machine and authorization enforcement", owner: Step27/29, future_step: 27, gate_relevance: G7, status: OPEN}
+  - {risk_id: R-14, description: "Performance tuning masks correctness defects", likelihood: MEDIUM, impact: HIGH, detection: "gate-order audit", mitigation: "correctness gates precede performance gates", owner: Step37/38, future_step: 37, gate_relevance: G12, status: OPEN}
+  - {risk_id: R-15, description: "Release docs overstate evidence", likelihood: MEDIUM, impact: HIGH, detection: "final limitation audit", mitigation: "bounded claims and Technical Writer review", owner: Step41, future_step: 41, gate_relevance: G15, status: OPEN}
