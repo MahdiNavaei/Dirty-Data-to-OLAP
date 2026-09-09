@@ -1,0 +1,77 @@
+schema_version: "1.0"
+scope: "v1 implementation plan after the frozen product, domain, data and software architecture"
+provenance:
+  authority: "05_MASTER_BUILD_SEQUENCE.md, product/domain/data/solution contracts, Step 05 cross-artifact audit"
+  status: "G2 PASS; implementation authorized from Step06; no implementation exists in this artifact"
+
+sequence_authority:
+  master_sequence_path: docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md
+  sequence_order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41]
+  first_implementation_step: 6
+  first_implementation_role: "Step06 Database Engineer / DBA"
+  current_handoff: "Step06 Database Engineer / DBA"
+
+specialist_sequence:
+  - {step: 1, role: Product Owner, phase: completed_governance}
+  - {step: 2, role: Domain Expert, phase: completed_governance}
+  - {step: 3, role: Data Architect, phase: completed_architecture}
+  - {step: 4, role: Solution Architect, phase: completed_architecture}
+  - {step: 5, role: Technical Lead / Engineering Lead, phase: completed_governance}
+  - {step: 6, role: Database Engineer / DBA, phase: first_implementation}
+  - {step: 7, role: Senior Data Engineer, phase: implementation}
+  - {step: 8, role: Data Profiling Specialist, phase: implementation}
+  - {step: 9, role: Data Quality Engineer, phase: implementation}
+  - {step: 10, role: Privacy and Compliance Engineer, phase: implementation}
+  - {step: 11, role: Database Security Specialist, phase: implementation}
+  - {step: 12, role: Dependency Discovery Engineer, phase: implementation}
+  - {step: 13, role: Schema Matching Engineer, phase: implementation}
+  - {step: 14, role: Entity Resolution Engineer, phase: implementation}
+  - {step: 15, role: Applied ML Engineer, phase: implementation}
+  - {step: 16, role: LLM / Semantic AI Engineer, phase: implementation}
+  - {step: 17, role: Evidence Fusion Engineer, phase: implementation}
+  - {step: 18, role: ML Evaluation Engineer, phase: evaluation}
+  - {step: 19, role: Canonical Data Model Engineer, phase: implementation}
+  - {step: 20, role: OLAP Engineer, phase: implementation}
+  - {step: 21, role: Semantic Layer Engineer, phase: implementation}
+  - {step: 22, role: Data QA Engineer, phase: validation}
+  - {step: 23, role: Data Platform Engineer, phase: platform}
+  - {step: 24, role: Distributed Systems Engineer, phase: platform}
+  - {step: 25, role: UX Engineer, phase: product_surface}
+  - {step: 26, role: Visualization Engineer, phase: product_surface}
+  - {step: 27, role: Backend Engineer, phase: product_surface}
+  - {step: 28, role: Jobs / Distributed Systems Engineer, phase: orchestration}
+  - {step: 29, role: Frontend Engineer, phase: product_surface}
+  - {step: 30, role: DevOps / Release Engineer, phase: delivery}
+  - {step: 31, role: QA Automation Engineer, phase: validation}
+  - {step: 32, role: Compatibility Engineer, phase: validation}
+  - {step: 33, role: Application Security Engineer, phase: security}
+  - {step: 34, role: Observability Engineer, phase: operations}
+  - {step: 35, role: SRE, phase: operations}
+  - {step: 36, role: Chaos / Resilience Engineer, phase: resilience}
+  - {step: 37, role: Performance Engineer, phase: performance}
+  - {step: 38, role: Load Testing Engineer, phase: performance}
+  - {step: 39, role: Red Team Engineer, phase: security}
+  - {step: 40, role: Developer Experience Engineer, phase: documentation}
+  - {step: 41, role: Technical Writer, phase: final_release}
+
+work_packages:
+  - {package_id: WP01, steps: [1, 2, 3, 4, 5], objective: "Freeze product, domain, data, software and engineering contracts", entry: "G0/G1 PASS", exit: "G2 PASS and no implementation", gate: G2}
+  - {package_id: WP02, steps: [6], objective: "Create minimal namespace, persistence schemas, contract serialization and test skeleton", entry: "G2 PASS", exit: "importable contract package and persistence contract tests", gate: G2}
+  - {package_id: WP03, steps: [7, 8, 9, 10, 11], objective: "Implement source, snapshot, profiling, quality and safety foundations", entry: "WP02 contracts", exit: "read-only adapters, bounded profiling and privacy/security evidence", gate: G3}
+  - {package_id: WP04, steps: [12, 13, 14, 15, 16, 17], objective: "Implement evidence producers, replaceable adapters, bounded semantic assistance and fusion", entry: "G3 PASS", exit: "normalized evidence and conflict-preserving decisions", gate: G4}
+  - {package_id: WP05, steps: [18], objective: "Evaluate evidence, schema matching and entity resolution without overstating scores", entry: "WP04 outputs", exit: "calibration/evaluation report and failure fixtures", gate: G5}
+  - {package_id: WP06, steps: [19, 20, 21], objective: "Finalize canonical model and produce reviewed analytical plans, grains and measures", entry: "G5 PASS", exit: "canonical and OLAP contracts with no unresolved required grain", gate: G6}
+  - {package_id: WP07, steps: [22], objective: "Validate accounting, lineage, grain, keys and reconciliation", entry: "WP06 artifacts", exit: "data QA acceptance evidence", gate: G6}
+  - {package_id: WP08, steps: [23, 24], objective: "Harden platform persistence, capabilities, execution and scale boundaries", entry: "G6 PASS", exit: "operational platform contract", gate: G8}
+  - {package_id: WP09, steps: [25, 26, 27, 28, 29], objective: "Build reviewable product surfaces and durable orchestration", entry: "platform contracts", exit: "review flow and API/UI acceptance", gate: G7}
+  - {package_id: WP10, steps: [30, 31, 32, 33], objective: "Package, test, compatibility-check and secure the application", entry: "product surface", exit: "delivery, QA, compatibility and AppSec evidence", gate: G10}
+  - {package_id: WP11, steps: [34, 35, 36], objective: "Add telemetry, reliability controls and fault-injection evidence", entry: "runtime package", exit: "resilience report and recovery evidence", gate: G11}
+  - {package_id: WP12, steps: [37, 38, 39], objective: "Measure performance/load and run authorized adversarial review", entry: "correctness gates", exit: "performance and red-team evidence", gate: G13}
+  - {package_id: WP13, steps: [40, 41], objective: "Make the repository usable and publish final bounded claims", entry: "all technical gates", exit: "fresh-clone evidence, final docs and release manifest", gate: G15}
+
+first_implementation_slice:
+  step: 6
+  allowed_paths: [src/dirty_data_to_olap/, tests/unit/, tests/contract/, pyproject.toml, migrations/]
+  required_outputs: ["contract package", "ControlStore schema", "migration policy", "test harness", "import boundary checks"]
+  forbidden_outputs: ["business-stage implementation", "OSS clone", "benchmark generator", "source write path", "production workflow"]
+  handoff_to_step_7: ["versioned contracts", "persistence ports", "read-only source boundary", "green Step06 tests"]

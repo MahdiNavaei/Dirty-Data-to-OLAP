@@ -494,8 +494,8 @@ def main() -> int:
         errors.append("G0 is not PASS")
     if state["gates"]["G1_DOMAIN_TRUTH"] != "PASS":
         errors.append("G1 is not PASS")
-    if state["gates"]["G2_ARCHITECTURE_READY"] != "PENDING":
-        errors.append("G2 is not PENDING")
+    if state["gates"]["G2_ARCHITECTURE_READY"] not in {"PENDING", "PASS"}:
+        errors.append("G2 is not PENDING or PASS")
     if any(
         value != "PENDING"
         for key, value in state["gates"].items()

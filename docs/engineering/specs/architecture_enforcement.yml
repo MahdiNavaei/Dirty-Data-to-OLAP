@@ -1,0 +1,23 @@
+schema_version: "1.0"
+scope: "automatable and runtime architecture enforcement for v1"
+provenance:
+  authority: "Step 04 solution architecture and Step 05 technical-lead governance"
+  status: "static checks active now; runtime checks activate with implementation"
+
+rules:
+  - {enforcement_id: ENF-001, rule: "namespace", source_of_truth: "architecture/specs/components.yml", enforcement: "import scan", test_type: architecture, activation: "Step06", failure_severity: blocking, gate_impact: G2}
+  - {enforcement_id: ENF-002, rule: "layer direction", source_of_truth: "components.yml layer/depends_on", enforcement: "dependency graph scan", test_type: architecture, activation: "Step06", failure_severity: blocking, gate_impact: G2}
+  - {enforcement_id: ENF-003, rule: "project-owned contracts", source_of_truth: "internal data contracts", enforcement: "contract schema tests", test_type: contract, activation: "Step06", failure_severity: blocking, gate_impact: G2}
+  - {enforcement_id: ENF-004, rule: "vendor adapter boundary", source_of_truth: "engine_interfaces.yml", enforcement: "vendor import allowlist", test_type: adapter_contract, activation: "Step12", failure_severity: blocking, gate_impact: G4}
+  - {enforcement_id: ENF-005, rule: "source read-only", source_of_truth: "product/data invariants", enforcement: "write-attempt negative tests", test_type: security, activation: "Step07", failure_severity: blocking, gate_impact: G3}
+  - {enforcement_id: ENF-006, rule: "control store is not raw data plane", source_of_truth: "solution architecture", enforcement: "persistence access scan", test_type: architecture, activation: "Step06", failure_severity: blocking, gate_impact: G2}
+  - {enforcement_id: ENF-007, rule: "provenance completeness", source_of_truth: "lineage contract", enforcement: "required-field contract tests", test_type: data, activation: "Step07", failure_severity: blocking, gate_impact: G5}
+  - {enforcement_id: ENF-008, rule: "ER output boundary", source_of_truth: "components.yml and OSS report", enforcement: "output contract negative test", test_type: architecture, activation: "Step14", failure_severity: blocking, gate_impact: G5}
+  - {enforcement_id: ENF-009, rule: "canonical finalization ownership", source_of_truth: "components.yml", enforcement: "producer matrix check", test_type: architecture, activation: "Step19", failure_severity: blocking, gate_impact: G6}
+  - {enforcement_id: ENF-010, rule: "review ordering and invalidation", source_of_truth: "review_checkpoints.yml", enforcement: "lifecycle and compatibility tests", test_type: failure_recovery, activation: "Step27", failure_severity: blocking, gate_impact: G7}
+  - {enforcement_id: ENF-011, rule: "record accounting", source_of_truth: "record_accounting.yml", enforcement: "reconciliation validator", test_type: data, activation: "Step22", failure_severity: blocking, gate_impact: G6}
+  - {enforcement_id: ENF-012, rule: "fact grain before implementation", source_of_truth: "logical model and modeling report", enforcement: "planner guard", test_type: contract, activation: "Step20", failure_severity: blocking, gate_impact: G6}
+  - {enforcement_id: ENF-013, rule: "no research runtime", source_of_truth: "OSS reuse report", enforcement: "dependency and deletion test", test_type: architecture, activation: "Step12", failure_severity: blocking, gate_impact: G4}
+  - {enforcement_id: ENF-014, rule: "bounded memory", source_of_truth: "product NFR-004", enforcement: "scale fixture and memory measurement", test_type: performance, activation: "Step37", failure_severity: release, gate_impact: G12}
+  - {enforcement_id: ENF-015, rule: "no false acceptance claims", source_of_truth: "execution protocol", enforcement: "review checklist and release audit", test_type: release, activation: "always", failure_severity: blocking, gate_impact: G15}
+  - {enforcement_id: ENF-016, rule: "secret and PII safety", source_of_truth: "product/privacy boundary", enforcement: "secret scan and log fixture", test_type: security, activation: "Step10", failure_severity: blocking, gate_impact: G10}

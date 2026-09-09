@@ -688,13 +688,22 @@ def check_state() -> None:
     state = load_yaml(STATE)
     execution = state.get("specialist_execution", {})
     gates = state.get("gates", {})
-    require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
-    require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
-    require(execution.get("current_step") == 5 and execution.get("current_role") == "technical_lead", "execution state must hand off to Step 05")
-    require(execution.get("current_specialist") == "Step 05 — Technical Lead / Engineering Lead", "current specialist must be Step 05")
-    require(execution.get("next_step") == "Step 05 — Technical Lead / Engineering Lead", "next step must be Step 05")
+    if execution.get("current_step") == 5:
+        require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
+        require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
+        require(execution.get("current_role") == "technical_lead", "execution state must be at Step 05")
+        require(execution.get("current_specialist") == "Step 05 — Technical Lead / Engineering Lead", "current specialist must be Step 05")
+        require(execution.get("next_step") == "Step 05 — Technical Lead / Engineering Lead", "next step must be Step 05")
+    elif execution.get("current_step") == 6:
+        require(execution.get("last_completed_step") == 5, "post-Step 05 state must record completed Step 05")
+        require(execution.get("last_completed_role") == "technical_lead", "post-Step 05 role must be technical_lead")
+        require(execution.get("current_role") == "database_engineer", "post-Step 05 state must hand off to Step 06")
+        require(execution.get("current_specialist") == "Step06 — Database Engineer / DBA", "post-Step 05 current specialist must be Step06")
+        require(execution.get("next_step") == "Step06 — Database Engineer / DBA", "post-Step 05 next step must be Step06")
+    else:
+        require(False, "execution state must be at Step 05 or post-Step 05 handoff")
     require(gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS", "G0/G1 must remain PASS")
-    require(gates.get("G2_ARCHITECTURE_READY") == "PENDING", "G2 must remain PENDING")
+    require(gates.get("G2_ARCHITECTURE_READY") in {"PENDING", "PASS"}, "G2 must be PENDING or PASS")
     later_gate_keys = [
         "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY",
         "G6_DATA_CORRECTNESS", "G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD",

@@ -43,8 +43,8 @@
     },
     {
       "path": "base_reports/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md",
-      "bytes": 15237,
-      "sha256": "f6db9b6cb5b39fefa2459ec9651059423bc018e55c8715612026cc0fe7b5bf86"
+      "bytes": 15454,
+      "sha256": "30671eff2bcd1c152061d071e6bc4d84c318af4d33b7bc43296bcfa6c47bd6c6"
     },
     {
       "path": "base_reports/03_SYSTEM_ARCHITECTURE.md",

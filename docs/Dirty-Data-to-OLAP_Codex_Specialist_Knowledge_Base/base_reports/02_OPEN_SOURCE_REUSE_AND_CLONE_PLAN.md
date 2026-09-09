@@ -406,7 +406,11 @@ Output:
 
 - `EntityMatchEdge`
 - `EntityCluster`
-- `SourceRecordCanonicalMap`
+
+The adapter must not emit `SourceRecordCanonicalMap`. Entity resolution produces
+linkage evidence only; `application.canonical_finalization` is the sole producer
+of accepted canonical identity mappings after the canonical-identity review
+guard.
 
 ## 9.5 Example
 

@@ -1,0 +1,32 @@
+schema_version: "1.0"
+scope: "G0-G15 specialist release and implementation gates"
+provenance:
+  authority: "05_MASTER_BUILD_SEQUENCE.md and MASTER_EXECUTION_STATE.yml"
+  status: "G2 becomes PASS only after pre-gate validation"
+
+gates:
+  - {gate_id: G0, name: Product Contract, after_step: 1, owner_step: 1, status: PASS, required_evidence: [product_contract, acceptance_criteria, scope_boundary], blocks: [implementation]}
+  - {gate_id: G1, name: Domain Truth, after_step: 2, owner_step: 2, status: PASS, required_evidence: [domain_docs, benchmark_labels, domain_validator], blocks: [architecture]}
+  - {gate_id: G2, name: Architecture Ready, after_step: 5, owner_step: 5, status: PENDING, required_evidence: [engineering_plan, ownership_map, test_strategy, enforcement, readiness_audit, pre_gate_validator], blocks: [implementation]}
+  - {gate_id: G3, name: Data Security and Source Safety, after_step: 11, owner_step: 11, status: PENDING, required_evidence: [read_only_source_tests, db_security_review], blocks: [downstream_data_execution]}
+  - {gate_id: G4, name: Dependency and Adapter Baseline, after_step: 16, owner_step: 16, status: PENDING, required_evidence: [dependency_audit, adapter_contracts, semantic_failure_paths], blocks: [evaluation]}
+  - {gate_id: G5, name: Evidence and ER Evaluation, after_step: 18, owner_step: 18, status: PENDING, required_evidence: [fusion_eval, schema_eval, er_eval, calibration_limits], blocks: [canonical_acceptance]}
+  - {gate_id: G6, name: Data QA and Reconciliation, after_step: 22, owner_step: 22, status: PENDING, required_evidence: [grain_tests, accounting, reconciliation], blocks: [release]}
+  - {gate_id: G7, name: Frontend Acceptance, after_step: 29, owner_step: 29, status: PENDING, required_evidence: [review_flow_e2e, accessibility], blocks: [release]}
+  - {gate_id: G8, name: DevOps and Runtime Delivery, after_step: 30, owner_step: 30, status: PENDING, required_evidence: [build, packaging, deployment_rehearsal], blocks: [release]}
+  - {gate_id: G9, name: Compatibility, after_step: 32, owner_step: 32, status: PENDING, required_evidence: [source_compatibility, adapter_matrix], blocks: [release]}
+  - {gate_id: G10, name: Application Security, after_step: 33, owner_step: 33, status: PENDING, required_evidence: [security_tests, secret_scan, threat_model], blocks: [release]}
+  - {gate_id: G11, name: Chaos and Resilience, after_step: 36, owner_step: 36, status: PENDING, required_evidence: [fault_injection, recovery_evidence], blocks: [release]}
+  - {gate_id: G12, name: Load and Performance, after_step: 38, owner_step: 38, status: PENDING, required_evidence: [stage_benchmarks, memory, load_report], blocks: [release]}
+  - {gate_id: G13, name: Red Team, after_step: 39, owner_step: 39, status: PENDING, required_evidence: [authorized_red_team_report, remediations], blocks: [release]}
+  - {gate_id: G14, name: Developer Experience, after_step: 40, owner_step: 40, status: PENDING, required_evidence: [fresh_clone, docs, examples], blocks: [release]}
+  - {gate_id: G15, name: Technical Writer and Final Release, after_step: 41, owner_step: 41, status: PENDING, required_evidence: [final_docs, limitation_audit, release_manifest], blocks: [public_release]}
+
+ordering_constraints:
+  - "evidence producers precede EVIDENCE_FUSION"
+  - "evaluation follows evidence and ER producers"
+  - "CANONICAL_FINALIZATION follows evaluation and evidence guards"
+  - "OLAP follows canonical finalization"
+  - "performance follows correctness"
+  - "Red Team follows AppSec"
+  - "Technical Writer is final"

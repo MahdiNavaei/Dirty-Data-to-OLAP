@@ -1,0 +1,59 @@
+schema_version: "1.0"
+scope: "v1 test strategy and evidence tiers"
+provenance:
+  authority: "docs/08_BENCHMARK_AND_VALIDATION_PLAN.md, software architecture specs, Step 05 engineering plan"
+  status: "planned execution policy; no CI workflow created"
+
+tiers:
+  - {tier_id: TIER0, name: repository_contract, runs: "now", blocking: true, evidence: "domain/data/solution/engineering validators"}
+  - {tier_id: TIER1, name: unit_contract_architecture, runs: "after implementation", blocking: true, evidence: "pytest and architecture checks"}
+  - {tier_id: TIER2, name: local_integration, runs: "after implementation", blocking: true, evidence: "SQLite/files/DuckDB controlled fixtures"}
+  - {tier_id: TIER3, name: deterministic_e2e, runs: "after implementation", blocking: true, evidence: "reference benchmark report"}
+  - {tier_id: TIER4, name: scheduled_scale, runs: "release candidate", blocking: false, evidence: "stage performance and hardware manifest"}
+
+categories:
+  - {category: unit, purpose: "small deterministic functions and state transitions", must_be_real: true, allowed_mocks: "ports only", owner: "owning specialist", tier: TIER1, blocking: true}
+  - {category: contract, purpose: "project-owned schemas, IDs, lineage and compatibility", must_be_real: true, allowed_mocks: "none for serialization", owner: "Step06 and contract owners", tier: TIER1, blocking: true}
+  - {category: architecture, purpose: "imports, layers, ownership, stage order and forbidden coupling", must_be_real: true, allowed_mocks: "none", owner: "Step05/Step40", tier: TIER1, blocking: true}
+  - {category: adapter_contract, purpose: "normalize each external engine behind its port", must_be_real: true, allowed_mocks: "vendor boundary fixtures", owner: "adapter owner", tier: TIER2, blocking: true}
+  - {category: integration, purpose: "stage and persistence interoperability", must_be_real: true, allowed_mocks: "controlled source fixtures", owner: "Step28", tier: TIER2, blocking: true}
+  - {category: data, purpose: "keys, grain, referential integrity, lineage and record accounting", must_be_real: true, allowed_mocks: "none for reconciliation", owner: "Step22", tier: TIER3, blocking: true}
+  - {category: evaluation, purpose: "precision/recall, false merges, calibration and quality detection", must_be_real: true, allowed_mocks: "ground truth labels only", owner: "Step18", tier: TIER3, blocking: true}
+  - {category: e2e, purpose: "fresh controlled run from source snapshot to validated target", must_be_real: true, allowed_mocks: "none beyond fixture sources", owner: "Step31", tier: TIER3, blocking: true}
+  - {category: failure_recovery, purpose: "failed stage, resume, cancellation, invalidation and retained artifacts", must_be_real: true, allowed_mocks: "fault injection", owner: "Step28", tier: TIER2, blocking: true}
+  - {category: security, purpose: "read-only source, secrets, authorization and PII-safe logging", must_be_real: true, allowed_mocks: "safe test credentials", owner: "Step33", tier: TIER1, blocking: true}
+  - {category: performance, purpose: "stage runtime, memory, rows scanned and cache behavior", must_be_real: true, allowed_mocks: "none for measurement", owner: "Step37", tier: TIER4, blocking: false}
+
+stage_test_requirements:
+  - {stage_id: SOURCE_DISCOVERY, required_categories: [contract, adapter_contract, integration], owner: "Step07"}
+  - {stage_id: SOURCE_SNAPSHOT_STAGE, required_categories: [contract, security, integration], owner: "Step07"}
+  - {stage_id: PROFILING, required_categories: [unit, adapter_contract, performance], owner: "Step08"}
+  - {stage_id: DEPENDENCY_DISCOVERY, required_categories: [unit, adapter_contract, evaluation], owner: "Step12"}
+  - {stage_id: SCHEMA_MATCHING, required_categories: [adapter_contract, evaluation], owner: "Step13"}
+  - {stage_id: QUALITY_ANALYSIS, required_categories: [unit, contract, evaluation], owner: "Step09"}
+  - {stage_id: OPTIONAL_SEMANTIC_EVIDENCE, required_categories: [contract, security, failure_recovery], owner: "Step16"}
+  - {stage_id: EVIDENCE_FUSION, required_categories: [unit, contract, evaluation], owner: "Step17"}
+  - {stage_id: REVIEW_EVIDENCE_DECISIONS, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
+  - {stage_id: CANONICAL_HYPOTHESES, required_categories: [contract, data, evaluation], owner: "Step19"}
+  - {stage_id: ENTITY_RESOLUTION, required_categories: [adapter_contract, evaluation, data], owner: "Step14"}
+  - {stage_id: REVIEW_CANONICAL_IDENTITY, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
+  - {stage_id: CANONICAL_FINALIZATION, required_categories: [contract, data, integration], owner: "Step19"}
+  - {stage_id: ANALYTICAL_PLANNING, required_categories: [contract, data, evaluation], owner: "Step20"}
+  - {stage_id: REVIEW_ANALYTICAL_PLAN, required_categories: [contract, integration], owner: "Step27"}
+  - {stage_id: COMPILATION, required_categories: [contract, integration, security], owner: "Step20"}
+  - {stage_id: REVIEW_MATERIALIZATION_PLAN, required_categories: [contract, security, failure_recovery], owner: "Step27"}
+  - {stage_id: MATERIALIZATION, required_categories: [adapter_contract, integration, data], owner: "Step20"}
+  - {stage_id: VALIDATION_RECONCILIATION, required_categories: [data, e2e, failure_recovery], owner: "Step22"}
+
+interface_test_requirements:
+  - {interface_id: SourceAdapter, categories: [adapter_contract, security]}
+  - {interface_id: ProfilingAdapter, categories: [adapter_contract, performance]}
+  - {interface_id: DependencyDiscoveryAdapter, categories: [adapter_contract, evaluation]}
+  - {interface_id: SchemaMatchingAdapter, categories: [adapter_contract, evaluation]}
+  - {interface_id: EntityResolutionAdapter, categories: [adapter_contract, evaluation]}
+  - {interface_id: OptionalSemanticEvidenceAdapter, categories: [adapter_contract, failure_recovery]}
+  - {interface_id: MaterializerPort, categories: [adapter_contract, integration]}
+  - {interface_id: ControlStorePort, categories: [contract, failure_recovery]}
+  - {interface_id: ArtifactStorePort, categories: [contract, data]}
+  - {interface_id: StageExecutorPort, categories: [integration, failure_recovery]}
+  - {interface_id: CapabilityRegistryPort, categories: [contract, security]}

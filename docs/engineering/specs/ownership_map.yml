@@ -1,0 +1,81 @@
+schema_version: "1.0"
+scope: "v1 implementation ownership for the frozen software architecture"
+provenance:
+  authority: "05_MASTER_BUILD_SEQUENCE.md, architecture/specs/components.yml, architecture/specs/engine_interfaces.yml"
+  status: "Step 05 planning artifact; implementation ownership is future-facing"
+
+components:
+  - {component_id: domain.contracts, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, test_strategy: "contract and architecture tests"}
+  - {component_id: application.run_manager, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "unit, lifecycle integration, failure recovery"}
+  - {component_id: application.stage_orchestrator, primary_specialist: "Step28 Distributed Systems / Jobs Engineer", implementation_step: 28, test_strategy: "DAG contract, lifecycle, resume and cancellation"}
+  - {component_id: application.review_policy, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "review contract and invalidation integration"}
+  - {component_id: application.source_registry, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source contract and security negative tests"}
+  - {component_id: application.source_snapshot, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "adapter contract and bounded-read tests"}
+  - {component_id: application.discovery, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source discovery contract tests"}
+  - {component_id: application.profiling, primary_specialist: "Step08 Data Profiling Specialist", implementation_step: 8, test_strategy: "profiling fixtures and scope tests"}
+  - {component_id: application.dependency_discovery, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, test_strategy: "key, FD, IND and trap evaluation"}
+  - {component_id: application.schema_matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, test_strategy: "labeled matching evaluation"}
+  - {component_id: application.quality, primary_specialist: "Step09 Data Quality Engineer", implementation_step: 9, test_strategy: "quality taxonomy fixtures and negatives"}
+  - {component_id: application.semantic_evidence, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "bounded optional-provider contract"}
+  - {component_id: application.evidence_fusion, primary_specialist: "Step17 Evidence Fusion Engineer", implementation_step: 17, test_strategy: "evidence, conflict and decision evaluation"}
+  - {component_id: application.canonical_hypotheses, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "canonical contract and lineage tests"}
+  - {component_id: application.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "ER adapter and false-merge evaluation"}
+  - {component_id: application.canonical_finalization, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "identity, survivorship and accounting tests"}
+  - {component_id: application.analytical_planner, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "grain, measure and model contract tests"}
+  - {component_id: application.compiler, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "compiled-plan and SQL contract tests"}
+  - {component_id: application.materializer, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "controlled-target integration tests"}
+  - {component_id: application.validation, primary_specialist: "Step22 Data QA Engineer", implementation_step: 22, test_strategy: "reconciliation and release acceptance suite"}
+  - {component_id: adapters.source, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source adapter contract tests"}
+  - {component_id: adapters.profiling, primary_specialist: "Step08 Data Profiling Specialist", implementation_step: 8, test_strategy: "DataProfiler adapter contract tests"}
+  - {component_id: adapters.dependencies, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, test_strategy: "Desbordante adapter contract tests"}
+  - {component_id: adapters.matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, test_strategy: "Valentine adapter contract tests"}
+  - {component_id: adapters.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "Splink normalized-output contract tests"}
+  - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "provider provenance and unavailable-path tests"}
+  - {component_id: adapters.materialization, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "DuckDB/materializer compatibility tests"}
+  - {component_id: persistence.control_store, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, test_strategy: "schema, migration and lifecycle tests"}
+  - {component_id: persistence.artifact_store, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, test_strategy: "immutability, hash and retention tests"}
+  - {component_id: runtime.stage_executor, primary_specialist: "Step28 Distributed Systems / Jobs Engineer", implementation_step: 28, test_strategy: "attempt isolation and retry tests"}
+  - {component_id: runtime.capability_registry, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, test_strategy: "capability policy and version tests"}
+  - {component_id: entrypoints.cli, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "CLI contract and smoke tests"}
+  - {component_id: entrypoints.api, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "API contract and authorization tests"}
+  - {component_id: composition.root, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, test_strategy: "composition and import-boundary tests"}
+
+interfaces:
+  - {interface_id: SourceAdapter, owner_component: adapters.source, implementation_step: 7, test_strategy: "adapter contract and read-only negative tests"}
+  - {interface_id: ProfilingAdapter, owner_component: adapters.profiling, implementation_step: 8, test_strategy: "adapter contract tests"}
+  - {interface_id: DependencyDiscoveryAdapter, owner_component: adapters.dependencies, implementation_step: 12, test_strategy: "adapter contract tests"}
+  - {interface_id: SchemaMatchingAdapter, owner_component: adapters.matching, implementation_step: 13, test_strategy: "adapter contract tests"}
+  - {interface_id: EntityResolutionAdapter, owner_component: adapters.entity_resolution, implementation_step: 14, test_strategy: "normalized output and provenance tests"}
+  - {interface_id: OptionalSemanticEvidenceAdapter, owner_component: adapters.semantic, implementation_step: 16, test_strategy: "optional and failure-path tests"}
+  - {interface_id: MaterializerPort, owner_component: adapters.materialization, implementation_step: 20, test_strategy: "controlled target contract tests"}
+  - {interface_id: ControlStorePort, owner_component: persistence.control_store, implementation_step: 6, test_strategy: "persistence contract tests"}
+  - {interface_id: ArtifactStorePort, owner_component: persistence.artifact_store, implementation_step: 23, test_strategy: "artifact immutability tests"}
+  - {interface_id: StageExecutorPort, owner_component: runtime.stage_executor, implementation_step: 28, test_strategy: "execution lifecycle tests"}
+  - {interface_id: CapabilityRegistryPort, owner_component: runtime.capability_registry, implementation_step: 23, test_strategy: "capability registry contract tests"}
+
+stages:
+  - {stage_id: SOURCE_DISCOVERY, owner_component: application.discovery, implementation_step: 7, test_strategy: "contract and fixture"}
+  - {stage_id: SOURCE_SNAPSHOT_STAGE, owner_component: application.source_snapshot, implementation_step: 7, test_strategy: "bounded-read and immutability"}
+  - {stage_id: PROFILING, owner_component: application.profiling, implementation_step: 8, test_strategy: "scope-aware profiling"}
+  - {stage_id: DEPENDENCY_DISCOVERY, owner_component: application.dependency_discovery, implementation_step: 12, test_strategy: "key/FD/IND evaluation"}
+  - {stage_id: SCHEMA_MATCHING, owner_component: application.schema_matching, implementation_step: 13, test_strategy: "labeled matching evaluation"}
+  - {stage_id: QUALITY_ANALYSIS, owner_component: application.quality, implementation_step: 9, test_strategy: "quality fixture and negative"}
+  - {stage_id: OPTIONAL_SEMANTIC_EVIDENCE, owner_component: application.semantic_evidence, implementation_step: 16, test_strategy: "optional-provider failure path"}
+  - {stage_id: EVIDENCE_FUSION, owner_component: application.evidence_fusion, implementation_step: 17, test_strategy: "conflict-preserving evaluation"}
+  - {stage_id: REVIEW_EVIDENCE_DECISIONS, owner_component: application.review_policy, implementation_step: 27, test_strategy: "review guard and invalidation"}
+  - {stage_id: CANONICAL_HYPOTHESES, owner_component: application.canonical_hypotheses, implementation_step: 19, test_strategy: "canonical contract"}
+  - {stage_id: ENTITY_RESOLUTION, owner_component: application.entity_resolution, implementation_step: 14, test_strategy: "false-merge evaluation"}
+  - {stage_id: REVIEW_CANONICAL_IDENTITY, owner_component: application.review_policy, implementation_step: 27, test_strategy: "identity review guard"}
+  - {stage_id: CANONICAL_FINALIZATION, owner_component: application.canonical_finalization, implementation_step: 19, test_strategy: "mapping and survivorship"}
+  - {stage_id: ANALYTICAL_PLANNING, owner_component: application.analytical_planner, implementation_step: 20, test_strategy: "grain and measures"}
+  - {stage_id: REVIEW_ANALYTICAL_PLAN, owner_component: application.review_policy, implementation_step: 27, test_strategy: "analytical review guard"}
+  - {stage_id: COMPILATION, owner_component: application.compiler, implementation_step: 20, test_strategy: "compiled-plan contract"}
+  - {stage_id: REVIEW_MATERIALIZATION_PLAN, owner_component: application.review_policy, implementation_step: 27, test_strategy: "materialization review guard"}
+  - {stage_id: MATERIALIZATION, owner_component: application.materializer, implementation_step: 20, test_strategy: "DuckDB integration"}
+  - {stage_id: VALIDATION_RECONCILIATION, owner_component: application.validation, implementation_step: 22, test_strategy: "reconciliation acceptance"}
+
+handoff:
+  first_implementation_step: 6
+  first_implementation_role: "Database Engineer / DBA"
+  required_inputs: ["G0 PASS", "G1 PASS", "G2 PASS", "all Step 05 engineering artifacts"]
+  forbidden_before_step_6: ["production source implementation", "third-party runtime dependency installation", "research clone", "benchmark generator", "CI workflow"]
