@@ -48,13 +48,13 @@
     },
     {
       "path": "base_reports/03_SYSTEM_ARCHITECTURE.md",
-      "bytes": 7051,
-      "sha256": "71551d735cdad10ee362df3b44bdfbb794b42a3fe324996b9422809247c88fdf"
+      "bytes": 7587,
+      "sha256": "c6dae994038248e9bb38cd081b1270a255a6c95f50952acbc4222eceb8e1fdae"
     },
     {
       "path": "base_reports/04_INTERNAL_DATA_CONTRACTS.md",
-      "bytes": 9670,
-      "sha256": "f7f0696cad06eec441ad866a45858bdc1d1b543d828eac08a086968ba861b980"
+      "bytes": 10215,
+      "sha256": "2faff582a4d1fe2f90abf6b0012ea2408eeb10e7eeba09163d63829dc5bed0e3"
     },
     {
       "path": "base_reports/05_EVIDENCE_AND_CONFIDENCE_MODEL.md",

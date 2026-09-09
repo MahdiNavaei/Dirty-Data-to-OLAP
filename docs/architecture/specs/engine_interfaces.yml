@@ -31,6 +31,8 @@ interfaces:
     side_effects: [write_artifacts]
     idempotency: pinned inputs/configuration/adapter version
     optional: false
+    capability_required_for_v1: true
+    runtime_stage_conditional: false
     capability_id: dependencies.adapter
     failure_mode: stage FAILED or NEEDS_REVIEW; no guessed relationship
     adapter_component: adapters.dependencies
@@ -42,21 +44,25 @@ interfaces:
     side_effects: [write_artifacts]
     idempotency: pinned inputs/configuration/adapter version
     optional: false
+    capability_required_for_v1: true
+    runtime_stage_conditional: true
     capability_id: matching.adapter
     failure_mode: explicit failure or optional SKIPPED
     adapter_component: adapters.matching
     forbidden_behavior: [native Valentine objects, score-as-probability, canonical mutation]
   - interface_id: EntityResolutionAdapter
     purpose: Selected entity-family linkage.
-    input_contracts: [EntityResolutionSpec, SourceRecordReference]
-    output_contracts: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    input_contracts: [EntityResolutionSpec, SourceRecordReference, IdentityFieldSpecification, EvidenceReferences]
+    output_contracts: [EntityMatchEdge, EntityCluster]
     side_effects: [write_artifacts]
     idempotency: pinned inputs/configuration/adapter version
     optional: true
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
     capability_id: entity_resolution.adapter
     failure_mode: affected family FAILED or NEEDS_REVIEW
     adapter_component: adapters.entity_resolution
-    forbidden_behavior: [native Splink objects, source deletion, automatic canonical ID assignment]
+    forbidden_behavior: [native Splink objects, source deletion, canonical_entity_id assignment, SourceRecordCanonicalMap output, fake linkage fallback]
   - interface_id: OptionalSemanticEvidenceAdapter
     purpose: Bounded semantic evidence.
     input_contracts: [SemanticEvidenceRequest, EvidenceReferences]
@@ -64,6 +70,8 @@ interfaces:
     side_effects: [optional_provider_call, write_artifacts]
     idempotency: provider repeatability recorded, not assumed
     optional: true
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
     capability_id: semantic.optional
     failure_mode: optional SKIPPED; required BLOCKED
     adapter_component: adapters.semantic

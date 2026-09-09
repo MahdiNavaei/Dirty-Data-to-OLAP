@@ -54,9 +54,10 @@ Canonicalization is explicitly two-phase:
 
 1. Canonical Hypothesis proposes entity types, attributes, identity candidates and mappings.
 2. Conditional Entity Resolution produces linkage evidence for selected entity families.
-3. Canonical Finalization assigns accepted canonical instances, source mappings, survivorship decisions and conflict-bearing values.
+3. Entity Resolution, when selected, produces linkage evidence (`EntityMatchEdge` and `EntityCluster`) only.
+4. Canonical Finalization assigns accepted canonical instances, `SourceRecordCanonicalMap`, survivorship decisions and conflict-bearing values.
 
-An EntityCluster never becomes a canonical ID automatically. Source records remain traceable.
+An EntityCluster never becomes a canonical ID automatically. When a selected entity family requires ER, finalization requires a complete acceptable linkage artifact and accepted/review-acceptable linkage decision for that family. When ER is not required, its absence or policy-recorded skip is legal. Source records remain traceable.
 
 ## 7. Runtime topology
 

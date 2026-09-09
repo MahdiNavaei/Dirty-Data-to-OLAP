@@ -356,7 +356,15 @@ members:
 confidence_summary: ...
 ```
 
-### 10.4 SourceRecordCanonicalMap
+`EntityCluster` and `EntityMatchEdge` are linkage evidence only. They do not
+assign `canonical_entity_id`, publish accepted canonical identity or create a
+source-to-canonical mapping.
+
+---
+
+## 11. Canonical model contracts
+
+### 11.1 SourceRecordCanonicalMap
 
 ```yaml
 record_ref: crm.customers#981
@@ -364,9 +372,11 @@ canonical_entity_id: cust_000182
 cluster_id: cluster_42
 ```
 
----
-
-## 11. Canonical model contracts
+`SourceRecordCanonicalMap` is produced only by Canonical Finalization after the
+canonical hypothesis, accepted or review-acceptable linkage evidence where
+required, domain assertion, identity policy, conflict state, review decision and
+provenance have been evaluated. `cluster_id` may be referenced, but a cluster
+ID is never reused as a canonical entity ID.
 
 ### CanonicalEntityType
 

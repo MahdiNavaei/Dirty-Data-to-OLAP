@@ -36,7 +36,7 @@ SCHEMA_MATCHING, QUALITY_ANALYSIS} -> EVIDENCE_FUSION -> REVIEW_DECISIONS
 -> VALIDATION_RECONCILIATION
 ```
 
-Optional semantic evidence is a declared branch into evidence fusion. Entity resolution is conditional: it runs only when the canonical hypothesis and policy require it. The graph is acyclic and all stage outputs are typed project-owned artifacts.
+Optional semantic evidence is a declared branch into evidence fusion. Entity resolution is conditional and produces linkage evidence only: `EntityMatchEdge` and `EntityCluster`. It never produces `canonical_entity_id` or `SourceRecordCanonicalMap`. Canonical Finalization is the sole producer of accepted canonical identity and `SourceRecordCanonicalMap`. For an ER-required entity family, finalization requires complete acceptable ER output and an accepted/review-acceptable linkage decision; for an ER-not-required family, absent or policy-recorded skipped ER is legal. The graph is acyclic and all stage outputs are typed project-owned artifacts.
 
 ## Run and stage lifecycle
 
@@ -44,7 +44,7 @@ Run states are `CREATED`, `RUNNING`, `NEEDS_REVIEW`, `BLOCKED`, `FAILED`, `CANCE
 
 Every execution has a stage attempt with pinned inputs, upstream hashes, configuration, adapter version, error/cancellation details, and output references. Retries create a new attempt. A run can become `SUCCEEDED` only after final validation passes, required work is complete, required unresolved conditions are zero, and complete required artifacts are published.
 
-The canonical path is deliberately two phase: evidence produces canonical hypotheses; optional entity resolution attaches or revises identity links; review and policy validation allow canonical finalization. Hypotheses are not silently treated as final records.
+The canonical path is deliberately two phase: evidence produces canonical hypotheses; optional entity resolution produces linkage evidence; review and policy validation allow Canonical Finalization to bind accepted source records to canonical instances. Hypotheses, clusters and accepted mappings are not interchangeable.
 
 ## Control plane and Artifact/Data Plane
 
@@ -75,6 +75,7 @@ New source, profiler, dependency, matching, semantic, entity-resolution, materia
 - [Runtime topology](/docs/architecture/RUNTIME_TOPOLOGY.md)
 - [Extension points](/docs/architecture/EXTENSION_POINTS.md)
 - [Machine-readable specifications](/docs/architecture/specs/components.yml)
+- [Stage state machine](/docs/architecture/specs/stage_state_machine.yml)
 - [Architecture decisions](/docs/adr/ADR-0001_PROJECT_OWNED_CONTRACTS.md)
 - [Two-phase canonicalization ADR](/docs/adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md)
 

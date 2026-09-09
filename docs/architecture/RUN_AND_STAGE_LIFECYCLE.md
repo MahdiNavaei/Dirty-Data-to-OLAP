@@ -18,6 +18,8 @@ PENDING, RUNNING, SUCCEEDED, NEEDS_REVIEW, BLOCKED, FAILED, CANCELLED, INVALIDAT
 
 SKIPPED is legal only for a conditional stage with an explicit reason and policy reference. A required stage cannot be silently skipped. Stage SUCCEEDED means its own outputs are complete; it does not imply run SUCCEEDED.
 
+The complete machine-readable logical-stage and attempt-state contract is [stage_state_machine.yml](specs/stage_state_machine.yml). `StageStatus` is the aggregate logical-stage state; each immutable `StageAttempt` has its own attempt status and history. Logical invalidation never mutates an old attempt.
+
 ## Transitions
 
 Run transitions:

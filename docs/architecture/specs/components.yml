@@ -123,7 +123,7 @@ components:
     ownership: Dirty Data to OLAP
     responsibilities: [candidate keys, FDs, INDs and relationship hypotheses]
     input_contracts: [SourceCatalog, ColumnProfile]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
     depends_on: [application.discovery, domain.contracts]
     ports_used: [DependencyDiscoveryAdapter, ArtifactStorePort]
     implemented_by: deferred to Step 05
@@ -180,7 +180,12 @@ components:
     responsibilities: [combine evidence, preserve conflicts, emit decisions and hypotheses]
     input_contracts: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, LLMEvidence]
     output_contracts: [RelationshipDecision, SemanticMappingDecision, Conflict]
-    depends_on: [application.profiling, application.dependency_discovery, application.schema_matching, application.quality, domain.contracts]
+    depends_on: [application.profiling, application.dependency_discovery, application.quality, domain.contracts]
+    conditional_dependencies:
+      - dependency: application.schema_matching
+        when: cross_source_mapping_scope == true
+        requires: complete SchemaMatchCandidate artifact
+        otherwise: absent or policy-recorded SKIPPED matching is allowed
     ports_used: [ArtifactStorePort, ControlStorePort]
     implemented_by: deferred to Step 05
     side_effect_class: artifact_write
@@ -205,24 +210,37 @@ components:
     name: Entity Resolution Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [run selected entity-family linkage and retain source mappings]
+    responsibilities: [run selected entity-family linkage and retain linkage evidence without assigning canonical identity]
     input_contracts: [EntityResolutionSpec, SourceRecordReference]
-    output_contracts: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    output_contracts: [EntityMatchEdge, EntityCluster]
     depends_on: [application.canonical_hypotheses, domain.contracts]
     ports_used: [EntityResolutionAdapter, ArtifactStorePort]
     implemented_by: deferred to Step 05
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: true
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
     failure_behavior: affected family FAILED or NEEDS_REVIEW; no source deletion
   - component_id: application.canonical_finalization
     name: Canonical Finalization Service
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [accepted canonical instances, mappings, survivorship and conflicts]
-    input_contracts: [CanonicalModelHypothesis, EntityResolutionOutput, ReviewDecision]
+    input_contracts: [CanonicalModelHypothesis, EntityMatchEdge, EntityCluster, ReviewDecision]
     output_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]
-    depends_on: [application.canonical_hypotheses, application.entity_resolution, application.review_policy, domain.contracts]
+    depends_on: [application.canonical_hypotheses, application.review_policy, domain.contracts]
+    conditional_dependencies:
+      - dependency: application.entity_resolution
+        scope: entity_family
+        when: entity_resolution_required(entity_family) == true
+        requires: [complete EntityMatchEdge/EntityCluster artifact, accepted_or_review_acceptable linkage decision]
+        on_failure: family_scoped BLOCKED or NEEDS_REVIEW; no SourceRecordCanonicalMap is published
+      - dependency: application.entity_resolution
+        scope: entity_family
+        when: entity_resolution_required(entity_family) == false
+        requires: no Entity Resolution output
+        on_success: finalization may proceed when all other guards hold
     ports_used: [ArtifactStorePort, ControlStorePort]
     implemented_by: deferred to Step 05
     side_effect_class: artifact_write
@@ -317,9 +335,11 @@ components:
     ownership: adapter implementation
     responsibilities: [normalize dependency engine evidence]
     input_contracts: [DependencyRequest]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
     depends_on: [domain.contracts]
     extension_port: DependencyDiscoveryAdapter
+    capability_required_for_v1: true
+    runtime_stage_conditional: false
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -336,6 +356,8 @@ components:
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
+    capability_required_for_v1: true
+    runtime_stage_conditional: true
     failure_behavior: explicit failure or optional absence
   - component_id: adapters.entity_resolution
     name: Entity Resolution Adapter Family
@@ -343,12 +365,14 @@ components:
     ownership: adapter implementation
     responsibilities: [normalize linkage output]
     input_contracts: [EntityResolutionSpec, SourceRecordReference]
-    output_contracts: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    output_contracts: [EntityMatchEdge, EntityCluster]
     depends_on: [domain.contracts]
     extension_port: EntityResolutionAdapter
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: true
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
     failure_behavior: affected family failure
   - component_id: adapters.semantic
     name: Semantic Evidence Adapter Family
@@ -359,6 +383,8 @@ components:
     output_contracts: [LLMEvidence]
     depends_on: [domain.contracts]
     extension_port: OptionalSemanticEvidenceAdapter
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
     side_effect_class: optional_external
     persistence_access: ArtifactStorePort
     optional: true

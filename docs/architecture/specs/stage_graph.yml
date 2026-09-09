@@ -35,24 +35,29 @@ stages:
     review_boundary: observation scope
   - stage_id: DEPENDENCY_DISCOVERY
     required: true
+    capability_required_for_v1: true
+    conditional: false
     dependencies: [SOURCE_SNAPSHOT_STAGE]
     optional_dependencies: [PROFILING]
     input_artifact_types: [SourceCatalog, SourceSnapshot, ColumnProfile]
-    output_artifact_types: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence]
+    output_artifact_types: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
     failure_consequence: FAILED; no guessed relationships
     cacheable: true
     idempotency: pinned inputs/configuration/adapter
     review_boundary: candidate evidence
   - stage_id: SCHEMA_MATCHING
-    required: true
+    required: false
+    capability_required_for_v1: true
+    conditional: true
     dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
     optional_dependencies: []
     input_artifact_types: [SourceCatalog, ColumnProfile]
     output_artifact_types: [SchemaMatchCandidate]
-    failure_consequence: FAILED or explicit plan-level SKIPPED only when allowed
+    failure_consequence: FAILED when selected; SKIPPED only when no cross-source mapping scope is selected and policy records the reason
     cacheable: true
     idempotency: pinned inputs/configuration/adapter
     review_boundary: candidate mapping
+    skip_semantics: SKIPPED only for a single-source/no-cross-source plan; multi-source V1 plans require this capability
   - stage_id: QUALITY_ANALYSIS
     required: true
     dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
@@ -66,6 +71,7 @@ stages:
   - stage_id: OPTIONAL_SEMANTIC_EVIDENCE
     required: false
     conditional: true
+    capability_required_for_v1: false
     dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
     optional_dependencies: []
     input_artifact_types: [SemanticEvidenceRequest]
@@ -76,14 +82,19 @@ stages:
     review_boundary: semantic hypothesis
   - stage_id: EVIDENCE_FUSION
     required: true
-    dependencies: [PROFILING, DEPENDENCY_DISCOVERY, SCHEMA_MATCHING, QUALITY_ANALYSIS]
-    optional_dependencies: [OPTIONAL_SEMANTIC_EVIDENCE]
+    dependencies: [PROFILING, DEPENDENCY_DISCOVERY, QUALITY_ANALYSIS]
+    optional_dependencies: [SCHEMA_MATCHING, OPTIONAL_SEMANTIC_EVIDENCE]
     input_artifact_types: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue]
     output_artifact_types: [RelationshipDecision, SemanticMappingDecision, Conflict]
     failure_consequence: FAILED; conflicts remain REVIEW_REQUIRED
     cacheable: true
     idempotency: pinned evidence/policy
     review_boundary: accepted/review/rejected decisions
+    conditional_dependencies:
+      - dependency: SCHEMA_MATCHING
+        when: cross_source_mapping_scope == true
+        requires: complete SchemaMatchCandidate artifact
+        otherwise: matching may be absent or policy-recorded SKIPPED
   - stage_id: REVIEW_DECISIONS
     required: true
     dependencies: [EVIDENCE_FUSION]
@@ -107,10 +118,11 @@ stages:
   - stage_id: ENTITY_RESOLUTION
     required: false
     conditional: true
+    capability_required_for_v1: false
     dependencies: [CANONICAL_HYPOTHESES]
     optional_dependencies: []
     input_artifact_types: [EntityResolutionSpec, SourceRecordReference]
-    output_artifact_types: [EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap]
+    output_artifact_types: [EntityMatchEdge, EntityCluster]
     failure_consequence: affected family FAILED or NEEDS_REVIEW
     cacheable: true
     idempotency: pinned spec/input/adapter
@@ -120,12 +132,23 @@ stages:
     required: true
     dependencies: [CANONICAL_HYPOTHESES]
     optional_dependencies: [ENTITY_RESOLUTION]
-    input_artifact_types: [CanonicalModelHypothesis, EntityResolutionOutput, ReviewDecision]
+    input_artifact_types: [CanonicalModelHypothesis, EntityMatchEdge, EntityCluster, ReviewDecision]
     output_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]
     failure_consequence: NEEDS_REVIEW
     cacheable: true
     idempotency: pinned identity decisions/policy
     review_boundary: canonical survivor and conflict state
+    conditional_dependencies:
+      - dependency: ENTITY_RESOLUTION
+        scope: entity_family
+        when: entity_resolution_required(entity_family) == true
+        requires: [ENTITY_RESOLUTION stage SUCCEEDED, COMPLETE linkage artifact, ACCEPTED or REVIEW_ACCEPTABLE linkage decision]
+        on_failure: family_scoped BLOCKED or NEEDS_REVIEW; CANONICAL_FINALIZATION cannot publish a mapping for that family
+      - dependency: ENTITY_RESOLUTION
+        scope: entity_family
+        when: entity_resolution_required(entity_family) == false
+        requires: ER may be absent or SKIPPED with reason/policy
+        on_success: CANONICAL_FINALIZATION may proceed for that family if all other guards hold
   - stage_id: ANALYTICAL_PLANNING
     required: true
     dependencies: [CANONICAL_FINALIZATION]

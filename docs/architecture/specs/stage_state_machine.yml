@@ -1,0 +1,106 @@
+schema_version: 1
+scope: v1_logical_stage_and_stage_attempt_state_machine
+provenance: Specialist Step 04 post-Step-04 architecture integrity repair
+
+logical_stage_statuses:
+  - PENDING
+  - RUNNING
+  - SUCCEEDED
+  - NEEDS_REVIEW
+  - BLOCKED
+  - FAILED
+  - CANCELLED
+  - INVALIDATED
+  - SKIPPED
+
+stage_attempt_statuses:
+  - PENDING
+  - RUNNING
+  - SUCCEEDED
+  - NEEDS_REVIEW
+  - BLOCKED
+  - FAILED
+  - CANCELLED
+  - SKIPPED
+
+logical_stage_terminal_statuses: [CANCELLED]
+stage_attempt_terminal_statuses: [SUCCEEDED, NEEDS_REVIEW, BLOCKED, FAILED, CANCELLED, SKIPPED]
+invalidated_is_logical_only: true
+
+logical_stage_transitions:
+  - from: PENDING
+    to: [RUNNING, SKIPPED, BLOCKED, CANCELLED]
+    guard: RUNNING creates a new attempt; SKIPPED requires a conditional/optional policy and recorded reason; BLOCKED requires an unavailable prerequisite/capability; CANCELLED is allowed only before attempt start
+  - from: RUNNING
+    to: [SUCCEEDED, NEEDS_REVIEW, BLOCKED, FAILED, CANCELLED]
+    guard: outcome is recorded on the current immutable attempt; SUCCEEDED requires complete output publication and stage success guards
+  - from: SUCCEEDED
+    to: [INVALIDATED]
+    guard: an upstream semantic/configuration/schema/grain dependency changed; prior success and artifact history are retained
+  - from: NEEDS_REVIEW
+    to: [PENDING, RUNNING]
+    guard: a compatible review decision is recorded and a new/resumed attempt is created
+  - from: BLOCKED
+    to: [PENDING, RUNNING]
+    guard: prerequisite or capability resolution is recorded and a new/resumed attempt is created
+  - from: FAILED
+    to: [PENDING, RUNNING]
+    guard: retry creates a new attempt and retains the failed attempt immutably
+  - from: INVALIDATED
+    to: [PENDING, RUNNING]
+    guard: a new attempt recomputes the stage; INVALIDATED is never revived in-place
+  - from: SKIPPED
+    to: [PENDING, RUNNING]
+    guard: plan or capability conditions changed; skip reason/policy remains in history and a new attempt is required
+  - from: CANCELLED
+    to: []
+    guard: terminal logical state; no silent resume
+
+stage_attempt_transitions:
+  - from: PENDING
+    to: [RUNNING, BLOCKED, CANCELLED]
+    guard: attempt starts only after prerequisites are available; pre-start cancellation is recorded
+  - from: RUNNING
+    to: [SUCCEEDED, NEEDS_REVIEW, BLOCKED, FAILED, CANCELLED]
+    guard: one immutable attempt records exactly one terminal outcome
+  - from: SUCCEEDED
+    to: []
+    guard: terminal; logical invalidation does not mutate this attempt
+  - from: NEEDS_REVIEW
+    to: []
+    guard: terminal; review resumes through a new attempt
+  - from: BLOCKED
+    to: []
+    guard: terminal; prerequisite resolution resumes through a new attempt
+  - from: FAILED
+    to: []
+    guard: terminal; retry never overwrites this attempt
+  - from: CANCELLED
+    to: []
+    guard: terminal; no complete artifact may be published by this attempt
+  - from: SKIPPED
+    to: []
+    guard: terminal; reconsideration creates a new attempt and retains reason/policy
+
+attempt_invariants:
+  attempt_id_immutable: true
+  failed_attempts_retained: true
+  retry_requires_new_attempt_id: true
+  cancelled_attempt_cannot_publish_complete: true
+  attempt_status_cannot_be_invalidated: true
+  logical_stage_history_retained: true
+
+skip_rules:
+  requires_conditional_or_optional_stage: true
+  reason_required: true
+  policy_reference_required: true
+  required_stage_without_conditional_policy_cannot_skip: true
+  condition_change_reconsiders_skip: true
+
+run_interaction:
+  stage_succeeded_does_not_succeed_run: true
+  required_stage_failed_drives_run_failed: true
+  required_stage_blocked_drives_run_blocked: true
+  required_stage_needs_review_drives_run_needs_review: true
+  optional_stage_skipped_may_succeed_if_plan_allows: true
+  final_validation_stage_succeeded_is_necessary_not_sufficient: true

@@ -404,9 +404,12 @@ handoff_to:
 - status: `PASS`
 - commit_sha: `73874269f70dc81c828b65334bdcd442a1a55f57` (final architecture content and manifest-integrity commit; execution-state follow-up commit recorded separately)
 - inputs_reviewed:
-  - `docs/00_PRODUCT_CONTRACT.md`
-  - `docs/01_USER_JOURNEYS.md`
-  - `docs/02_ACCEPTANCE_CRITERIA.md`
+  - `docs/product/PRODUCT_CONTRACT.md`
+  - `docs/product/USER_JOURNEYS.md`
+  - `docs/product/ACCEPTANCE_CRITERIA.md`
+  - `docs/product/SCOPE_BOUNDARY.md`
+  - `docs/product/TERMINOLOGY.md`
+  - `docs/product/REQUIREMENTS_TRACEABILITY.csv`
   - `docs/03_SYSTEM_ARCHITECTURE.md`
   - `docs/04_INTERNAL_DATA_CONTRACTS.md`
   - `docs/05_EVIDENCE_AND_CONFIDENCE_MODEL.md`
@@ -456,3 +459,71 @@ handoff_to:
   - `G2 is not evaluated by this specialist receipt and remains PENDING.`
 - blocking_issues: `none known`
 - handoff_to: `Step 05 — Technical Lead / Engineering Lead`
+
+## Post-Step-04 Software Architecture Integrity Repair
+
+- execution_step: `post-step-04 repair`
+- owning_context: `Step 04 — Software / Solution Architect`
+- status: `PASS`
+- reason: `Independent review found an Entity Resolution ownership contradiction, incomplete conditional ER dependency semantics, no complete machine-readable StageStatus state machine, and clerical nonexistent product paths in the Step 04 receipt.`
+- defects_corrected:
+  - `Entity Resolution no longer emits SourceRecordCanonicalMap or assigns canonical_entity_id.`
+  - `Canonical Finalization is the sole owner of accepted SourceRecordCanonicalMap.`
+  - `ER-required entity families require acceptable complete linkage output; ER-not-required families may proceed without ER.`
+  - `Logical StageStatus and immutable StageAttemptStatus transitions are now machine-readable.`
+  - `Step 04 input paths now point to actual docs/product files; the original clerical path error is retained as this repair history.`
+- files_reread:
+  - `docs/product/PRODUCT_CONTRACT.md`
+  - `docs/product/USER_JOURNEYS.md`
+  - `docs/product/ACCEPTANCE_CRITERIA.md`
+  - `docs/product/SCOPE_BOUNDARY.md`
+  - `docs/product/TERMINOLOGY.md`
+  - `docs/product/REQUIREMENTS_TRACEABILITY.csv`
+  - `docs/domain/DOMAIN_CONTRACT.md`
+  - `docs/domain/IDENTITY_AND_KEYS.md`
+  - `docs/domain/DOMAIN_ASSERTION_MODEL.md`
+  - `docs/domain/REFERENCE_BENCHMARK_DOMAIN.md`
+  - `docs/data-architecture/DATA_ARCHITECTURE_CONTRACT.md`
+  - `docs/data-architecture/KEY_STRATEGY.md`
+  - `docs/data-architecture/CANONICAL_MODEL_PRINCIPLES.md`
+  - `docs/data-architecture/LINEAGE_AND_PROVENANCE.md`
+  - `docs/data-architecture/specs/architecture_invariants.yml`
+  - `docs/data-architecture/specs/reference_logical_model.yml`
+  - `docs/data-architecture/specs/record_accounting.yml`
+  - `docs/03_SYSTEM_ARCHITECTURE.md`
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md`
+  - `docs/architecture/` (directory review)
+  - `docs/architecture/specs/` (directory review)
+  - `docs/adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md`
+  - `tools/validate_solution_architecture.py`
+- files_changed:
+  - `docs/architecture/specs/engine_interfaces.yml`
+  - `docs/architecture/specs/components.yml`
+  - `docs/architecture/specs/stage_graph.yml`
+  - `docs/architecture/specs/stage_state_machine.yml`
+  - `docs/architecture/ENGINE_INTERFACES.md`
+  - `docs/architecture/COMPONENT_MODEL.md`
+  - `docs/architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md`
+  - `docs/architecture/RUN_AND_STAGE_LIFECYCLE.md`
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md` and synchronized Knowledge Base copy
+  - `docs/03_SYSTEM_ARCHITECTURE.md` and synchronized Knowledge Base copy
+  - `tools/validate_solution_architecture.py`
+  - `docs/execution/STEP04_SOLUTION_ARCHITECTURE_REVIEW.md`
+- tests_run:
+  - `python tools/validate_domain_docs.py`
+  - `python tools/validate_data_architecture.py`
+  - `python tools/validate_solution_architecture.py`
+  - `python -m py_compile tools/validate_solution_architecture.py`
+  - full Knowledge Base manifest verification and paired report equality checks
+  - deterministic execution-log path audit
+  - secret-like, src absence and research/oss clone checks
+  - `git diff --check`
+- tests_passed:
+  - `Entity Resolution negative tests: 8/8`
+  - `Stage lifecycle negative tests: 10/10`
+  - `Cross-contract negative tests: 7/7`
+  - `Domain, data-architecture and solution validators: PASS`
+  - `Manifest: PASS (56/56)`
+- content_commit_sha: `recorded after validation`
+- g2_status: `PENDING`
+- handoff_to: `Step 05 — Technical Lead / Engineering Lead; Step 05 not started`

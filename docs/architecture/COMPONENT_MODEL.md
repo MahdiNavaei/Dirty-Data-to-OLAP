@@ -17,7 +17,8 @@ The component model is a set of small project-owned services connected through p
 - Review / Policy Service records human decisions and checks replay compatibility.
 - Source Registry manages source metadata, inclusion rules and read-only connection-profile references.
 - Source Snapshot Coordinator requests bounded snapshots and stages immutable source references.
-- Stage services own one semantic responsibility: discovery, profiling, dependency discovery, schema matching, quality analysis, optional semantic evidence, evidence fusion, canonical hypotheses, entity resolution, canonical finalization, analytical planning, compilation, materialization and validation/reconciliation.
+- Stage services own one semantic responsibility: discovery, profiling, dependency discovery, schema matching, quality analysis, optional semantic evidence, evidence fusion, canonical hypotheses, linkage-evidence-only entity resolution, canonical finalization, analytical planning, compilation, materialization and validation/reconciliation.
+- Entity Resolution owns `EntityMatchEdge` and `EntityCluster` linkage evidence only. Canonical Finalization owns accepted canonical identity and `SourceRecordCanonicalMap` after policy, review, conflict and provenance checks.
 
 ### Ports and infrastructure
 
@@ -38,7 +39,9 @@ Adapters normalize dlt, DataProfiler, Desbordante, Valentine, Splink, optional s
 | Run Manager / Orchestrator | lifecycle and stage coordination | control metadata only |
 | Source Snapshot | source observation and staging references | read-only source access |
 | Evidence services | evidence and decision artifacts | project-local artifact writes |
-| Canonical / Analytical services | semantic plans and mappings | no source writes |
+| Entity Resolution | linkage edges and clusters | never assigns canonical identity |
+| Canonical Finalization | accepted canonical instances and source mappings | no source writes; family-scoped ER guard |
+| Analytical services | analytical plans and mappings | no source writes |
 | Compiler | compiled execution plan | no execution |
 | Materializer | controlled target creation | writes only controlled target |
 | Validation | checks and reconciliation | reads artifacts; records result |
@@ -47,4 +50,4 @@ Adapters normalize dlt, DataProfiler, Desbordante, Valentine, Splink, optional s
 
 ## 3. Component interaction
 
-The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts.
+The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts. Canonical Finalization evaluates the conditional ER guard per entity family; it cannot publish a mapping when required linkage evidence is absent or unacceptable.

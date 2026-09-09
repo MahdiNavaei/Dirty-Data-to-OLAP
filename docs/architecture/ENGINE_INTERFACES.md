@@ -49,13 +49,21 @@ These are logical ports for Step 05. They are not Python signatures and do not d
 ## EntityResolutionAdapter
 
 - Purpose: link selected source-record families after accepted identity specifications exist.
-- Input: project-owned EntityResolutionSpec and SourceRecordReferences.
-- Output: EntityMatchEdge, EntityCluster, SourceRecordCanonicalMap as project-owned artifacts.
+- Input: project-owned EntityResolutionSpec, SourceRecordReferences, accepted identity-field specification and relevant evidence references.
+- Output: EntityMatchEdge and EntityCluster as project-owned linkage-evidence artifacts.
 - Side effects: no source writes; artifact-plane writes only.
 - Idempotency: same inputs/configuration/version produce a repeatable attempt identity.
 - Optionality: conditional per entity family.
 - Failure: affected family is failed/review-required; unrelated stages may continue only when their dependencies remain valid.
-- Forbidden: assigning canonical IDs alone, deleting source records or exposing native Splink objects.
+- Forbidden: assigning `canonical_entity_id`, producing `SourceRecordCanonicalMap`, deleting source records, or exposing native Splink objects.
+
+## Canonical Finalization Service
+
+- Purpose: turn a reviewed canonical hypothesis and acceptable linkage evidence into accepted canonical identity and source mappings.
+- Input: CanonicalModelHypothesis, EntityMatchEdge/EntityCluster where the family requires ER, ReviewDecision, domain assertion, identity policy and conflict/provenance references.
+- Output: CanonicalModel, CanonicalAttribute and `SourceRecordCanonicalMap`.
+- Ownership: this is the sole producer of accepted source-record-to-canonical mappings. An EntityCluster is evidence and is never reused as a canonical ID.
+- Conditional dependency: when `entity_resolution_required(entity_family) == true`, an acceptable complete ER result and linkage decision are required; when false, absent or policy-recorded SKIPPED ER is legal.
 
 ## OptionalSemanticEvidenceAdapter
 
