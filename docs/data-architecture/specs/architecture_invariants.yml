@@ -1,0 +1,193 @@
+schema_version: 1
+scope: generic_data_architecture_with_reference_benchmark_examples
+provenance: Specialist Step 03 Principal Data Architect
+invariants:
+  - id: DA-001
+    scope: V1 source interaction
+    statement: Operational sources are read-only and source representations are never destructively overwritten.
+    rationale: Preserve source truth and prevent irreversible cleaning.
+    downstream_risk: Source corruption, unsafe writes and unrecoverable evidence loss.
+    verification_expectation: Read-only security tests and negative source-write tests.
+    status: DEFINED
+  - id: DA-002
+    scope: SourceSnapshot
+    statement: Every observation is tied to source_id, snapshot/run identity, schema fingerprint, observation time, selection scope, sampling scope and adapter context.
+    rationale: A database is not timeless truth and sample evidence is not full evidence.
+    downstream_risk: Reuse of stale or incomparable evidence.
+    verification_expectation: Snapshot contract and artifact schema inspection.
+    status: DEFINED
+  - id: DA-003
+    scope: SourceRecordReference
+    statement: Source records remain referencable through transformations, including snapshot-bound references when no stable key exists.
+    rationale: Canonicalization and aggregation require reversible traceability.
+    downstream_risk: Unexplained record loss and impossible lineage.
+    verification_expectation: Source-record lineage and record-accounting checks.
+    status: DEFINED
+  - id: DA-004
+    scope: Key taxonomy
+    statement: Physical source key, business identifier, candidate key, canonical identity, canonical surrogate ID, analytical surrogate key, degenerate identifier and source-record reference are distinct.
+    rationale: Different scopes and lifecycles cannot safely share one identifier category.
+    downstream_risk: False joins, identity collisions and unstable dimensions.
+    verification_expectation: Logical model and contract review.
+    status: DEFINED
+  - id: DA-005
+    scope: Candidate keys
+    statement: Candidate keys remain hypotheses with uniqueness, nullability, scope and violation evidence until accepted by policy/review.
+    rationale: Statistical uniqueness is not domain identity.
+    downstream_risk: False canonical identity or invalid relationships.
+    verification_expectation: Key-candidate status and evidence tests.
+    status: DEFINED
+  - id: DA-006
+    scope: Canonical identity
+    statement: Canonical identity is project-owned and is not copied from a source key or mutable descriptive attribute by convenience.
+    rationale: Source identities are local and descriptions can change or collide.
+    downstream_risk: Cross-source collisions and irreversible false merges.
+    verification_expectation: Canonical identity review and negative tests.
+    status: DEFINED
+  - id: DA-007
+    scope: Entity resolution
+    statement: EntityCluster and cluster_id are linkage evidence/results, not canonical entity identity by default.
+    rationale: A cluster can be uncertain, conflicted or later revised.
+    downstream_risk: False merges and historical rewrites.
+    verification_expectation: ER-to-canonical mapping contract tests.
+    status: DEFINED
+  - id: DA-008
+    scope: Canonical entity boundaries
+    statement: Entity boundaries require domain, identity, relationship, source-role and review evidence; names, similar values and code domains alone are insufficient.
+    rationale: Matching signals cannot define business concepts.
+    downstream_risk: Wrong canonical model and downstream aggregates.
+    verification_expectation: Ambiguity and semantic-boundary tests.
+    status: DEFINED
+  - id: DA-009
+    scope: Canonical attributes
+    statement: Canonical attributes retain mappings, source values/references, transforms, authority, survivorship, conflicts, absence state, provenance and review state.
+    rationale: A final value without disagreement and lineage is not auditable.
+    downstream_risk: Silent semantic loss and unreviewable survivors.
+    verification_expectation: Artifact schema and conflict-preservation inspection.
+    status: DEFINED
+  - id: DA-010
+    scope: Source authority
+    statement: Authority is scoped by subject, attribute/process, source, time, assertion/policy and validity; no source is globally authoritative.
+    rationale: Benchmark authority does not generalize to runtime customers.
+    downstream_risk: Global precedence errors and wrong survivors.
+    verification_expectation: Authority-scope validation and policy review.
+    status: DEFINED
+  - id: DA-011
+    scope: Survivorship
+    statement: A versioned survivorship policy selects a canonical representation while preserving losing values, rationale and evidence.
+    rationale: Selection is not deletion and cannot erase disagreement.
+    downstream_risk: Irrecoverable source conflict and false certainty.
+    verification_expectation: Policy/version/rationale lineage checks.
+    status: DEFINED
+  - id: DA-012
+    scope: Conflict handling
+    statement: Value, authority, temporal, normalization, identity, semantic-mapping and missing-authority conflicts remain explicit.
+    rationale: A higher uncalibrated score cannot resolve a conflict silently.
+    downstream_risk: Wrong canonical values and hidden ambiguity.
+    verification_expectation: Conflict-state negative tests.
+    status: DEFINED
+  - id: DA-013
+    scope: Absence semantics
+    statement: Source missing, not captured, unknown, not applicable, invalid, withheld and quarantined states remain distinct.
+    rationale: Absence states have different business and analytical meanings.
+    downstream_risk: Incorrect completeness, joins and measures.
+    verification_expectation: Null/unknown contract and materialization review.
+    status: DEFINED
+  - id: DA-014
+    scope: Provenance
+    statement: Persisted semantic artifacts retain origin, time/snapshot, engine/policy/actor, evidence and upstream dependencies.
+    rationale: Decisions must be replayable and explainable.
+    downstream_risk: Unverifiable inference and stale reuse.
+    verification_expectation: Provenance completeness checks.
+    status: DEFINED
+  - id: DA-015
+    scope: Lineage
+    statement: Table, column, record/entity, transformation and decision lineage connect analytical outputs to source/evidence paths.
+    rationale: Analytical correctness requires traceability beyond table names.
+    downstream_risk: Unexplained outputs and failed reconciliation.
+    verification_expectation: End-to-end lineage inspection.
+    status: DEFINED
+  - id: DA-016
+    scope: Reversible traceability
+    statement: Traceability to source/evidence is preserved even when transformations are not mathematically invertible.
+    rationale: Aggregation and normalization need audit paths, not fake reversibility.
+    downstream_risk: Loss of accountability during transformation.
+    verification_expectation: Mapping and aggregation-manifest tests.
+    status: DEFINED
+  - id: DA-017
+    scope: Record accounting
+    statement: Every source record/entity has an explicit accepted, mapped, linked, aggregated, filtered, quarantined, rejected or unresolved outcome.
+    rationale: No record may silently disappear.
+    downstream_risk: Hidden data loss and invalid reconciliation.
+    verification_expectation: Record-accounting reconciliation.
+    status: DEFINED
+  - id: DA-018
+    scope: Model layers
+    statement: Canonical business model remains separate from analytical dimensional model.
+    rationale: The star schema is not the only semantic record.
+    downstream_risk: Source semantics become irreversibly shaped by reporting layout.
+    verification_expectation: Logical-model separation review.
+    status: DEFINED
+  - id: DA-019
+    scope: Fact/dimension classification
+    statement: Classification uses domain meaning, relationship position, grain, key behavior, measure semantics and temporal behavior, not table names or numeric columns alone.
+    rationale: Technical shape does not determine business role.
+    downstream_risk: Wrong facts, dimensions and aggregates.
+    verification_expectation: Benchmark model review.
+    status: DEFINED
+  - id: DA-020
+    scope: Fact grain
+    statement: Every fact requires human-readable grain and machine-testable grain keys; ambiguous grain is review-required and cannot be accepted.
+    rationale: Grain is the protection against double counting.
+    downstream_risk: Invalid facts and unreconcilable measures.
+    verification_expectation: Grain uniqueness and negative acceptance tests.
+    status: DEFINED
+  - id: DA-021
+    scope: Measure semantics
+    statement: Every measure has meaning, type, grain context, aggregation behavior, units/currency where needed, lineage and validation.
+    rationale: Numeric columns are not automatically measures or additive.
+    downstream_risk: Wrong aggregates and fabricated revenue semantics.
+    verification_expectation: Measure contract and aggregation tests.
+    status: DEFINED
+  - id: DA-022
+    scope: Conformed dimensions
+    statement: A dimension is conformed only when canonical entity, keys, attribute meaning, temporal policy, authority and domain scope are compatible across facts.
+    rationale: Shared column names do not establish semantic conformance.
+    downstream_risk: Inconsistent slicing across facts.
+    verification_expectation: Cross-fact conformance review.
+    status: DEFINED
+  - id: DA-023
+    scope: Unknown/orphan policy
+    statement: Unknown-member mapping is never implicit; reference benchmark orphans remain corruption/evaluation cases unless an explicit policy says otherwise.
+    rationale: An UNKNOWN row must not hide a broken relationship.
+    downstream_risk: False referential-integrity success.
+    verification_expectation: Negative unknown-member and orphan tests.
+    status: DEFINED
+  - id: DA-024
+    scope: SCD and temporal semantics
+    statement: V1 supports snapshot/current Type 1-compatible rebuilds but does not fabricate history or claim full incremental SCD2.
+    rationale: A snapshot cannot prove historical versions.
+    downstream_risk: Invented history and incorrect temporal analytics.
+    verification_expectation: Snapshot/SCD boundary review.
+    status: DEFINED
+  - id: DA-025
+    scope: Cleaning layers
+    statement: Raw representation, observed issue, repair proposal, approved transformation, canonical value and validation remain distinct.
+    rationale: Proposal is not execution and normalization is not source correction.
+    downstream_risk: Silent mutation and data loss.
+    verification_expectation: Quality-contract and quarantine tests.
+    status: DEFINED
+  - id: DA-026
+    scope: Entity resolution history
+    statement: Linking source records retains source identity, linkage decision and canonical mapping without rewriting historical source evidence.
+    rationale: Later cluster changes must be auditable.
+    downstream_risk: Historical facts silently change.
+    verification_expectation: Linkage/version lineage checks.
+    status: DEFINED
+  - id: DA-027
+    scope: Model evolution
+    statement: Canonical models, domain assertions, mappings, plans and contracts are versioned; semantic changes cannot silently reinterpret old runs.
+    rationale: Reproducibility requires visible evolution.
+    downstream_risk: Incomparable runs and stale decisions.
+    verification_expectation: Schema-version and compatibility checks.
+    status: DEFINED

@@ -1,0 +1,147 @@
+schema_version: 1
+scope: reference_benchmark_only
+provenance: Specialist Step 03 Principal Data Architect
+canonical_entities:
+  - Customer
+  - Product
+  - Branch
+  - Order
+  - OrderLine
+  - Payment
+relationships:
+  - direction: Order.customer -> Customer
+    source_entity: Order
+    target_entity: Customer
+    meaning_ref: docs/domain/RELATIONSHIP_SEMANTICS.md
+  - direction: OrderLine.order -> Order
+    source_entity: OrderLine
+    target_entity: Order
+    meaning_ref: docs/domain/RELATIONSHIP_SEMANTICS.md
+  - direction: OrderLine.product -> Product
+    source_entity: OrderLine
+    target_entity: Product
+    meaning_ref: docs/domain/RELATIONSHIP_SEMANTICS.md
+  - direction: Order.branch -> Branch
+    source_entity: Order
+    target_entity: Branch
+    meaning_ref: docs/domain/RELATIONSHIP_SEMANTICS.md
+  - direction: Payment.order -> Order
+    source_entity: Payment
+    target_entity: Order
+    meaning_ref: docs/domain/RELATIONSHIP_SEMANTICS.md
+dimensions:
+  - name: dim_customer
+    semantic_source: Customer
+    row_meaning: One accepted analytical representation of a canonical Customer for a chosen snapshot policy.
+    key_category: analytical_surrogate_key plus canonical/source identifiers
+    lineage_requirement: canonical mapping -> source records and authority/survivorship evidence
+    scd_expectation: V1 snapshot/current Type 1-compatible; no fabricated history
+    validation_requirement: key uniqueness, lineage completeness and accepted authority/conflict state
+  - name: dim_product
+    semantic_source: Product
+    row_meaning: One accepted analytical representation of a canonical Product.
+    key_category: analytical_surrogate_key plus canonical/source identifiers
+    lineage_requirement: canonical mapping -> ERP/alias evidence and source records
+    scd_expectation: V1 snapshot; history unresolved
+    validation_requirement: key uniqueness and product mapping/lineage completeness
+  - name: dim_branch
+    semantic_source: Branch
+    row_meaning: One accepted analytical representation of a canonical Branch.
+    key_category: analytical_surrogate_key plus canonical/source identifiers
+    lineage_requirement: canonical mapping -> ERP/legacy alias evidence and source records
+    scd_expectation: V1 snapshot; history unresolved
+    validation_requirement: key uniqueness and branch mapping/lineage completeness
+  - name: dim_date
+    semantic_source: Calendar Date
+    row_meaning: One deterministic calendar date used to group events.
+    key_category: analytical date key plus source event-date lineage
+    lineage_requirement: event date -> deterministic calendar derivation
+    scd_expectation: not applicable
+    validation_requirement: date-key uniqueness and derivation reproducibility
+facts:
+  - name: fact_order_line
+    semantic_source: OrderLine
+    row_meaning: One product-level OrderLine event.
+    grain_ref: GRAIN-ORDER-LINE
+    required_relationships: [OrderLine.order -> Order, OrderLine.product -> Product, Order.customer -> Customer, Order.branch -> Branch]
+    measure_refs: [quantity, unit_price, discount_rate]
+    lineage_requirement: OrderLine -> Order/Product/Customer/Branch mappings -> source records
+    validation_requirement: machine-testable grain, accepted relationship integrity, measure semantics and record accounting
+    physical_grain_key: UNRESOLVED — benchmark generator specification required
+  - name: fact_payment
+    semantic_source: Payment
+    row_meaning: One Payment event associated with one Order.
+    grain_ref: GRAIN-PAYMENT
+    required_relationships: [Payment.order -> Order, Order.customer -> Customer, Order.branch -> Branch]
+    measure_refs: [payment_amount]
+    lineage_requirement: Payment -> Order mapping -> source records
+    validation_requirement: machine-testable event identity, relationship integrity and record accounting
+    physical_grain_key: UNRESOLVED — benchmark generator specification required
+fact_grains:
+  - grain_id: GRAIN-ORDER-LINE
+    fact: fact_order_line
+    human_readable: One product-level OrderLine event.
+    conceptual_business_key: Order identity + line sequence
+    machine_validation: Uniqueness of conceptual business key after generator/source mapping is established.
+    physical_key_status: UNRESOLVED — benchmark generator specification required
+  - grain_id: GRAIN-PAYMENT
+    fact: fact_payment
+    human_readable: One Payment event associated with one Order.
+    conceptual_business_key: Stable Payment event identity
+    machine_validation: Uniqueness of payment event key after generator/source mapping is established.
+    physical_key_status: UNRESOLVED — benchmark generator specification required
+measure_semantics:
+  - name: quantity
+    meaning: Ordered units on an OrderLine.
+    class: ADDITIVE
+    grain_context: fact_order_line valid line-event grain
+    unit_currency: Unit metadata unresolved.
+    lineage_validation: source value, approved transform and row accounting required
+  - name: unit_price
+    meaning: Per-unit value for an OrderLine.
+    class: NON_ADDITIVE
+    grain_context: fact_order_line
+    unit_currency: Currency/unit metadata unresolved.
+    lineage_validation: source value and explicit non-additive policy required
+  - name: discount_rate
+    meaning: Rate associated with an OrderLine.
+    class: NON_ADDITIVE
+    grain_context: fact_order_line
+    unit_currency: Not applicable; exact representation unresolved.
+    lineage_validation: source value and explicit rate policy required
+  - name: payment_amount
+    meaning: Payment-event amount if the generator/domain specification defines it.
+    class: UNRESOLVED
+    grain_context: fact_payment
+    unit_currency: Unresolved.
+    lineage_validation: Cannot be treated as revenue without a later domain contract.
+key_categories:
+  - PHYSICAL_SOURCE_KEY
+  - DECLARED_BUSINESS_KEY
+  - CANDIDATE_KEY
+  - CANONICAL_IDENTITY
+  - CANONICAL_SURROGATE_ID
+  - ANALYTICAL_SURROGATE_KEY
+  - DEGENERATE_BUSINESS_IDENTIFIER
+  - SOURCE_RECORD_REFERENCE
+lineage_requirements:
+  - source_snapshot
+  - source_table_or_file
+  - source_column_or_attribute
+  - source_record_or_entity_when_applicable
+  - transformation
+  - decision_and_evidence
+  - analytical_output
+scd_boundaries:
+  v1: snapshot/current Type 1-compatible rebuild semantics
+  future_ready_fields: [valid_from, valid_to, is_current]
+  deferred: full incremental SCD2 and fabricated historical versions
+unresolved_items:
+  - exact physical generator columns and row schema
+  - record-level hidden canonical IDs and clusters
+  - payment event key
+  - order-line physical line-sequence field
+  - status/category mappings
+  - currency/unit metadata
+  - full temporal validity and SCD history
+  - explicit runtime unknown-member policy
