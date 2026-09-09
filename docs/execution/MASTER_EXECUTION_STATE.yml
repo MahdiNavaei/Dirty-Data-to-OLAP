@@ -12,17 +12,17 @@ post_bootstrap_repairs:
     scope: "Documentation, governance, research location, reuse policy and manifest integrity"
     specialist_step_started: false
 specialist_execution:
-  current_step: 2
-  current_role: "domain_expert"
-  current_specialist: "Step 02 — Business / Domain Data Expert"
-  last_completed_step: 1
-  last_completed_role: "product_owner"
-  last_completed_specialist: "Step 01 — Product Manager / Technical Product Owner"
-  last_completed_content_commit: "eedeb6699ffd2938bb4e27a0ba30c2bc8a9aa7488"
-  next_step: "Step 02 — Business / Domain Data Expert"
+  current_step: 3
+  current_role: "principal_data_architect"
+  current_specialist: "Step 03 — Principal Data Architect"
+  last_completed_step: 2
+  last_completed_role: "domain_expert"
+  last_completed_specialist: "Step 02 — Business / Domain Data Expert"
+  last_completed_content_commit: "53603ecbc2c44d34f5a626f4e8d254d20ba600d5"
+  next_step: "Step 03 — Principal Data Architect"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
-  G1_DOMAIN_TRUTH: "PENDING"
+  G1_DOMAIN_TRUTH: "PASS"
   G2_ARCHITECTURE_READY: "PENDING"
   G3_SOURCE_SAFETY: "PENDING"
   G4_BOUNDED_INTELLIGENCE: "PENDING"
@@ -43,8 +43,8 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "eedeb6699ffd2938bb4e27a0ba30c2bc8a9aa7488"
-  commit_recording_note: "This SHA identifies the complete Specialist Step 01 content commit; the follow-up commit records the final execution-state metadata."
+  last_verified_commit: "53603ecbc2c44d34f5a626f4e8d254d20ba600d5"
+  commit_recording_note: "This SHA identifies the complete Specialist Step 02 content commit; the follow-up commit records the final execution-state metadata."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'
