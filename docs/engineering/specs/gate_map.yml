@@ -7,7 +7,7 @@ provenance:
 gates:
   - {gate_id: G0, name: Product Contract, after_step: 1, owner_step: 1, status: PASS, required_evidence: [product_contract, acceptance_criteria, scope_boundary], blocks: [implementation]}
   - {gate_id: G1, name: Domain Truth, after_step: 2, owner_step: 2, status: PASS, required_evidence: [domain_docs, benchmark_labels, domain_validator], blocks: [architecture]}
-  - {gate_id: G2, name: Architecture Ready, after_step: 5, owner_step: 5, status: PENDING, required_evidence: [engineering_plan, ownership_map, test_strategy, enforcement, readiness_audit, pre_gate_validator], blocks: [implementation]}
+  - {gate_id: G2, name: Architecture Ready, after_step: 5, owner_step: 5, status: PASS, required_evidence: [engineering_plan, ownership_map, test_strategy, enforcement, readiness_audit, pre_gate_validator], blocks: [implementation]}
   - {gate_id: G3, name: Data Security and Source Safety, after_step: 11, owner_step: 11, status: PENDING, required_evidence: [read_only_source_tests, db_security_review], blocks: [downstream_data_execution]}
   - {gate_id: G4, name: Dependency and Adapter Baseline, after_step: 16, owner_step: 16, status: PENDING, required_evidence: [dependency_audit, adapter_contracts, semantic_failure_paths], blocks: [evaluation]}
   - {gate_id: G5, name: Evidence and ER Evaluation, after_step: 18, owner_step: 18, status: PENDING, required_evidence: [fusion_eval, schema_eval, er_eval, calibration_limits], blocks: [canonical_acceptance]}

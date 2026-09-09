@@ -17,7 +17,7 @@ We are not building a wrapper that blindly chains libraries. We are building a s
 Recommended repository layout during research and integration:
 
 ```text
-Dirty Data to OLAP/
+Dirty-Data-to-OLAP/
 ├── src/
 ├── tests/
 ├── docs/
