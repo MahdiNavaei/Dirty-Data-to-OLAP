@@ -60,7 +60,8 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
 - execution_step: `bootstrap_policy_correction`
 - role_id: `repository_bootstrap`
 - specialist_file: `none`
-- status: `IN_PROGRESS`
+- status: `PASS`
+- commit_sha: `48664c49154d0e8385208d692c8badbb286c0751`
 - reason: `Independent repository review found contradictory OSS license and research-clone policy.`
 - authoritative_policy_corrected: `License-aware reuse; research clones only under research/oss; research clones never runtime dependencies.`
 - files_affected:
@@ -71,8 +72,18 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
   - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/manifest.json`
   - `docs/execution/SPECIALIST_EXECUTION_LOG.md`
   - `docs/execution/BOOTSTRAP_BASELINE.md`
-- validation: `pending final policy-reconciliation validation`
-- commit_sha_strategy: `Correction commit followed by a metadata commit recording the verified correction SHA without a self-referential SHA.`
+- validation:
+  - `Manifest validation: PASS (56 files, byte counts and SHA-256 verified)`
+  - `Execution state: PASS (Bootstrap PASS, no specialist steps, G0-G15 pending)`
+  - `Paired OSS report policy scan: PASS`
+  - `Global governance policy scan: PASS`
+  - `Research clone absence: PASS`
+  - `research/oss/README.md tracked: PASS`
+  - `.gitignore research rules: PASS`
+  - `Secret-like file scan: PASS`
+  - `Obsolete policy phrase absence: PASS`
+  - `Bootstrap correction staged diff check: PASS`
+- commit_sha_strategy: `Correction commit SHA is recorded here; this metadata update is a separate follow-up commit to avoid a self-referential SHA.`
 - handoff_to: `Step 01 — Product Manager / Technical Product Owner`
 
 ## Future specialist entries

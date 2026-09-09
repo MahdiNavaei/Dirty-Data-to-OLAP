@@ -5,6 +5,12 @@ bootstrap:
   scope: "Repository bootstrap / Prompt 0 only"
   completed_at: "2026-09-09"
   completed_specialist_steps: []
+post_bootstrap_repairs:
+  - repair: "OSS reuse policy reconciliation"
+    status: "PASS"
+    verified_commit: "48664c49154d0e8385208d692c8badbb286c0751"
+    scope: "Documentation, governance, research location, reuse policy and manifest integrity"
+    specialist_step_started: false
 specialist_execution:
   current_step: 1
   current_role: "product_owner"
