@@ -402,7 +402,7 @@ handoff_to:
 - role_id: `solution_architect`
 - specialist_file: `specialists/04_SOLUTION_ARCHITECT.md`
 - status: `PASS`
-- commit_sha: `fe1bf4f276c70f68b057c0bce0660e346f6dbbea` (final architecture content commit; execution-state follow-up commit recorded separately)
+- commit_sha: `73874269f70dc81c828b65334bdcd442a1a55f57` (final architecture content and manifest-integrity commit; execution-state follow-up commit recorded separately)
 - inputs_reviewed:
   - `docs/00_PRODUCT_CONTRACT.md`
   - `docs/01_USER_JOURNEYS.md`
