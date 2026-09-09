@@ -825,3 +825,46 @@ handoff_to:
 - blocking_issues: none
 - handoff_to: `Step09 — Data Quality Engineer`
 - next_state: `last_completed_step=8`, `current_step=9`, `current_role=data_quality_engineer`, `G3-G15=PENDING`, `blocked=false`
+
+## Specialist Step09 - Data Quality Engineer
+
+- execution_step: 9
+- role_id: `data_quality_engineer`
+- status: `PASS`
+- starting_head: `96833620b02684570116a7bf2d2c6a278cbcaae1`
+- content_commit_sha: `201c2f6`
+- metadata_commit_sha: recorded in the final handoff commit
+- inputs_reviewed: current execution state, Step08 review and contracts,
+  source/staging contracts, software architecture specifications, engineering
+  ownership/test matrices, quality requirements, and Great Expectations source,
+  tests and Apache-2.0 license at `4b5dd52306872ec130f7bc0093eb4aebf6b7515b`
+- upstream_step08_hardening: normalized DataProfiler engine observations into
+  `ProfilerEngineObservation`; semantic profile config fingerprint excludes
+  request/source/snapshot identity; physical and configured missing markers are
+  excluded from validity/type/distinct denominators with explicit non-missing
+  counts; quality inputs include snapshot/result, batch/record refs, profiles,
+  rules and optional future DependencyEvidence without a hidden Step12 dependency
+- implementation: project-owned quality contracts and vector; integrity-checked
+  staged-only Parquet reader; deterministic required, unique, duplicate, pattern,
+  type, domain, range, declared-FK and normalization detectors; atomic
+  aggregate-only artifacts; versioned YAML rules; validator and quality docs
+- representative_evidence: 4-row complete staged fixture measured 4/4 rows;
+  one required-value and one allowed-domain issue; separate FK fixture reported
+  two orphan references with complete target coverage and INCONCLUSIVE with
+  partial target coverage; tampered batches returned INPUT_INTEGRITY_FAILED
+- tests_run: `python -m pytest -q` => 60 passed; Step08 DataProfiler 0.13.4
+  integration => 4 passed; Step09 unit/integration/architecture => 8 passed;
+  all domain/data/solution/source/profiling/quality/engineering validators PASS;
+  `python -m compileall -q src tools tests` PASS; `git diff --check` PASS
+- oss_research: Great Expectations source and tests inspected locally;
+  Apache-2.0 verified; no source copied; clone removed before final regression
+- repairability: explicit normalization/type parsing may be AUTO_SAFE or
+  AUTO_WITH_VALIDATION; duplicates and quarantine are review-required; business,
+  domain and FK decisions are manual or non-repairable
+- limitations: no business requiredness/key/pattern inference, hidden FK,
+  entity identity or canonicalization; no source mutation or repair execution;
+  formal G3 and G4-G15 remain PENDING
+- handoff_to: `Step10 - Data Security / Privacy Engineer`
+- next_state: `last_completed_step=9`, `current_step=10`,
+  `current_role=data_security_privacy_engineer`, `G3A=PASS`, `G3B=PASS`,
+  formal G3 and G4-G15=PENDING, `blocked=false`

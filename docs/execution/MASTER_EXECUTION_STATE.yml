@@ -27,14 +27,14 @@ post_bootstrap_repairs:
     scope: "Stage-scoped temporal review checkpoints, artifact-bound ReviewDecision compatibility, review invalidation/replay semantics and topological validator checks"
     specialist_step_started: false
 specialist_execution:
-  current_step: 9
-  current_role: "data_quality_engineer"
-  current_specialist: "Step09 — Data Quality Engineer"
-  last_completed_step: 8
-  last_completed_role: "data_profiling_specialist"
-  last_completed_specialist: "Step08 — Data Profiling Specialist"
-  last_completed_content_commit: "38ac4d326d0278f97852075fef9199ad46054732"
-  next_step: "Step09 — Data Quality Engineer"
+  current_step: 10
+  current_role: "data_security_privacy_engineer"
+  current_specialist: "Step10 — Data Security / Privacy Engineer"
+  last_completed_step: 9
+  last_completed_role: "data_quality_engineer"
+  last_completed_specialist: "Step09 — Data Quality Engineer"
+  last_completed_content_commit: "201c2f65d9830f4d06c9eccb761cb4975e81bad2"
+  next_step: "Step10 — Data Security / Privacy Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
@@ -52,14 +52,17 @@ gates:
   G13_ADVERSARIAL_SECURITY: "PENDING"
   G14_USABILITY: "PENDING"
   G15_RELEASE: "PENDING"
+intermediate_milestones:
+  G3A_SOURCE_USABILITY: "PASS"
+  G3B_DATA_CONDITION_MEASURABLE: "PASS"
 repository:
   root: 'D:\Projects\Dirty-Data-to-OLAP'
   branch: "main"
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "d8cd34b7b9823522191f14fc95c9a25884aeefdc"
-  commit_recording_note: "This SHA identifies the Step08 implementation content commit; the follow-up commit records Step08 completion, Step09 handoff metadata and final validation."
+  last_verified_commit: "201c2f65d9830f4d06c9eccb761cb4975e81bad2"
+  commit_recording_note: "This SHA identifies the Step09 implementation content commit; the follow-up commit records Step09 completion, Step10 handoff metadata and final validation."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'
