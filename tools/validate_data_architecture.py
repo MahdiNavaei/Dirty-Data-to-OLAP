@@ -12,6 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 ARCH = ROOT / "docs" / "data-architecture"
 SPECS = ARCH / "specs"
+STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
 
 EXPECTED_TERMINAL_DISPOSITIONS = {
     "EMITTED_DIRECT",
@@ -29,6 +30,16 @@ EXPECTED_PROCESSING_ANNOTATIONS = {
     "PROFILED",
     "REVIEWED",
 }
+
+
+def implementation_is_authorized() -> bool:
+    """Allow the package only after G2; preserve the pre-gate guard."""
+    try:
+        state = yaml.safe_load(STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    execution = state.get("specialist_execution", {})
+    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
 
 
 def _accounting_record_is_valid(
@@ -520,8 +531,8 @@ def main() -> int:
     research = ROOT / "research" / "oss"
     if research.is_dir() and any(path.name != "README.md" for path in research.rglob("*")):
         errors.append("unexpected OSS clone/content under research/oss")
-    if (ROOT / "src").exists():
-        errors.append("application src/ directory exists")
+    if (ROOT / "src").exists() and not implementation_is_authorized():
+        errors.append("application src/ directory exists before implementation authorization")
 
     if errors:
         print("FAIL")

@@ -64,6 +64,16 @@ def require(condition: bool, message: str) -> None:
         fail(message)
 
 
+def implementation_is_authorized() -> bool:
+    """Allow the package only after G2; preserve the pre-gate guard."""
+    try:
+        state = load_yaml(STATE)
+    except Exception:
+        return False
+    execution = state.get("specialist_execution", {})
+    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     try:
         value = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -519,7 +529,8 @@ def check_cross_artifact() -> None:
     require("EntityCluster never becomes a canonical ID" in architecture_text, "cluster/canonical identity distinction is missing")
     require("SourceRecordCanonicalMap" in architecture_text and "sole producer" in architecture_text, "accepted mapping ownership is missing from narrative architecture")
     require("UNRESOLVED" in (ROOT / "docs" / "data-architecture" / "specs" / "record_accounting.yml").read_text(encoding="utf-8"), "record accounting UNRESOLVED semantics are missing")
-    require(not (ROOT / "src").exists(), "Step 04 must not create src/")
+    if not implementation_is_authorized():
+        require(not (ROOT / "src").exists(), "pre-G2 architecture validation must reject src/")
     oss_root = ROOT / "research" / "oss"
     if oss_root.exists():
         oss_files = [path.relative_to(oss_root).as_posix() for path in oss_root.rglob("*") if path.is_file()]

@@ -108,6 +108,11 @@ def source_lifecycle_valid(components: list[dict], stages: list[dict], contracts
     )
 
 
+def implementation_is_authorized(state: dict) -> bool:
+    execution = state.get("specialist_execution", {}) if isinstance(state, dict) else {}
+    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
+
+
 def critical_topology_valid(components: list[dict], stages: list[dict], ownership_stages: list[dict], contracts: list[dict]) -> bool:
     component_by_id = {item.get("component_id"): item for item in components}
     stage_by_id = {item.get("stage_id"): item for item in stages}
@@ -256,10 +261,14 @@ def main() -> int:
         check("pre-gate current specialist is Step 05", execution.get("current_step") == 5 and execution.get("current_role") == "technical_lead")
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
-        check("post-gate completed step is 5", execution.get("last_completed_step") == 5)
-        check("post-gate completed role is technical_lead", execution.get("last_completed_role") == "technical_lead")
-        check("post-gate current step is 6", execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
-        check("post-gate current and next specialist are Step06", execution.get("current_specialist") == "Step06 — Database Engineer / DBA" and execution.get("next_step") == "Step06 — Database Engineer / DBA")
+        check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer"})
+        check("post-gate implementation remains after G2", implementation_is_authorized(state))
+        check(
+            "post-gate current specialist is Step06 or its Step07 handoff",
+            (execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
+            or (execution.get("current_step", 0) >= 7 and execution.get("current_role") == "senior_data_engineer"),
+        )
 
     # 4-5: required artifacts parse and carry provenance.
     check("all required engineering documents exist", all((ENG / name).is_file() for name in REQUIRED_DOCS))
@@ -380,11 +389,15 @@ def main() -> int:
     check("technical risk spec has required qualitative fields", risks_valid(risk_spec))
     check("documented paths exist or are explicitly future", "future runtime namespace" in (ENG / "REPOSITORY_STRUCTURE.md").read_text(encoding="utf-8") and "future" in (ENG / "IMPLEMENTATION_READINESS_AUDIT.md").read_text(encoding="utf-8").lower())
     structure_text = (ENG / "REPOSITORY_STRUCTURE.md").read_text(encoding="utf-8")
-    check("no false implemented claim", "future runtime namespace" in structure_text and not (ROOT / "src").exists() and not (ROOT / "pyproject.toml").exists())
+    check(
+        "implementation phase claims are state-aware",
+        "future runtime namespace" in structure_text
+        and (implementation_is_authorized(state) or (not (ROOT / "src").exists() and not (ROOT / "pyproject.toml").exists())),
+    )
     check("source read-only and no OSS runtime are explicit", "read-only" in (ENG / "OSS_INTEGRATION_PLAN.md").read_text(encoding="utf-8").lower() or "read-only" in (ENG / "CODING_STANDARDS.md").read_text(encoding="utf-8").lower())
     oss_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in ["docs/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md", "docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/base_reports/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md"])
     check("OSS report does not assign canonical mapping to Splink", not re.search(r"Output:\s*\n(?:\s*-.*\n){0,4}\s*-\s*`?SourceRecordCanonicalMap", oss_text))
-    check("no research/oss clone or application source exists", not (ROOT / "src").exists() and not any(path.name != "README.md" for path in (ROOT / "research" / "oss").rglob("*")))
+    check("no research/oss clone exists", not any(path.name != "README.md" for path in (ROOT / "research" / "oss").rglob("*")))
 
     # 36-40: state-aware previous validators and integrity checks.
     validator_results = []

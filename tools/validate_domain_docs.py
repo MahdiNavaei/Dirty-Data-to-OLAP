@@ -12,10 +12,21 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DOMAIN = ROOT / "docs" / "domain"
 LABELS = ROOT / "benchmarks" / "labels" / "domain-reviewed"
+STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
 
 
 def fail(errors: list[str], message: str) -> None:
     errors.append(message)
+
+
+def implementation_is_authorized() -> bool:
+    """Allow the package only after G2; preserve the pre-gate guard."""
+    try:
+        state = yaml.safe_load(STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    execution = state.get("specialist_execution", {})
+    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
 
 
 def main() -> int:
@@ -196,8 +207,8 @@ def main() -> int:
         unexpected = [p for p in research.rglob("*") if p.name != "README.md"]
         if unexpected:
             fail(errors, "unexpected OSS clone/content under research/oss")
-    if (ROOT / "src").exists():
-        fail(errors, "application source directory was introduced during Step 02")
+    if (ROOT / "src").exists() and not implementation_is_authorized():
+        fail(errors, "application source directory exists before implementation authorization")
 
     if errors:
         print("FAIL")
