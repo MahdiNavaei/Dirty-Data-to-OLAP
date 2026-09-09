@@ -32,6 +32,6 @@ python tools/validate_engineering_plan.py --post-gate
 PASS: engineering_checks=73 mode=post components=34 interfaces=11 stages=19 contracts=31 gates=16 negative_tests=23/23
 ```
 
-Content repair commit: `9a04bd3e4433d1f8a4a46062440552d61ddba9a1`. Metadata commit SHA will be recorded exactly in the receipt-only follow-up after Commit B exists.
+Content repair commit: `9a04bd3e4433d1f8a4a46062440552d61ddba9a1`. Metadata commit: `32f246313c0a8e591c1a4a743fd72e9cbbb99f0`.
 
 Final G2 decision: `PASS`. G3-G15 remain `PENDING`; Step06 is not executed by this repair.

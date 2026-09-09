@@ -632,6 +632,7 @@ handoff_to:
   - `Domain/data/solution validators: PASS`
   - `Cross-spec source lifecycle, ownership, Step06, gate and risk checks: PASS`
 - content_commit_sha: `9a04bd3e4433d1f8a4a46062440552d61ddba9a1`
+- metadata_commit_sha: `32f246313c0a8e591c1a4a743fd72e9cbbb99f0`
 - final_g2_decision: `PASS`
 - handoff: `Step06 — Database Engineer / DBA; not executed during this repair`
 
