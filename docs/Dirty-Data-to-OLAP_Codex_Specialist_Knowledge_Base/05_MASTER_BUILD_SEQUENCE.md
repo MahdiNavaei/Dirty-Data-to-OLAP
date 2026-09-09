@@ -886,7 +886,7 @@ OLAP
 - orphan rates;
 - key integrity;
 - aggregate reconciliation;
-- revenue/amount reconciliation;
+- conditional monetary/amount reconciliation only where a versioned domain contract defines the measure;
 - date coverage;
 - fact-grain uniqueness;
 - source-to-target traceability.
