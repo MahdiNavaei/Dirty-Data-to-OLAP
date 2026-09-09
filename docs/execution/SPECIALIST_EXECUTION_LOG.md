@@ -395,3 +395,64 @@ known_limitations:
 blocking_issues:
 handoff_to:
 ```
+
+## Specialist Step 04 — Software / Solution Architect
+
+- execution_step: `04`
+- role_id: `solution_architect`
+- specialist_file: `specialists/04_SOLUTION_ARCHITECT.md`
+- status: `PASS`
+- commit_sha: `fe921fdc62d3ea9fd2848f913985fe1a3b67a150` (content commit; execution-state follow-up commit recorded separately)
+- inputs_reviewed:
+  - `docs/00_PRODUCT_CONTRACT.md`
+  - `docs/01_USER_JOURNEYS.md`
+  - `docs/02_ACCEPTANCE_CRITERIA.md`
+  - `docs/03_SYSTEM_ARCHITECTURE.md`
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md`
+  - `docs/05_EVIDENCE_AND_CONFIDENCE_MODEL.md`
+  - `docs/06_DATA_QUALITY_AND_CLEANING_TAXONOMY.md`
+  - `docs/07_CANONICAL_AND_OLAP_MODELING_STRATEGY.md`
+  - `docs/08_BENCHMARK_AND_VALIDATION_PLAN.md`
+  - `docs/data-architecture/`
+  - `docs/domain/`
+  - `docs/architecture/`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/` governance, base reports, and Step 04 playbook
+- artifacts_created_or_changed:
+  - `docs/architecture/` ten architecture contracts and six machine-readable specifications
+  - `docs/adr/ADR-0001_PROJECT_OWNED_CONTRACTS.md`
+  - `docs/adr/ADR-0002_CONTROL_STORE_AND_ARTIFACT_PLANE.md`
+  - `docs/adr/ADR-0003_RUN_AND_STAGE_LIFECYCLES.md`
+  - `docs/adr/ADR-0004_EXTERNAL_ADAPTERS_AND_CAPABILITIES.md`
+  - `docs/adr/ADR-0005_ARTIFACT_PUBLICATION_CACHE_AND_INVALIDATION.md`
+  - `docs/adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md`
+  - `docs/03_SYSTEM_ARCHITECTURE.md` and synchronized Knowledge Base copy
+  - `docs/execution/STEP04_SOLUTION_ARCHITECTURE_REVIEW.md`
+  - `tools/validate_solution_architecture.py`
+  - `README.md` and Knowledge Base manifest entry for report 03
+- tests_run:
+  - `python -m py_compile tools/validate_solution_architecture.py`
+  - `python tools/validate_domain_docs.py`
+  - `python tools/validate_data_architecture.py`
+  - pre-state architecture semantic validation
+  - full Knowledge Base manifest byte/SHA validation
+  - paired system-report equality
+  - `git diff --check`
+  - secret-like, source-tree, and OSS-clone scope checks
+- tests_passed:
+  - `Domain validator: PASS (10 documents, 5 specs, 6 entities, 5 relationships, 11 rules, 14 ambiguities)`
+  - `Data architecture validator: PASS (10 documents, 27 invariants, accounting negative tests 8/8, revenue negative tests 6/6)`
+  - `Architecture semantic pre-state check: PASS (34 components, 11 interfaces, 16 stages)`
+  - `Architecture negative checks: lifecycle 10/10, dependency 10/10, artifact/cache 7/7`
+  - `Manifest: PASS (56/56 entries)`
+  - `No application source or OSS clone: PASS; research/oss contains governance README only`
+- architecture_walkthroughs:
+  - `Source snapshot to evidence: immutable input references, bounded attempts and project-owned artifacts remain distinct.`
+  - `Canonical hypothesis to finalization: optional entity resolution is conditional and cannot silently assign canonical identity.`
+  - `Plan to target: analytical planning, compilation, materialization and validation are separate stages.`
+  - `Required capability unavailable: BLOCKED with recorded prerequisite; optional capability unavailable: explicit SKIPPED.`
+  - `Failed/cancelled publication: incomplete output remains non-consumable; retry uses a new attempt.`
+- known_limitations:
+  - `No application implementation, src/ tree, concrete adapters, drivers, queue, deployment topology or runtime benchmarks were created.`
+  - `G2 is not evaluated by this specialist receipt and remains PENDING.`
+- blocking_issues: `none known`
+- handoff_to: `Step 05 — Technical Lead / Engineering Lead`

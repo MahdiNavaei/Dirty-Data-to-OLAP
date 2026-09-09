@@ -342,7 +342,13 @@ def check_state() -> None:
     require(execution.get("next_step") == "Step 05 — Technical Lead / Engineering Lead", "next step must be Step 05")
     require(gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS", "G0/G1 must remain PASS")
     require(gates.get("G2_ARCHITECTURE_READY") == "PENDING", "G2 must remain PENDING")
-    require(all(gates.get(f"G{i}") == "PENDING" for i in range(3, 16)), "G3-G15 must remain PENDING")
+    later_gate_keys = [
+        "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY",
+        "G6_DATA_CORRECTNESS", "G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD",
+        "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE",
+        "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE",
+    ]
+    require(all(gates.get(key) == "PENDING" for key in later_gate_keys), "G3-G15 must remain PENDING")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 
