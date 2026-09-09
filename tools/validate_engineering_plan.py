@@ -265,9 +265,10 @@ def main() -> int:
         check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
-            "post-gate current specialist is Step06 or its Step07 handoff",
+            "post-gate current specialist is Step06, Step07, or the Step08 handoff",
             (execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
-            or (execution.get("current_step", 0) >= 7 and execution.get("current_role") == "senior_data_engineer"),
+            or (execution.get("current_step") == 7 and execution.get("current_role") == "senior_data_engineer")
+            or (execution.get("current_step") == 8 and execution.get("current_role") == "data_profiling_specialist"),
         )
 
     # 4-5: required artifacts parse and carry provenance.

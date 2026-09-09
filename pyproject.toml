@@ -15,6 +15,16 @@ dependencies = [
 test = [
   "pytest>=8.4,<9",
 ]
+sql = [
+  "dlt==1.30.0",
+  "SQLAlchemy>=2.0,<3",
+]
+files = [
+  "pyarrow>=16,<23",
+]
+excel = [
+  "openpyxl>=3.1,<4",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

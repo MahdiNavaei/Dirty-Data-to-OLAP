@@ -37,11 +37,15 @@ def test_sql_session_has_no_public_arbitrary_query_surface() -> None:
     assert {"inspect_database_metadata", "inspect_table_metadata", "sample_rows_bounded", "explain_bounded_read"} <= public_names
 
 
-def test_driver_objects_and_research_clones_do_not_cross_project_boundary() -> None:
+def test_vendor_objects_stay_in_concrete_adapters_and_research_is_not_runtime() -> None:
     source_text = "\n".join(path.read_text(encoding="utf-8") for path in SRC.rglob("*.py"))
     assert "research/oss" not in source_text.replace("\\", "/")
-    assert "SourceSnapshot" not in source_text
-    assert "SourceCatalog" not in source_text
+    for root in (SRC / "domain", SRC / "application"):
+        for path in root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            assert not any(token in text for token in ("import dlt", "import sqlalchemy", "import pyarrow", "import openpyxl")), path
+    assert "class StageOrchestrator" not in source_text
+    assert "null_ratio" not in source_text
 
 
 def test_phase_aware_governance_validators_accept_authorized_step06() -> None:

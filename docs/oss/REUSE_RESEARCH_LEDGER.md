@@ -1,21 +1,31 @@
-# Open-Source Research and Reuse Ledger
+# OSS Reuse Research Ledger
 
-This ledger records meaningful external research or reuse performed for Dirty Data to OLAP.
+## dlt
 
-Research clones belong only under `research/oss/` and are never runtime dependencies. Direct code reuse requires inspection, license compliance, attribution where required, and adaptation behind project-owned contracts. Where direct reuse is not permitted or appropriate, implementation must be written independently from the studied behavior.
+- Repository: https://github.com/dlt-hub/dlt
+- Reviewed revision: `a1c530114cc347496d1f00f38891475a047b6d05`
+- License: Apache License 2.0, verified in `research/oss/dlt/LICENSE.txt`.
+- Installed/tested version: `dlt==1.30.0`.
+- Source inspected: `dlt/sources/sql_database/__init__.py`, `helpers.py`,
+  `schema_types.py`, `arrow_helpers.py` and `dlt/common/libs/sql_alchemy.py`.
+- Tests inspected: SQL database schema-type, engine-kwargs, reflection-cache,
+  config-section, helper, source and backfill tests under
+  `tests/sources/sql_database/` and `tests/load/sources/sql_database/`.
+- Decision: use the official installed package through the project-owned
+  `DltSqlSourceAdapter`; use `sql_database`/`sql_table` reflection and the
+  SQLAlchemy backend with explicit chunk size. No dlt source was copied.
+- Boundary: dlt resources and SQLAlchemy objects are consumed only inside the
+  concrete adapter and normalized into project contracts.
+- Obligations: retain Apache attribution and license obligations for any
+  distributed runtime installation.
+- Research clone deletion: after source inspection, the clone was removed;
+  final tests and import scans run with `research/oss/dlt` absent.
 
-No external repository was cloned or inspected during Bootstrap / Prompt 0, so no project-specific reuse entry is asserted here.
+## Other libraries
 
-## Entry fields
-
-| Field | Required meaning |
-|---|---|
-| Project | External project name |
-| Repository URL | Authoritative source URL |
-| Reviewed version / commit | Exact inspected revision |
-| License | License observed during review |
-| Role | Intended role in Dirty Data to OLAP |
-| Use type | Direct code reuse or conceptual research |
-| Affected component | Project-owned component affected |
-| Attribution | Required notices or attribution |
-| Runtime clone required | Must always be `false` |
+| Library | Tested version | License | Decision |
+|---|---:|---|---|
+| SQLAlchemy | 2.0.46 | MIT | Runtime SQL engine boundary used only by dlt adapter |
+| PyArrow | 22.0.0 | Apache-2.0 | Parquet discovery, iteration and narrow staging boundary |
+| openpyxl | 3.1.5 | MIT | Optional read-only XLSX adapter |
+| Python `csv` | 3.10.11 stdlib | PSF-2.0 | Streaming CSV parser with explicit malformed-row failure |
