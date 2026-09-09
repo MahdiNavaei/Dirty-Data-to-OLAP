@@ -207,6 +207,17 @@ class ProfileProvenance(_ProfileModel):
     created_at: datetime
 
 
+class ProfilerEngineObservation(_ProfileModel):
+    engine: str
+    engine_version: str
+    metric_name: str
+    value: Any
+    observation_scope: ProfileObservationScope
+    engine_semantics: str
+    config: Mapping[str, Any] = Field(default_factory=dict)
+    provenance: ProfileProvenance
+
+
 class ValuePatternSummary(_ProfileModel):
     pattern_id: str
     source_id: str
@@ -216,6 +227,9 @@ class ValuePatternSummary(_ProfileModel):
     pattern_type: PatternType
     match_count: int = Field(ge=0)
     observed_rows: int = Field(ge=0)
+    eligible_non_missing_rows: int = Field(ge=0)
+    missing_rows_excluded: int = Field(ge=0)
+    denominator_semantics: str = "physical_and_configured_missing_excluded"
     support_ratio: float = Field(ge=0, le=1)
     observation_scope: ProfileObservationScope
     method: str
@@ -244,6 +258,8 @@ class ColumnProfile(_ProfileModel):
     categorical_summary: Mapping[str, float | int | None] = Field(default_factory=dict)
     pattern_summary_refs: tuple[str, ...] = ()
     semantic_label_evidence: tuple[Mapping[str, Any], ...] = ()
+    non_missing_observed_count: int = Field(ge=0)
+    engine_observations: tuple[ProfilerEngineObservation, ...] = ()
     observation_scope: ProfileObservationScope
     provenance: ProfileProvenance
     status: ProfileCompleteness
@@ -319,7 +335,28 @@ class ProfileDiff(_ProfileModel):
 
 
 def profile_config_hash(request: ProfileRequest) -> str:
-    return stable_digest(request)
+    return stable_digest({
+        "mode": request.mode.value,
+        "sample_algorithm": "deterministic_reservoir_v1" if request.mode is ProfileMode.SAMPLE else "none",
+        "sample_limit": request.sample_limit,
+        "seed": request.seed if request.mode is ProfileMode.SAMPLE else None,
+        "metric_policy_version": request.metric_policy_version,
+        "expensive_statistics": request.expensive_statistics,
+        "semantic_label_policy": request.semantic_label_policy,
+        "null_marker_policy": request.null_marker_policy,
+        "profile_config_version": request.profile_config_version,
+    })
+
+
+def profile_request_fingerprint(request: ProfileRequest) -> str:
+    return stable_digest({
+        "profile_request_id": request.profile_request_id,
+        "source_id": request.source_id,
+        "snapshot_id": request.snapshot_id,
+        "selected_table_ids": request.selected_table_ids,
+        "selected_column_ids": request.selected_column_ids,
+        "config": profile_config_hash(request),
+    })
 
 
 def profile_id_for(source_id: str, snapshot_id: str, table_id: str, column_id: str, request: ProfileRequest) -> str:

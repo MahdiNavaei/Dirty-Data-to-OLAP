@@ -14,6 +14,22 @@ fingerprints, policy/domain scope and semantic subject ID. Entry points and
 future UI/API transports call this service; they do not mutate decision records
 directly.
 
+## QualityStagedReader
+
+- Purpose: read a requested projection from COMPLETE staged Parquet evidence for
+  deterministic quality measurement.
+- Input: SourceSnapshotResult, SourceCatalog, TableDescriptor, BatchReference,
+  SourceRecordReference and explicit physical-column projection.
+- Output: project-owned QualityStagedRow values with snapshot-bound record refs.
+- Side effects: staged artifact reads only; quality artifact publication is
+  handled separately through ArtifactStorePort.
+- Idempotency: source/snapshot/schema/content hashes and projection are pinned.
+- Optionality: required for QUALITY_ANALYSIS.
+- Failure: path, hash, row-count, schema or reference mismatch is an explicit
+  input-integrity failure; it cannot produce a clean result.
+- Forbidden: source reconnects, source writes, raw-value persistence, hidden
+  foreign-key inference, entity resolution or canonicalization.
+
 ## SourceAdapter
 
 - Purpose: expose two explicit read-only operations: `discover_source` and `create_bounded_snapshot`.

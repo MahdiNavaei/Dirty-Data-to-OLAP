@@ -33,6 +33,16 @@ The component model is a set of small project-owned services connected through p
 
 Adapters normalize dlt, DataProfiler, Desbordante, Valentine, Splink, optional semantic providers and DuckDB behavior into project-owned inputs and outputs. Their native objects never cross the adapter boundary.
 
+Quality Analysis is a required staged service between profiling and later evidence
+fusion. It consumes only a COMPLETE, hash-bound SourceSnapshotResult and the
+selected profile artifacts plus explicit QualityRule values. Its staged reader
+does not reconnect to a source. Quality outputs are issue, proposal, validation
+plan and result artifacts; a proposal is never an approval or an execution.
+
+The quality service may accept optional future DependencyEvidence, but it does
+not depend on Step12 and it never infers a foreign key, business requiredness,
+entity duplicate or canonical identity from profiling alone.
+
 The source lifecycle is `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog -> SOURCE_SNAPSHOT_STAGE -> SourceSnapshot/BatchReference/SourceRecordReference`. Discovery and snapshot responsibilities are not interchangeable.
 
 ## 2. Ownership and side effects

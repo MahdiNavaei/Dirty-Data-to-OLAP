@@ -1,0 +1,26 @@
+schema_version: "1.0"
+rule_set_id: "core_v1"
+version: "1.0"
+provenance: "Dirty Data to OLAP technical baseline; no universal business domains"
+runtime_default: true
+rules:
+  - rule_id: "technical.exact_row_duplication"
+    rule_version: "1.0"
+    rule_type: "EXACT_ROW_DUPLICATION"
+    scope: "GENERIC_TECHNICAL"
+    entity_type: "table"
+    severity: "MEDIUM"
+    repairability: "REVIEW_REQUIRED"
+    evidence_prerequisites: ["TableProfile", "SourceSnapshot", "BatchReference"]
+    provenance: "docs/quality/RULE_CATALOG.md"
+  - rule_id: "technical.normalization_opportunity"
+    rule_version: "1.0"
+    rule_type: "NORMALIZATION_OPPORTUNITY"
+    scope: "GENERIC_TECHNICAL"
+    entity_type: "column"
+    severity: "INFO"
+    repairability: "AUTO_SAFE"
+    detector_config:
+      operation: "trim_whitespace"
+    evidence_prerequisites: ["SourceSnapshot", "BatchReference"]
+    provenance: "docs/quality/RULE_CATALOG.md"

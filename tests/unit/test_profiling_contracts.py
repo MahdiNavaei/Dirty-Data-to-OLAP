@@ -10,6 +10,7 @@ from dirty_data_to_olap.domain.contracts.profiling import (
     ProfileRequest,
     ProfileObservationStatus,
     TableObservationStatus,
+    profile_config_hash,
 )
 
 
@@ -62,3 +63,17 @@ def test_null_markers_are_explicit_and_unique():
     assert NullMarkerPolicy(configured_markers=("NULL",)).configured_markers == ("NULL",)
     with pytest.raises(ValueError):
         NullMarkerPolicy(configured_markers=("NULL", "NULL"))
+
+
+def test_profile_config_hash_excludes_request_and_source_identity():
+    first = _request(profile_request_id="request-a", source_id="source-a", snapshot_id="snapshot-a")
+    second = _request(profile_request_id="request-b", source_id="source-b", snapshot_id="snapshot-b")
+    assert profile_config_hash(first) == profile_config_hash(second)
+    changed = _request(profile_request_id="request-c", null_marker_policy=NullMarkerPolicy(configured_markers=("NULL",)))
+    assert profile_config_hash(first) != profile_config_hash(changed)
+
+
+def test_profile_config_hash_changes_only_with_semantic_configuration():
+    first = _request(profile_request_id="request-a", source_id="source-a", snapshot_id="snapshot-a")
+    changed_identity = _request(profile_request_id="request-b", source_id="source-b", snapshot_id="snapshot-b", selected_table_ids=("other-table",))
+    assert profile_config_hash(first) == profile_config_hash(changed_identity)

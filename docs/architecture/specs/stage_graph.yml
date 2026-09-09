@@ -61,9 +61,10 @@ stages:
   - stage_id: QUALITY_ANALYSIS
     required: true
     dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
-    optional_dependencies: [DEPENDENCY_DISCOVERY]
-    input_artifact_types: [SourceCatalog, ColumnProfile, DependencyEvidence]
-    output_artifact_types: [QualityIssue, RepairProposal]
+    optional_dependencies: []
+    input_artifact_types: [SourceCatalog, SourceSnapshot, SourceSnapshotResult, BatchReference, SourceRecordReference, ColumnProfile, TableProfile, ValuePatternSummary, DependencyEvidence, QualityRule]
+    optional_input_artifact_types: [DependencyEvidence]
+    output_artifact_types: [QualityIssue, RepairProposal, RepairValidationPlan, QualityResult]
     failure_consequence: NEEDS_REVIEW or FAILED
     cacheable: true
     idempotency: pinned inputs/configuration

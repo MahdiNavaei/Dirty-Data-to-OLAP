@@ -27,6 +27,7 @@ from dirty_data_to_olap.domain.contracts.profiling import (
     ProfileObservationScope,
     ProfileObservationStatus,
     ProfileProvenance,
+    ProfilerEngineObservation,
     ProfileRequest,
     UniquenessSemantics,
     ValuePatternSummary,
@@ -132,15 +133,20 @@ class _ColumnAccumulator:
         self.patterns = Counter()
         self.category_counts: Counter[str] = Counter()
         self.category_overflow = False
+        self.non_missing = 0
 
     def add(self, value: Any) -> None:
         self.rows += 1
         kind = _primitive(value)
         self.primitive[kind] += 1
+        configured_marker = isinstance(value, str) and value in self.markers
         if value is None:
             self.physical_nulls += 1
-        elif isinstance(value, str) and value in self.markers:
+        elif configured_marker:
             self.marker_count += 1
+        if value is None or configured_marker:
+            return
+        self.non_missing += 1
         key = _value_key(value)
         if not self.distinct_overflow:
             self.distinct.add(key)
@@ -188,6 +194,9 @@ class _ColumnAccumulator:
         column: ColumnDescriptor,
         scope: ProfileObservationScope,
         provenance: ProfileProvenance,
+        engine_metrics: Sequence[tuple[str, Any]] = (),
+        engine_version: str = "unknown",
+        engine_config: Mapping[str, Any] | None = None,
     ) -> tuple[ColumnProfile, tuple[ValuePatternSummary, ...]]:
         if self.distinct_overflow:
             distinct_count = None
@@ -195,7 +204,7 @@ class _ColumnAccumulator:
             uniqueness = UniquenessSemantics.NOT_COMPUTED_BOUNDED
         else:
             distinct_count = len(self.distinct)
-            distinct_ratio = distinct_count / self.rows if self.rows else None
+            distinct_ratio = distinct_count / self.non_missing if self.non_missing else None
             uniqueness = UniquenessSemantics.EXACT_ON_FULL_SCOPE if request.mode is ProfileMode.FULL else UniquenessSemantics.SAMPLE_OBSERVATION
         length_summary = None
         if self.lengths:
@@ -219,9 +228,9 @@ class _ColumnAccumulator:
                 continue
             pattern_id = pattern_id_for(request.source_id, request.snapshot_id, table.table_id, column.column_id, pattern, request)
             pattern_refs.append(pattern_id)
-            patterns.append(ValuePatternSummary(pattern_id=pattern_id, source_id=request.source_id, snapshot_id=request.snapshot_id, table_id=table.table_id, column_id=column.column_id, pattern_type=pattern, match_count=match_count, observed_rows=self.rows, support_ratio=match_count / self.rows if self.rows else 0.0, observation_scope=scope, method="anchored_project_regex", method_version="1.0", provenance=provenance))
-        categorical = {"distinct_count": distinct_count, "gini_impurity": (1.0 - sum((count / self.rows) ** 2 for count in self.category_counts.values())) if self.rows and not self.category_overflow else None}
-        profile = ColumnProfile(profile_id=profile_id_for(request.source_id, request.snapshot_id, table.table_id, column.column_id, request), source_id=request.source_id, snapshot_id=request.snapshot_id, table_id=table.table_id, column_id=column.column_id, physical_type=column.native_physical_type, primitive_type_observations=dict(self.primitive), physical_null_count=self.physical_nulls, configured_null_marker_count=self.marker_count, unknown_missing_count=0, rows_observed=self.rows, observed_distinct_count=distinct_count, observed_distinct_ratio=distinct_ratio, uniqueness_semantics=uniqueness, length_summary=length_summary, numeric_summary=numeric_summary, datetime_summary=datetime_summary, categorical_summary=categorical, pattern_summary_refs=tuple(pattern_refs), observation_scope=scope, provenance=provenance, status=ProfileCompleteness.COMPLETE)
+            patterns.append(ValuePatternSummary(pattern_id=pattern_id, source_id=request.source_id, snapshot_id=request.snapshot_id, table_id=table.table_id, column_id=column.column_id, pattern_type=pattern, match_count=match_count, observed_rows=self.rows, eligible_non_missing_rows=self.non_missing, missing_rows_excluded=self.rows - self.non_missing, support_ratio=match_count / self.non_missing if self.non_missing else 0.0, observation_scope=scope, method="anchored_project_regex", method_version="1.0", provenance=provenance))
+        categorical = {"distinct_count": distinct_count, "gini_impurity": (1.0 - sum((count / self.non_missing) ** 2 for count in self.category_counts.values())) if self.non_missing and not self.category_overflow else None}
+        profile = ColumnProfile(profile_id=profile_id_for(request.source_id, request.snapshot_id, table.table_id, column.column_id, request), source_id=request.source_id, snapshot_id=request.snapshot_id, table_id=table.table_id, column_id=column.column_id, physical_type=column.native_physical_type, primitive_type_observations=dict(self.primitive), physical_null_count=self.physical_nulls, configured_null_marker_count=self.marker_count, unknown_missing_count=0, rows_observed=self.rows, non_missing_observed_count=self.non_missing, observed_distinct_count=distinct_count, observed_distinct_ratio=distinct_ratio, uniqueness_semantics=uniqueness, length_summary=length_summary, numeric_summary=numeric_summary, datetime_summary=datetime_summary, categorical_summary=categorical, pattern_summary_refs=tuple(pattern_refs), engine_observations=tuple(ProfilerEngineObservation(engine="dataprofiler", engine_version=engine_version, metric_name=name, value=value, observation_scope=scope, engine_semantics="DataProfiler normalized aggregate; non-authoritative project evidence", config=engine_config or {}, provenance=provenance) for name, value in engine_metrics), observation_scope=scope, provenance=provenance, status=ProfileCompleteness.COMPLETE)
         return profile, tuple(patterns)
 
 
@@ -286,10 +295,20 @@ class DataProfilerAdapter(ProfilingAdapter):
             dataframe = pd.DataFrame(rows, columns=list(names))
             profiler.update_profile(dataframe, sample_size=len(dataframe), min_true_samples=0)
 
-    @staticmethod
-    def _finish_engine(profiler: Any) -> None:
-        if profiler is not None:
-            profiler.report({"output_format": "serializable", "remove_disabled_flag": True})
+    def _finish_engine(self, profiler: Any) -> dict[str, tuple[tuple[str, Any], ...]]:
+        if profiler is None:
+            return {}
+        report = profiler.report({"output_format": "serializable", "remove_disabled_flag": True})
+        observations: dict[str, tuple[tuple[str, Any], ...]] = {}
+        for entry in report.get("data_stats", ()) if isinstance(report, Mapping) else ():
+            if not isinstance(entry, Mapping):
+                continue
+            column_name = entry.get("column_name")
+            stats = entry.get("statistics") if isinstance(entry.get("statistics"), Mapping) else {}
+            data_type = stats.get("data_type") or entry.get("data_type")
+            if isinstance(column_name, str) and isinstance(data_type, (str, int, float, bool)):
+                observations[column_name] = (("data_type", str(data_type)),)
+        return observations
 
     def profile_table(self, request: ProfileRequest, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, table: TableDescriptor, columns: Sequence[ColumnDescriptor], batches: Sequence[BatchReference], table_observation: TableSnapshotObservation, *, project_root: Path) -> AdapterTableProfileResult:
         adapter_reference = self._adapter_reference(request)
@@ -364,7 +383,7 @@ class DataProfilerAdapter(ProfilingAdapter):
                 if sample_rows:
                     engine_profiler = self._new_engine()
                     self._update_engine(engine_profiler, sample_rows, selected_names)
-            self._finish_engine(engine_profiler)
+            engine_observations = self._finish_engine(engine_profiler)
         except _BatchIntegrityError as error:
             failure = ProfileFailure(failure_id=f"failure_{table.table_id}_batch_integrity", profile_request_id=request.profile_request_id, source_id=request.source_id, snapshot_id=request.snapshot_id, table_id=table.table_id, kind=ProfileFailureKind.BATCH_INTEGRITY_FAILED, detail=str(error), engine=self.name, config_hash=profile_config_hash(request), rows_observed=rows_available, retryable=False)
             return AdapterTableProfileResult(columns=(), patterns=(), failures=(failure,), observation_scope=self._scope(request, snapshot_result, table_observation, rows_available, 0, tuple(sample_refs), known_source_row_count=table.row_count), duplicate_row_count=None, duplicate_observation_complete=False, provenance=provenance)
@@ -379,7 +398,7 @@ class DataProfilerAdapter(ProfilingAdapter):
         for column in selected_columns:
             try:
                 column_provenance = provenance.model_copy(update={"column_id": column.column_id})
-                profile, column_patterns = self._build_column_profile(accumulators[column.column_id], request=request, catalog=catalog, table=table, column=column, scope=scope, provenance=column_provenance)
+                profile, column_patterns = self._build_column_profile(accumulators[column.column_id], request=request, catalog=catalog, table=table, column=column, scope=scope, provenance=column_provenance, engine_metrics=engine_observations.get(column.physical_name, ()), engine_version=self.version, engine_config={"data_labeler": False, "correlation": False, "chi_square": False})
                 profiles.append(profile)
                 patterns.extend(column_patterns)
             except Exception:

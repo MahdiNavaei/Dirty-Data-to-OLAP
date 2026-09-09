@@ -23,6 +23,26 @@
 
 ## Other libraries
 
+## Great Expectations (Step09 research)
+
+- Repository: https://github.com/great-expectations/great_expectations
+- Reviewed revision: `4b5dd52306872ec130f7bc0093eb4aebf6b7515b` (shallow research checkout).
+- License: Apache License 2.0, verified in `research/oss/great_expectations/LICENSE`.
+- Source inspected: `great_expectations/expectations/expectation.py`,
+  `great_expectations/core/expectation_validation_result.py` and the
+  distinct-values expectation implementation.
+- Tests inspected: expectation and validation-result tests in the repository's
+  `tests/` tree, including expectation configuration, validation counts,
+  unexpected values and serializable result behavior.
+- Decision: reference the mature expectation/validation-result design only;
+  do not copy code or persist native Great Expectations objects. Dirty Data to
+  OLAP retains project-owned QualityRule, QualityIssue and QualityResult
+  contracts with its own staged-only and privacy boundaries.
+- Boundary and license obligation: no Great Expectations runtime dependency is
+  introduced by Step09; Apache attribution remains required if it is adopted in
+  a future implementation.
+- Research clone deletion: clone removed before final regression.
+
 ## Capital One DataProfiler
 
 - Repository: https://github.com/capitalone/DataProfiler

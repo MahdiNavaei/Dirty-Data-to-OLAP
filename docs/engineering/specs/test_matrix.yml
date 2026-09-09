@@ -48,6 +48,7 @@ stage_test_requirements:
 interface_test_requirements:
   - {interface_id: SourceAdapter, categories: [adapter_contract, security]}
   - {interface_id: ProfilingAdapter, categories: [adapter_contract, performance]}
+  - {interface_id: QualityStagedReader, categories: [contract, integration, security]}
   - {interface_id: DependencyDiscoveryAdapter, categories: [adapter_contract, evaluation]}
   - {interface_id: SchemaMatchingAdapter, categories: [adapter_contract, evaluation]}
   - {interface_id: EntityResolutionAdapter, categories: [adapter_contract, evaluation]}

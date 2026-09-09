@@ -87,6 +87,7 @@ from .profiling import (
     ProfileObservationScope,
     ProfileObservationStatus,
     ProfileProvenance,
+    ProfilerEngineObservation,
     ProfileRequest,
     ProfileResult,
     SemanticLabelPolicy,
@@ -95,6 +96,31 @@ from .profiling import (
     ValuePatternSummary,
     diff_column_profiles,
     profile_config_hash,
+    profile_request_fingerprint,
+)
+from .quality import (
+    DetectionBasis,
+    MeasurementSemantics,
+    QualityDimension,
+    QualityDimensionStatus,
+    QualityEvidenceRef,
+    QualityFailure,
+    QualityFailureKind,
+    QualityIssue,
+    QualityIssueStatus,
+    QualityRequest,
+    QualityResult,
+    QualityRule,
+    QualityRuleScope,
+    QualityRuleSet,
+    QualityRuleType,
+    constraint_ref_for,
+    RepairProposal,
+    RepairProposalStatus,
+    RepairValidationPlan,
+    Repairability,
+    RuleApplicability,
+    quality_profile_fingerprint,
 )
 
 __all__ = [
@@ -121,4 +147,5 @@ __all__ = [
     "TimeoutPolicy",
     "quote_identifier",
     "quote_qualified_identifier",
+    "constraint_ref_for",
 ]

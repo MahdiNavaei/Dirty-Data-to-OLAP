@@ -171,17 +171,18 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [classify observations, issues, repair proposals and quarantine requirements]
-    input_contracts: [SourceCatalog, ColumnProfile, DependencyEvidence]
-    output_contracts: [QualityIssue, RepairProposal]
+    input_contracts: [SourceCatalog, SourceSnapshot, SourceSnapshotResult, BatchReference, SourceRecordReference, ColumnProfile, TableProfile, ValuePatternSummary, DependencyEvidence, QualityRule]
+    optional_input_contracts: [DependencyEvidence]
+    output_contracts: [QualityIssue, RepairProposal, RepairValidationPlan, QualityResult]
     depends_on: [application.discovery, application.profiling, domain.contracts]
-    ports_used: [ArtifactStorePort]
+    ports_used: [QualityStagedReader, ArtifactStorePort]
     implementation_owner: Step09 Data Quality Engineer
     implementation_step: 9
     implementation_status: PLANNED
-    side_effect_class: artifact_write
+    side_effect_class: staged_read_and_artifact_write
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: preserve issue evidence; unresolved semantics become NEEDS_REVIEW
+    failure_behavior: preserve issue evidence; staged integrity and unresolved semantics are explicit; no source writes
   - component_id: application.semantic_evidence
     name: Optional Semantic Evidence Service
     layer: application
@@ -376,6 +377,22 @@ components:
     persistence_access: ArtifactStorePort
     optional: false
     failure_behavior: explicit item/stage failure
+  - component_id: adapters.quality
+    name: Staged Quality Reader Adapter
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [read integrity-checked staged batches for quality analysis]
+    input_contracts: [SourceSnapshotResult, BatchReference, SourceRecordReference]
+    output_contracts: [QualityStagedRow]
+    depends_on: [domain.contracts]
+    extension_port: QualityStagedReader
+    implementation_owner: Step09 Data Quality Engineer
+    implementation_step: 9
+    implementation_status: PLANNED
+    side_effect_class: read_staged_artifacts
+    persistence_access: ArtifactStorePort
+    optional: false
+    failure_behavior: explicit input-integrity failure; no source access
   - component_id: adapters.dependencies
     name: Dependency Adapter Family
     layer: adapters

@@ -35,6 +35,17 @@ interfaces:
     failure_mode: item failure retained; stage NEEDS_REVIEW or FAILED
     adapter_component: adapters.profiling
     forbidden_behavior: [native DataProfiler objects, business truth decisions]
+  - interface_id: QualityStagedReader
+    purpose: Read integrity-checked staged rows for explicit quality rules.
+    input_contracts: [SourceCatalog, SourceSnapshotResult, TableDescriptor, BatchReference, SourceRecordReference]
+    output_contracts: [QualityStagedRow]
+    side_effects: [read_staged_artifacts]
+    idempotency: pinned snapshot, batch hashes and projection
+    optional: false
+    capability_id: quality.staged_reader
+    failure_mode: input integrity failure; no clean result
+    adapter_component: adapters.quality
+    forbidden_behavior: [source reconnect, source writes, raw-value artifact persistence]
   - interface_id: DependencyDiscoveryAdapter
     purpose: Key, FD and IND evidence generation.
     input_contracts: [SourceCatalog, Profiles, DependencyRequest]

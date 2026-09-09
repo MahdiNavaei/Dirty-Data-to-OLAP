@@ -47,6 +47,7 @@ components:
   - {component_id: application.validation, primary_specialist: "Step22 Data QA Engineer", implementation_step: 22, test_strategy: "reconciliation and release acceptance suite"}
   - {component_id: adapters.source, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source adapter contract tests"}
   - {component_id: adapters.profiling, primary_specialist: "Step08 Data Profiling Specialist", implementation_step: 8, test_strategy: "DataProfiler adapter contract tests"}
+  - {component_id: adapters.quality, primary_specialist: "Step09 Data Quality Engineer", implementation_step: 9, test_strategy: "staged reader integrity and privacy tests"}
   - {component_id: adapters.dependencies, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, test_strategy: "Desbordante adapter contract tests"}
   - {component_id: adapters.matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, test_strategy: "Valentine adapter contract tests"}
   - {component_id: adapters.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "Splink normalized-output contract tests"}
@@ -63,6 +64,7 @@ components:
 interfaces:
   - {interface_id: SourceAdapter, owner_component: adapters.source, implementation_step: 7, test_strategy: "adapter contract and read-only negative tests"}
   - {interface_id: ProfilingAdapter, owner_component: adapters.profiling, implementation_step: 8, test_strategy: "adapter contract tests"}
+  - {interface_id: QualityStagedReader, owner_component: adapters.quality, implementation_step: 9, test_strategy: "staged integrity and privacy tests"}
   - {interface_id: DependencyDiscoveryAdapter, owner_component: adapters.dependencies, implementation_step: 12, test_strategy: "adapter contract tests"}
   - {interface_id: SchemaMatchingAdapter, owner_component: adapters.matching, implementation_step: 13, test_strategy: "adapter contract tests"}
   - {interface_id: EntityResolutionAdapter, owner_component: adapters.entity_resolution, implementation_step: 14, test_strategy: "normalized output and provenance tests"}
