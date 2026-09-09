@@ -233,6 +233,103 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
 - blocking_issues: `none known`
 - handoff_to: `Step 03 — Principal Data Architect`
 
+## Specialist Step 03 — Principal Data Architect
+
+- execution_step: `3`
+- role_id: `principal_data_architect`
+- specialist_file: `specialists/03_PRINCIPAL_DATA_ARCHITECT.md`
+- status: `PASS`
+- commit_sha: `bfe7eef01d7d86806a8c2bf19bc4236b280cdb37`
+- inputs_reviewed:
+  - `docs/execution/MASTER_EXECUTION_STATE.yml`
+  - `docs/execution/SPECIALIST_EXECUTION_LOG.md`
+  - `docs/execution/gates/G0_PRODUCT_CONTRACT.md`
+  - `docs/execution/gates/G1_DOMAIN_TRUTH.md`
+  - `docs/execution/gates/G2_ARCHITECTURE_READY.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/00_README.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/01_SPECIALIST_ROUTING_MATRIX.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/02_GLOBAL_CODEX_EXECUTION_PROTOCOL.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/03_SHARED_PROJECT_INVARIANTS.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/04_SPECIALIST_ACTIVATION_TEMPLATE.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/specialists/03_PRINCIPAL_DATA_ARCHITECT.md`
+  - `docs/01_PROJECT_SCOPE_AND_REQUIREMENTS.md`
+  - `docs/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md`
+  - `docs/03_SYSTEM_ARCHITECTURE.md`
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md`
+  - `docs/05_EVIDENCE_AND_CONFIDENCE_MODEL.md`
+  - `docs/06_DATA_QUALITY_AND_CLEANING_TAXONOMY.md`
+  - `docs/07_CANONICAL_AND_OLAP_MODELING_STRATEGY.md`
+  - `docs/08_BENCHMARK_AND_VALIDATION_PLAN.md`
+  - `docs/product/PRODUCT_CONTRACT.md`
+  - `docs/product/USER_JOURNEYS.md`
+  - `docs/product/ACCEPTANCE_CRITERIA.md`
+  - `docs/product/SCOPE_BOUNDARY.md`
+  - `docs/product/TERMINOLOGY.md`
+  - `docs/product/REQUIREMENTS_TRACEABILITY.csv`
+  - `docs/domain/DOMAIN_CONTRACT.md`
+  - `docs/domain/GLOSSARY.md`
+  - `docs/domain/SOURCE_SYSTEM_MAP.md`
+  - `docs/domain/BUSINESS_RULES.md`
+  - `docs/domain/IDENTITY_AND_KEYS.md`
+  - `docs/domain/RELATIONSHIP_SEMANTICS.md`
+  - `docs/domain/AMBIGUITY_CATALOGUE.md`
+  - `docs/domain/DOMAIN_ASSERTION_MODEL.md`
+  - `docs/domain/REFERENCE_BENCHMARK_DOMAIN.md`
+  - `docs/domain/SEMANTIC_WALKTHROUGH.md`
+  - `benchmarks/labels/domain-reviewed/entities.yml`
+  - `benchmarks/labels/domain-reviewed/relationships.yml`
+  - `benchmarks/labels/domain-reviewed/source_authority.yml`
+  - `benchmarks/labels/domain-reviewed/business_rules.yml`
+  - `benchmarks/labels/domain-reviewed/ambiguities.yml`
+  - `tools/validate_domain_docs.py`
+- artifacts_created_or_changed:
+  - `docs/data-architecture/DATA_ARCHITECTURE_CONTRACT.md`
+  - `docs/data-architecture/SOURCE_REPRESENTATION.md`
+  - `docs/data-architecture/KEY_STRATEGY.md`
+  - `docs/data-architecture/CANONICAL_MODEL_PRINCIPLES.md`
+  - `docs/data-architecture/CONFLICT_AND_SURVIVORSHIP.md`
+  - `docs/data-architecture/LINEAGE_AND_PROVENANCE.md`
+  - `docs/data-architecture/DIMENSIONAL_MODELING_RULES.md`
+  - `docs/data-architecture/NULL_AND_UNKNOWN_SEMANTICS.md`
+  - `docs/data-architecture/SCD_AND_TEMPORAL_BOUNDARIES.md`
+  - `docs/data-architecture/REFERENCE_BENCHMARK_LOGICAL_MODEL.md`
+  - `docs/data-architecture/specs/architecture_invariants.yml`
+  - `docs/data-architecture/specs/reference_logical_model.yml`
+  - `docs/execution/STEP03_DATA_ARCHITECTURE_REVIEW.md`
+  - `tools/validate_data_architecture.py`
+  - `README.md`
+- tests_run:
+  - `python tools/validate_domain_docs.py`
+  - `python tools/validate_data_architecture.py`
+  - `Python` YAML, invariant, logical-model, link and execution-state checks
+  - `git diff --cached --check`
+  - `rg` secret-like, source-code, blanket-authority and OSS-scope audit
+- tests_passed:
+  - `Domain regression: PASS (10 documents, 5 specs, 6 entities, 5 relationships, 11 rules, 14 ambiguities)`
+  - `Architecture validation: PASS (10 documents, 27 invariants, 6 entities, 5 relationships, 4 dimensions, 2 facts)`
+  - `Architecture/review Markdown links: PASS (13 links)`
+  - `G0/G1 PASS, G2 PENDING, G3-G15 PENDING, blocked false: PASS`
+  - `No application source, OSS clone or secret-like material: PASS`
+- architecture_walkthroughs:
+  - `Customer canonicalization: source records, clusters, canonical IDs, scoped authority and conflicts remain distinct.`
+  - `Order-line fact: OrderLine grain, unresolved physical line key, measures and orphan behavior are explicit.`
+  - `Payment fact: payment events remain distinct; multiple payments are allowed; accounting semantics are not invented.`
+  - `Conflicted customer attribute: source values and rationale remain visible under scoped survivorship.`
+  - `SCD boundary: snapshot rebuild is allowed; fabricated SCD2 history is prohibited.`
+- negative_architecture_checks:
+  - `14 invalid proposals rejected or explicitly review-required, including cluster-as-ID, global source authority, missing grain, additive rates, implicit UNKNOWN, source deletion, discarded conflicts, fabricated history and missing lineage.`
+- known_limitations:
+  - `No application implementation, software contracts, physical schemas, drivers, package boundaries or Step 04 work was created.`
+- unresolved_architecture_items:
+  - `Physical generator/source keys for OrderLine and Payment`
+  - `Record-level hidden canonical IDs and runtime mapping persistence`
+  - `Runtime unknown-member policy`
+  - `Currency/unit metadata and payment amount semantics`
+  - `Full temporal validity and incremental SCD2 behavior`
+- blocking_issues: `none known`
+- handoff_to: `Step 04 — Software / Solution Architect`
+
 ## Future specialist entries
 
 Each entry must record:
