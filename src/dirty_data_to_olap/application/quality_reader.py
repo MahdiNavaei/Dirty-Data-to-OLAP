@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Iterator, Protocol, Sequence
 
 from dirty_data_to_olap.domain.contracts.quality import QualityStagedRow
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSnapshotResult, TableDescriptor
@@ -14,7 +14,7 @@ class QualityInputIntegrityError(ValueError):
 
 
 class QualityStagedReader(Protocol):
-    def scan_table(
+    def iter_table(
         self,
         snapshot_result: SourceSnapshotResult,
         catalog: SourceCatalog,
@@ -22,5 +22,5 @@ class QualityStagedReader(Protocol):
         physical_columns: Sequence[str],
         *,
         project_root: Path,
-    ) -> Sequence[QualityStagedRow]:
-        """Yield bounded staged rows with source record references."""
+    ) -> Iterator[QualityStagedRow]:
+        """Stream staged rows with source record references; never return all rows."""

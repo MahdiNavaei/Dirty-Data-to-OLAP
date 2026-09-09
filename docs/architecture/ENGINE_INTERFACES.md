@@ -149,6 +149,16 @@ directly.
 - Failure: artifact remains non-consumable and evidence is retained.
 - Forbidden: exposing path manipulation throughout core services.
 
+## Privacy policy service boundary
+
+Privacy is deliberately a project-owned application service and does not add a
+provider-facing engine interface at Step10. Callers submit an
+`ExposureRequest` and receive a `PrivacyDecision`; artifact publication carries
+`ArtifactSensitivity`. External processing has a separate aggregate-only
+decision path. A future semantic/LLM adapter must call this service before any
+payload is assembled. No raw value, secret key or provider-native privacy type
+is a transport contract.
+
 ## StageExecutorPort
 
 - Purpose: run heavy stages behind a local or future worker boundary.

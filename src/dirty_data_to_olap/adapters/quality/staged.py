@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 from dirty_data_to_olap.application.quality_reader import QualityInputIntegrityError, QualityStagedReader
 from dirty_data_to_olap.domain.contracts.quality import QualityStagedRow
@@ -28,12 +28,11 @@ def _sha256(path: Path) -> str:
 class ParquetQualityStagedReader(QualityStagedReader):
     """Reads only COMPLETE batches pinned to one source snapshot."""
 
-    def scan_table(self, snapshot_result: SourceSnapshotResult, catalog: SourceCatalog, table: TableDescriptor, physical_columns: Sequence[str], *, project_root: Path) -> tuple[QualityStagedRow, ...]:
+    def iter_table(self, snapshot_result: SourceSnapshotResult, catalog: SourceCatalog, table: TableDescriptor, physical_columns: Sequence[str], *, project_root: Path) -> Iterator[QualityStagedRow]:
         import pyarrow.parquet as pq
 
         project_root = project_root.resolve()
         refs = {(ref.batch_id, ref.extraction_ordinal): ref for ref in snapshot_result.record_references}
-        rows: list[QualityStagedRow] = []
         batches = tuple(batch for batch in snapshot_result.batches if batch.table_id == table.table_id)
         observation = next((item for item in snapshot_result.table_observations if item.table_id == table.table_id), None)
         if not batches and observation is not None and observation.rows_observed:
@@ -52,7 +51,7 @@ class ParquetQualityStagedReader(QualityStagedReader):
                         ref = refs.get((batch.batch_id, ordinal))
                         if ref is None or ref.source_id != snapshot_result.snapshot.source_id or ref.snapshot_id != snapshot_result.snapshot.snapshot_id or ref.table_id != table.table_id:
                             raise QualityInputIntegrityError("staged row has no matching source record reference")
-                        rows.append(QualityStagedRow(record_ref=ref.record_ref, extraction_ordinal=ordinal, values=values))
+                        yield QualityStagedRow(record_ref=ref.record_ref, extraction_ordinal=ordinal, values=values)
                         ordinal += 1
                         yielded += 1
                 if yielded != batch.row_count:
@@ -61,7 +60,6 @@ class ParquetQualityStagedReader(QualityStagedReader):
                 raise
             except Exception as error:
                 raise QualityInputIntegrityError(f"staged Parquet batch could not be read: {error.__class__.__name__}") from None
-        return tuple(rows)
 
     @staticmethod
     def _verify_batch(batch: BatchReference, snapshot_result: SourceSnapshotResult, catalog: SourceCatalog, table: TableDescriptor, project_root: Path) -> None:

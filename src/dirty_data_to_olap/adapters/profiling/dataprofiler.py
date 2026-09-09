@@ -6,7 +6,6 @@ import hashlib
 import logging
 import math
 import random
-import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -48,17 +47,7 @@ from dirty_data_to_olap.domain.contracts.source import (
     stable_digest,
     utc_now,
 )
-
-
-_PATTERNS: tuple[tuple[PatternType, re.Pattern[str]], ...] = (
-    (PatternType.EMAIL_LIKE, re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")),
-    (PatternType.PHONE_LIKE, re.compile(r"^\+?[0-9][0-9()\-\s]{6,}$")),
-    (PatternType.UUID_LIKE, re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")),
-    (PatternType.INTEGER_STRING, re.compile(r"^[+-]?\d+$")),
-    (PatternType.DECIMAL_STRING, re.compile(r"^[+-]?\d+\.\d+$")),
-    (PatternType.DATE_STRING, re.compile(r"^\d{4}-\d{2}-\d{2}(?:[T ].*)?$")),
-    (PatternType.URL_LIKE, re.compile(r"^https?://[^\s]+$", re.IGNORECASE)),
-)
+from dirty_data_to_olap.domain.patterns import matches_pattern
 
 
 class _BatchIntegrityError(ValueError):
@@ -161,8 +150,8 @@ class _ColumnAccumulator:
         if isinstance(value, str):
             self.lengths.append(len(value))
             self.empty_strings += value == ""
-            for pattern, regex in _PATTERNS:
-                if regex.fullmatch(value):
+            for pattern in PatternType:
+                if matches_pattern(pattern.value, value):
                     self.patterns[pattern] += 1
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             numeric = float(value)
@@ -222,7 +211,7 @@ class _ColumnAccumulator:
             datetime_summary = DateTimeSummary(observed_count=self.datetime_count, parse_success_count=self.datetime_success, minimum=self.datetime_min.isoformat() if self.datetime_min else None, maximum=self.datetime_max.isoformat() if self.datetime_max else None)
         patterns = []
         pattern_refs = []
-        for pattern, _ in _PATTERNS:
+        for pattern in PatternType:
             match_count = self.patterns[pattern]
             if not match_count:
                 continue

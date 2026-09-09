@@ -36,9 +36,10 @@ interfaces:
     adapter_component: adapters.profiling
     forbidden_behavior: [native DataProfiler objects, business truth decisions]
   - interface_id: QualityStagedReader
-    purpose: Read integrity-checked staged rows for explicit quality rules.
+    purpose: Stream integrity-checked staged rows for explicit quality rules.
     input_contracts: [SourceCatalog, SourceSnapshotResult, TableDescriptor, BatchReference, SourceRecordReference]
     output_contracts: [QualityStagedRow]
+    streaming: bounded_iterator
     side_effects: [read_staged_artifacts]
     idempotency: pinned snapshot, batch hashes and projection
     optional: false

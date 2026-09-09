@@ -24,3 +24,9 @@ Incomplete profiles, missing prerequisites, invalid paths/hashes, detector
 errors and partial FK target coverage remain visible in `QualityFailure` or an
 inconclusive dimension. No absence of an issue means that unmeasured data is
 clean.
+
+Dimension denominators are built from the union of evaluated source record
+references. When rules in one dimension evaluate the same population, that
+population is counted once. When their populations differ and no defensible
+common denominator exists, the summary reports
+`RULE_LOCAL_DENOMINATORS_NOT_COMBINABLE`, zero measured rows and no ratio.

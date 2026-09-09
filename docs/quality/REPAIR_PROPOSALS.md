@@ -15,3 +15,8 @@ Every proposal carries affected record references, a transform ID/version,
 preconditions, risk notes, lineage requirements, row-accounting requirements and
 a `RepairValidationPlan`. Proposal status is `PROPOSED`; there are deliberately
 no approved/applied/executed fields in this contract.
+
+No rule receives an automatic quarantine proposal by default. A proposal is
+created only when the rule explicitly authorizes a known deterministic
+operation or an explicit quarantine policy, and manual or non-repairable rules
+never receive one.

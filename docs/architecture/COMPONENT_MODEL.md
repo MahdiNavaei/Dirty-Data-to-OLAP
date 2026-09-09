@@ -65,3 +65,15 @@ The source lifecycle is `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog ->
 ## 3. Component interaction
 
 The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts. Review checkpoints are explicit DAG boundaries: each is entered only after its subject artifact exists, and each calls the common Review / Policy Service. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`. Canonical Finalization evaluates the conditional ER guard per entity family; it cannot publish a mapping when required linkage evidence or its post-ER identity review is absent or unacceptable.
+
+### Privacy policy boundary
+
+`application.privacy_policy` is a cross-cutting policy/service boundary rather
+than a new processing stage. It owns `PrivacyClassification`,
+`ArtifactSensitivity`, `PrivacyDecision`, `ExternalProcessingDecision` and
+`PrivacyFailure` contracts. It classifies raw values ephemerally, assigns
+conservative artifact sensitivity, masks or pseudonymizes only on an explicit
+request, sanitizes nested diagnostic structures and owns cleanup only beneath
+its privacy-owned ephemeral root. Quality, future entity resolution and future
+semantic/LLM work consume the boundary; no later component may bypass it for
+raw sensitive or unknown exposure.

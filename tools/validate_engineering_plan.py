@@ -158,7 +158,7 @@ def ownership_consistent(components: list[dict], ownership_components: list[dict
             return False
         if component.get("implementation_step") != record.get("implementation_step"):
             return False
-        if component.get("implementation_status") != "PLANNED":
+        if component.get("implementation_status") not in {"PLANNED", "IMPLEMENTED"}:
             return False
     return True
 
@@ -302,7 +302,7 @@ def main() -> int:
     owned_components = {item.get("component_id") for item in ownership.get("components", [])}
     owned_interfaces = {item.get("interface_id") for item in ownership.get("interfaces", [])}
     owned_stages = {item.get("stage_id") for item in ownership.get("stages", [])}
-    check("ownership covers exactly all 35 components", len(component_ids) == 35 and owned_components == component_ids)
+    check("ownership covers exactly all 36 components", len(component_ids) == 36 and owned_components == component_ids)
     check("ownership covers exactly all 12 interfaces", len(interface_ids) == 12 and owned_interfaces == interface_ids)
     check("ownership covers exactly all 19 stages", len(stage_ids) == 19 and owned_stages == stage_ids)
     check("every component has owner and test strategy", all(item.get("primary_specialist") and item.get("test_strategy") for item in ownership.get("components", [])))
@@ -312,7 +312,7 @@ def main() -> int:
     ownership_by_id = {item.get("component_id"): item for item in ownership.get("components", [])}
     check("component implementation ownership matches ownership map", ownership_consistent(components, ownership.get("components", [])))
     check("no component retains deferred Step05 ownership", not any("deferred to Step 05" in str(item) for item in components))
-    check("component statuses are PLANNED and no component is falsely IMPLEMENTED", all(item.get("implementation_status") == "PLANNED" for item in components))
+    check("component statuses are planned or explicitly implemented", all(item.get("implementation_status") in {"PLANNED", "IMPLEMENTED"} for item in components))
     check("domain contract family ownership is separated from DBA bootstrap", semantic_ownership_valid(ownership) and ownership_by_id.get("domain.contracts", {}).get("implementation_scope") == "bootstrap-only")
     check("composition root and ControlStore Step06 ownership are scoped", ownership_by_id.get("composition.root", {}).get("implementation_scope") == "bootstrap-only" and ownership_by_id.get("persistence.control_store", {}).get("comprehensive_platform_owner") == "Step23 Data Platform Engineer")
 

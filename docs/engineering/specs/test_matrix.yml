@@ -58,3 +58,6 @@ interface_test_requirements:
   - {interface_id: ArtifactStorePort, categories: [contract, data]}
   - {interface_id: StageExecutorPort, categories: [integration, failure_recovery]}
   - {interface_id: CapabilityRegistryPort, categories: [contract, security]}
+
+privacy_test_requirements:
+  - {category: privacy, purpose: "classification, minimization, exposure, retention and recursive output inspection", must_be_real: true, allowed_mocks: "synthetic canaries and runtime-only test keys", owner: "Step10", tier: TIER1, blocking: true}

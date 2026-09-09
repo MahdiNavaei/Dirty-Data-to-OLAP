@@ -1,0 +1,29 @@
+policy_id: privacy-v1
+version: "1.0"
+unknown_state: UNKNOWN
+unknown_sensitivity: SENSITIVE
+raw_staging_sensitivity: RESTRICTED
+raw_staging_allowed: true
+logs_allow_raw: false
+debug_allow_raw_staging: false
+export_allow_raw: false
+external_allow_raw_sensitive: false
+external_allow_unknown: false
+future_llm_requires_guard: true
+masking:
+  policy_id: masking-v1
+  method: category_specific_redaction
+  fail_closed: true
+pseudonymization:
+  policy_id: pseudonymization-v1
+  algorithm: HMAC-SHA256
+  key_reference: runtime-only-secret-reference
+  scope: project-and-column
+  version: "1"
+retention:
+  policy_id: retention-v1
+  restricted_staging: until_run_completion_or_explicit_cleanup
+  debug_bundles: ephemeral_only
+  exports: no_raw_sensitive_values
+  cleanup_root_name: privacy_ephemeral
+  source_artifacts_deletable_by_privacy_service: false

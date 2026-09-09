@@ -246,6 +246,7 @@ class QualityRuleEvaluation(_QualityModel):
     affected_ratio: float | None = Field(default=None, ge=0, le=1)
     issue_refs: tuple[str, ...] = ()
     evidence_refs: tuple[QualityEvidenceRef, ...] = ()
+    evaluated_record_refs: tuple[str, ...] = ()
     failure_ref: str | None = None
 
 
@@ -269,6 +270,7 @@ class QualityDimensionSummary(_QualityModel):
     inconclusive_rule_count: int = Field(ge=0)
     affected_record_count: int | None = Field(default=None, ge=0)
     measured_row_count: int = Field(ge=0)
+    denominator_semantics: str = "UNSPECIFIED"
     affected_ratio: float | None = Field(default=None, ge=0, le=1)
     issue_refs: tuple[str, ...] = ()
 

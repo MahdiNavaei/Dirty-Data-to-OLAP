@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from dirty_data_to_olap.application.quality_reader import QualityInputIntegrityError, QualityStagedReader
 from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, ProfileMode
@@ -42,12 +42,14 @@ from dirty_data_to_olap.domain.contracts.source import (
     TableObservationStatus,
     stable_digest,
 )
+from dirty_data_to_olap.domain.patterns import matches_pattern
 
 
 class QualityAnalysisService:
-    def __init__(self, reader: QualityStagedReader, *, project_root: Path) -> None:
+    def __init__(self, reader: QualityStagedReader, *, project_root: Path, max_state_rows: int = 100_000) -> None:
         self.reader = reader
         self.project_root = project_root.resolve()
+        self.max_state_rows = max_state_rows
 
     def analyze(self, request: QualityRequest, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, profile_result, *, artifact_root: Path | None = None) -> QualityResult:
         try:
@@ -94,7 +96,7 @@ class QualityAnalysisService:
                 evaluations.append(QualityRuleEvaluation(rule_id=rule.rule_id, applicability=RuleApplicability.INSUFFICIENT_EVIDENCE, measurement_semantics=MeasurementSemantics.UNMEASURED, failure_ref=failure_id))
                 continue
             try:
-                rule_issues, evaluated_count = self._evaluate_rule(rule, table, table_profile, catalog, snapshot_result, profiles, snapshot_id=request.snapshot_id, configured_missing_markers=profile_result.profile_request.null_marker_policy.configured_markers)
+                rule_issues, evaluated_count, evaluated_refs = self._evaluate_rule(rule, table, table_profile, catalog, snapshot_result, profiles, snapshot_id=request.snapshot_id, configured_missing_markers=profile_result.profile_request.null_marker_policy.configured_markers)
             except QualityInputIntegrityError as error:
                 failure_id = f"failure_{request.quality_run_id}_{rule.rule_id}"
                 failures.append(QualityFailure(failure_id=failure_id, kind=QualityFailureKind.INPUT_INTEGRITY_FAILED, detail=str(error), rule_id=rule.rule_id, table_id=table.table_id, source_id=request.source_id, snapshot_id=request.snapshot_id))
@@ -111,7 +113,7 @@ class QualityAnalysisService:
                 if proposal is not None:
                     proposals.append(proposal)
             semantics = rule_issues[0].measurement_semantics if rule_issues else self._measurement(table_profile.observation_scope)
-            evaluations.append(QualityRuleEvaluation(rule_id=rule.rule_id, applicability=RuleApplicability.INCONCLUSIVE if any(item.status is QualityIssueStatus.INCONCLUSIVE for item in rule_issues) else RuleApplicability.APPLICABLE, measurement_semantics=semantics, evaluated_count=evaluated_count, affected_count=sum(item.affected_count for item in rule_issues), affected_ratio=(sum(item.affected_count for item in rule_issues) / evaluated_count if evaluated_count and rule_issues and all(item.status is QualityIssueStatus.OPEN for item in rule_issues) else None), issue_refs=tuple(item.issue_id for item in rule_issues), evidence_refs=tuple(ref for item in rule_issues for ref in item.evidence_refs)))
+            evaluations.append(QualityRuleEvaluation(rule_id=rule.rule_id, applicability=RuleApplicability.INCONCLUSIVE if any(item.status is QualityIssueStatus.INCONCLUSIVE for item in rule_issues) else RuleApplicability.APPLICABLE, measurement_semantics=semantics, evaluated_count=evaluated_count, affected_count=sum(item.affected_count for item in rule_issues), affected_ratio=(sum(item.affected_count for item in rule_issues) / evaluated_count if evaluated_count and rule_issues and all(item.status is QualityIssueStatus.OPEN for item in rule_issues) else None), issue_refs=tuple(item.issue_id for item in rule_issues), evidence_refs=tuple(ref for item in rule_issues for ref in item.evidence_refs), evaluated_record_refs=evaluated_refs))
         proposal_refs = {issue_ref: proposal.proposal_id for proposal in proposals for issue_ref in proposal.issue_refs}
         issues = [issue.model_copy(update={"repair_proposal_refs": (proposal_refs[issue.issue_id],)}) if issue.issue_id in proposal_refs else issue for issue in issues]
         summaries = self._dimension_summaries(evaluations, issues, table_profiles, request.rule_set.rules)
@@ -172,52 +174,60 @@ class QualityAnalysisService:
             completeness="INCOMPLETE",
         )
 
-    def _evaluate_rule(self, rule: QualityRule, table: TableDescriptor, table_profile, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, profiles: Mapping[str, Any], *, snapshot_id: str, configured_missing_markers: Sequence[str] = ()) -> tuple[list[QualityIssue], int]:
+    def _evaluate_rule(self, rule: QualityRule, table: TableDescriptor, table_profile, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, profiles: Mapping[str, Any], *, snapshot_id: str, configured_missing_markers: Sequence[str] = ()) -> tuple[list[QualityIssue], int, tuple[str, ...]]:
         scope = table_profile.observation_scope
         semantics = self._measurement(scope)
         if rule.applicability_conditions.get("requires_full_snapshot_scope") and semantics is not MeasurementSemantics.EXACT_ON_FULL_SNAPSHOT_SCOPE:
-            issue = self._issue(rule, table, scope, 0, 0, (), MeasurementSemantics.INCONCLUSIVE, "QUALITY_RULE_INCONCLUSIVE_SCOPE", profiles, snapshot_id=snapshot_id, status=QualityIssueStatus.INCONCLUSIVE)
-            return [issue], 0
+            issue = self._issue(rule, table, table_profile.profile_id, scope, 0, 0, (), MeasurementSemantics.INCONCLUSIVE, "QUALITY_RULE_INCONCLUSIVE_SCOPE", profiles, snapshot_id=snapshot_id, status=QualityIssueStatus.INCONCLUSIVE)
+            return [issue], 0, ()
         if rule.rule_type is QualityRuleType.EXACT_ROW_DUPLICATION:
-            rows = self._scan(table, catalog, snapshot_result, [column.physical_name for column in catalog.columns if column.table_id == table.table_id])
+            evaluated_refs: list[str] = []
             seen: dict[str, str] = {}
             affected: list[str] = []
-            for row in rows:
+            evaluated = 0
+            for row in self._scan(table, catalog, snapshot_result, [column.physical_name for column in catalog.columns if column.table_id == table.table_id]):
+                self._bounded_append(evaluated_refs, row.record_ref, "quality evaluation population")
+                evaluated += 1
                 key = stable_digest(row.values)
                 if key in seen:
                     affected.extend((seen[key], row.record_ref))
                 else:
+                    if len(seen) >= self.max_state_rows:
+                        raise QualityInputIntegrityError("duplicate detector state exceeded configured bounded limit")
                     seen[key] = row.record_ref
             refs = tuple(dict.fromkeys(affected))
-            return ([self._issue(rule, table, scope, len(refs), len(rows), refs, semantics, "EXACT_DUPLICATE_ROWS_OBSERVED", profiles, snapshot_id=snapshot_id)] if refs else []), len(rows)
+            return ([self._issue(rule, table, table_profile.profile_id, scope, len(refs), evaluated, refs, semantics, "EXACT_DUPLICATE_ROWS_OBSERVED", profiles, snapshot_id=snapshot_id)] if refs else []), evaluated, tuple(evaluated_refs)
         if rule.rule_type is QualityRuleType.DECLARED_REFERENTIAL_INTEGRITY:
             return self._referential_issue(rule, table, catalog, snapshot_result, table_profile, profiles, snapshot_id=snapshot_id)
         columns = tuple(item for item in catalog.columns if item.table_id == table.table_id and (not rule.column_ids or item.column_id in rule.column_ids))
         if not columns:
             raise ValueError("rule has no applicable columns")
-        rows = self._scan(table, catalog, snapshot_result, [column.physical_name for column in columns])
         affected: list[str] = []
+        evaluated_refs: list[str] = []
         config = dict(rule.detector_config)
         markers = set(str(item) for item in config.get("missing_markers", configured_missing_markers))
         include_markers = bool(config.get("treat_configured_markers_as_missing", True))
         evaluated = 0
         key_counts: dict[tuple[Any, ...], list[str]] = defaultdict(list)
-        for row in rows:
+        for row in self._scan(table, catalog, snapshot_result, [column.physical_name for column in columns]):
             values = tuple(row.values.get(column.physical_name) for column in columns)
             missing = tuple(value is None or (include_markers and isinstance(value, str) and value in markers) for value in values)
             if rule.rule_type is QualityRuleType.REQUIRED_VALUE:
                 evaluated += 1
+                self._bounded_append(evaluated_refs, row.record_ref, "quality evaluation population")
                 if any(missing):
                     affected.append(row.record_ref)
             elif rule.rule_type is QualityRuleType.UNIQUE_VALUES:
                 if not any(missing):
                     evaluated += 1
+                    self._bounded_append(evaluated_refs, row.record_ref, "quality evaluation population")
                     key_counts[values].append(row.record_ref)
             else:
                 value = values[0]
                 if value is None or (include_markers and isinstance(value, str) and value in markers):
                     continue
                 evaluated += 1
+                self._bounded_append(evaluated_refs, row.record_ref, "quality evaluation population")
                 if rule.rule_type is QualityRuleType.EXPECTED_PATTERN and (not isinstance(value, str) or not self._matches_pattern(value, rule)):
                     affected.append(row.record_ref)
                 elif rule.rule_type is QualityRuleType.EXPECTED_PRIMITIVE_TYPE and self._primitive(value) != str(rule.expected_primitive_type).lower():
@@ -231,7 +241,7 @@ class QualityAnalysisService:
         if rule.rule_type is QualityRuleType.UNIQUE_VALUES:
             affected = [ref for refs in key_counts.values() if len(refs) > 1 for ref in refs]
         if not affected:
-            return [], evaluated
+            return [], evaluated, tuple(evaluated_refs)
         issue_type = {
             QualityRuleType.REQUIRED_VALUE: "REQUIRED_VALUE_MISSING",
             QualityRuleType.UNIQUE_VALUES: "UNIQUE_VALUES_VIOLATION",
@@ -241,9 +251,9 @@ class QualityAnalysisService:
             QualityRuleType.NUMERIC_RANGE: "NUMERIC_RANGE_VIOLATION",
             QualityRuleType.NORMALIZATION_OPPORTUNITY: "REPRESENTATION_NORMALIZATION_OPPORTUNITY",
         }[rule.rule_type]
-        return [self._issue(rule, table, scope, len(set(affected)), evaluated, tuple(dict.fromkeys(affected)), semantics, issue_type, profiles, snapshot_id=snapshot_id)], evaluated
+        return [self._issue(rule, table, table_profile.profile_id, scope, len(set(affected)), evaluated, tuple(dict.fromkeys(affected)), semantics, issue_type, profiles, snapshot_id=snapshot_id)], evaluated, tuple(evaluated_refs)
 
-    def _referential_issue(self, rule: QualityRule, table: TableDescriptor, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, table_profile, profiles: Mapping[str, Any], *, snapshot_id: str) -> tuple[list[QualityIssue], int]:
+    def _referential_issue(self, rule: QualityRule, table: TableDescriptor, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, table_profile, profiles: Mapping[str, Any], *, snapshot_id: str) -> tuple[list[QualityIssue], int, tuple[str, ...]]:
         constraint = next((item for item in catalog.declared_constraints if constraint_ref_for(item) == rule.declared_constraint_ref), None)
         if constraint is None or not constraint.referenced_table_name:
             raise ValueError("declared referential rule does not bind to catalog constraint")
@@ -252,28 +262,50 @@ class QualityAnalysisService:
             raise ValueError("declared referential target is absent")
         target_observation = next((item for item in snapshot_result.table_observations if item.table_id == target.table_id), None)
         if target_observation is None or target_observation.status is not TableObservationStatus.FULLY_OBSERVED:
-            issue = self._issue(rule, table, table_profile.observation_scope, 0, 0, (), MeasurementSemantics.INCONCLUSIVE, "DECLARED_REFERENTIAL_INTEGRITY_INCONCLUSIVE", profiles, snapshot_id=snapshot_id, status=QualityIssueStatus.INCONCLUSIVE)
-            return [issue], 0
-        source_columns = tuple(item for item in catalog.columns if item.table_id == table.table_id and item.physical_name in constraint.columns)
-        target_columns = tuple(item for item in catalog.columns if item.table_id == target.table_id and item.physical_name in constraint.referenced_columns)
-        source_rows = self._scan(table, catalog, snapshot_result, [item.physical_name for item in source_columns])
-        target_rows = self._scan(target, catalog, snapshot_result, [item.physical_name for item in target_columns])
-        targets = {tuple(row.values.get(item.physical_name) for item in target_columns) for row in target_rows}
-        affected = []
+            issue = self._issue(rule, table, table_profile.profile_id, table_profile.observation_scope, 0, 0, (), MeasurementSemantics.INCONCLUSIVE, "DECLARED_REFERENTIAL_INTEGRITY_INCONCLUSIVE", profiles, snapshot_id=snapshot_id, status=QualityIssueStatus.INCONCLUSIVE)
+            return [issue], 0, ()
+        source_by_name = {item.physical_name: item for item in catalog.columns if item.table_id == table.table_id}
+        target_by_name = {item.physical_name: item for item in catalog.columns if item.table_id == target.table_id}
+        try:
+            source_columns = tuple(source_by_name[name] for name in constraint.columns)
+            target_columns = tuple(target_by_name[name] for name in constraint.referenced_columns)
+        except KeyError:
+            raise ValueError("declared referential columns are absent from catalog") from None
+        targets: set[tuple[Any, ...]] = set()
+        for row in self._scan(target, catalog, snapshot_result, [item.physical_name for item in target_columns]):
+            key = tuple(row.values.get(item.physical_name) for item in target_columns)
+            if len(targets) >= self.max_state_rows and key not in targets:
+                raise QualityInputIntegrityError("referential target state exceeded configured bounded limit")
+            targets.add(key)
+        affected: list[str] = []
+        evaluated_refs: list[str] = []
+        partial_null_refs: list[str] = []
         evaluated = 0
-        for row in source_rows:
+        for row in self._scan(table, catalog, snapshot_result, [item.physical_name for item in source_columns]):
             key = tuple(row.values.get(item.physical_name) for item in source_columns)
             if all(value is None for value in key):
                 continue
+            if any(value is None for value in key):
+                self._bounded_append(partial_null_refs, row.record_ref, "partial-null referential observations")
+                continue
             evaluated += 1
+            self._bounded_append(evaluated_refs, row.record_ref, "quality evaluation population")
             if key not in targets:
                 affected.append(row.record_ref)
-        if not affected:
-            return [], evaluated
-        return [self._issue(rule, table, table_profile.observation_scope, len(affected), evaluated, tuple(affected), self._measurement(table_profile.observation_scope), "DECLARED_REFERENTIAL_INTEGRITY_VIOLATION", profiles, snapshot_id=snapshot_id)], evaluated
+        issues: list[QualityIssue] = []
+        if affected:
+            issues.append(self._issue(rule, table, table_profile.profile_id, table_profile.observation_scope, len(affected), evaluated, tuple(affected), self._measurement(table_profile.observation_scope), "DECLARED_REFERENTIAL_INTEGRITY_VIOLATION", profiles, snapshot_id=snapshot_id))
+        if partial_null_refs:
+            issues.append(self._issue(rule, table, table_profile.profile_id, table_profile.observation_scope, 0, evaluated, (), MeasurementSemantics.INCONCLUSIVE, "DECLARED_REFERENTIAL_INTEGRITY_PARTIAL_NULL_INCONCLUSIVE", profiles, snapshot_id=snapshot_id, status=QualityIssueStatus.INCONCLUSIVE))
+        return issues, evaluated, tuple(evaluated_refs)
 
-    def _scan(self, table: TableDescriptor, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, physical_columns: Sequence[str]):
-        return tuple(self.reader.scan_table(snapshot_result, catalog, table, physical_columns, project_root=self.project_root))
+    def _scan(self, table: TableDescriptor, catalog: SourceCatalog, snapshot_result: SourceSnapshotResult, physical_columns: Sequence[str]) -> Iterator[Any]:
+        return self.reader.iter_table(snapshot_result, catalog, table, physical_columns, project_root=self.project_root)
+
+    def _bounded_append(self, values: list[str], value: str, state_name: str) -> None:
+        if len(values) >= self.max_state_rows:
+            raise QualityInputIntegrityError(f"{state_name} exceeded configured bounded limit")
+        values.append(value)
 
     @staticmethod
     def _measurement(scope) -> MeasurementSemantics:
@@ -299,12 +331,10 @@ class QualityAnalysisService:
 
     @staticmethod
     def _matches_pattern(value: str, rule: QualityRule) -> bool:
-        import re
-        patterns = {"EMAIL_LIKE": r"^[^@\s]+@[^@\s]+\.[^@\s]+$", "PHONE_LIKE": r"^\+?[0-9][0-9()\-\s]{6,}$", "UUID_LIKE": r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"}
         pattern = rule.expected_pattern.value if rule.expected_pattern is not None else ""
-        return bool(patterns.get(pattern) and re.fullmatch(patterns[pattern], value))
+        return matches_pattern(pattern, value)
 
-    def _issue(self, rule: QualityRule, table: TableDescriptor, scope, affected_count: int, evaluated: int, refs: tuple[str, ...], semantics: MeasurementSemantics, issue_type: str, profiles: Mapping[str, Any], *, snapshot_id: str, status: QualityIssueStatus = QualityIssueStatus.OPEN) -> QualityIssue:
+    def _issue(self, rule: QualityRule, table: TableDescriptor, table_profile_id: str, scope, affected_count: int, evaluated: int, refs: tuple[str, ...], semantics: MeasurementSemantics, issue_type: str, profiles: Mapping[str, Any], *, snapshot_id: str, status: QualityIssueStatus = QualityIssueStatus.OPEN) -> QualityIssue:
         issue_id = "issue_" + stable_digest({"run": rule.rule_id, "table": table.table_id, "refs": refs, "type": issue_type})[:32]
         if semantics is MeasurementSemantics.INCONCLUSIVE:
             basis = DetectionBasis.INCONCLUSIVE
@@ -318,19 +348,34 @@ class QualityAnalysisService:
             basis = DetectionBasis.USER_RULE
         else:
             basis = DetectionBasis.EXACT_MEASUREMENT
-        evidence = (QualityEvidenceRef(evidence_type="QualityRule", evidence_id=rule.rule_id, semantics="explicit rule"), QualityEvidenceRef(evidence_type="TableProfile", evidence_id=table.table_id, semantics=semantics.value))
+        evidence = (QualityEvidenceRef(evidence_type="QualityRule", evidence_id=rule.rule_id, semantics="explicit rule"), QualityEvidenceRef(evidence_type="TableProfile", evidence_id=table_profile_id, semantics=semantics.value))
         return QualityIssue(issue_id=issue_id, issue_type=issue_type, quality_dimension=quality_rule_dimension(rule.rule_type), entity_type=rule.entity_type, entity_id=table.table_id, source_id=table.source_id, snapshot_id=snapshot_id, table_id=table.table_id, column_ids=rule.column_ids, rule_id=rule.rule_id, severity=rule.severity, detection_basis=basis, measurement_semantics=semantics, observation_scope=scope, affected_count=affected_count, affected_ratio=affected_count / evaluated if evaluated and status is QualityIssueStatus.OPEN else None, affected_record_refs=refs, evidence_refs=evidence, profile_refs=tuple(profiles[item].profile_id for item in rule.column_ids if item in profiles), declared_constraint_refs=(rule.declared_constraint_ref,) if rule.declared_constraint_ref else (), domain_assertion_refs=rule.domain_assertion_refs, repairability=rule.repairability, status=status, provenance=rule.provenance)
 
     @staticmethod
     def _proposal_for(issue: QualityIssue, rule: QualityRule) -> RepairProposal | None:
-        if rule.rule_type in {QualityRuleType.NORMALIZATION_OPPORTUNITY, QualityRuleType.EXPECTED_PRIMITIVE_TYPE, QualityRuleType.EXACT_ROW_DUPLICATION}:
-            transform = "review_duplicate_handling" if rule.rule_type is QualityRuleType.EXACT_ROW_DUPLICATION else str(rule.detector_config.get("operation", "parse_expected_type"))
-            repairability = Repairability.REVIEW_REQUIRED if rule.rule_type is QualityRuleType.EXACT_ROW_DUPLICATION else rule.repairability
+        config = dict(rule.detector_config)
+        if not config.get("repair_authorized") and not config.get("quarantine_authorized"):
+            return None
+        if rule.repairability in {Repairability.MANUAL_BUSINESS_DECISION, Repairability.NOT_REPAIRABLE}:
+            return None
+        repairability = rule.repairability
+        if config.get("repair_authorized"):
+            transforms = {
+                (QualityRuleType.NORMALIZATION_OPPORTUNITY, "trim_whitespace"): "trim_whitespace",
+                (QualityRuleType.EXPECTED_PRIMITIVE_TYPE, "parse_expected_type"): "parse_expected_type",
+                (QualityRuleType.EXACT_ROW_DUPLICATION, "review_duplicate_handling"): "review_duplicate_handling",
+            }
+            operation = str(config.get("operation", "parse_expected_type"))
+            transform = transforms.get((rule.rule_type, operation))
+            if rule.rule_type is QualityRuleType.EXACT_ROW_DUPLICATION and config.get("operation", "review_duplicate_handling") == "review_duplicate_handling":
+                transform = "review_duplicate_handling"
+                repairability = Repairability.REVIEW_REQUIRED
+            if transform is None:
+                return None
             target_layer = "CONTROLLED_DERIVED_COPY"
             repair_type = transform
-        elif rule.rule_type in {QualityRuleType.REQUIRED_VALUE, QualityRuleType.UNIQUE_VALUES, QualityRuleType.EXPECTED_PATTERN, QualityRuleType.ALLOWED_DOMAIN, QualityRuleType.NUMERIC_RANGE, QualityRuleType.DECLARED_REFERENTIAL_INTEGRITY}:
+        elif config.get("quarantine_authorized"):
             transform = "quarantine_affected_rows"
-            repairability = Repairability.REVIEW_REQUIRED if rule.repairability is Repairability.AUTO_SAFE else rule.repairability
             target_layer = "QUARANTINE_ARTIFACT"
             repair_type = transform
         else:
@@ -360,6 +405,8 @@ class QualityAnalysisService:
             else:
                 status = QualityDimensionStatus.UNMEASURED
                 measurement = MeasurementSemantics.UNMEASURED
-            measured_rows = sum(item.evaluated_count for item in dimension_evaluations)
-            summaries.append(__import__("dirty_data_to_olap.domain.contracts.quality", fromlist=["QualityDimensionSummary"]).QualityDimensionSummary(dimension=dimension, status=status, measurement_semantics=measurement, applicable_rule_count=len(dimension_evaluations), evaluated_rule_count=sum(item.applicability is RuleApplicability.APPLICABLE for item in dimension_evaluations), inconclusive_rule_count=len(inconclusive), affected_record_count=len(refs) if refs else (0 if dimension_evaluations and not inconclusive else None), measured_row_count=measured_rows, affected_ratio=(len(refs) / measured_rows if measured_rows and refs and not inconclusive else None), issue_refs=tuple(item.issue_id for item in dimension_issues)))
+            populations = {tuple(item.evaluated_record_refs) for item in dimension_evaluations if item.evaluated_record_refs}
+            common_denominator = len(next(iter(populations))) if len(populations) == 1 else 0
+            denominator_semantics = "COMMON_RECORD_REF_POPULATION" if len(populations) == 1 else "RULE_LOCAL_DENOMINATORS_NOT_COMBINABLE"
+            summaries.append(__import__("dirty_data_to_olap.domain.contracts.quality", fromlist=["QualityDimensionSummary"]).QualityDimensionSummary(dimension=dimension, status=status, measurement_semantics=measurement, applicable_rule_count=len(dimension_evaluations), evaluated_rule_count=sum(item.applicability is RuleApplicability.APPLICABLE for item in dimension_evaluations), inconclusive_rule_count=len(inconclusive), affected_record_count=len(refs) if refs else (0 if dimension_evaluations and not inconclusive else None), measured_row_count=common_denominator, denominator_semantics=denominator_semantics, affected_ratio=(len(refs) / common_denominator if common_denominator and refs and not inconclusive else None), issue_refs=tuple(item.issue_id for item in dimension_issues)))
         return tuple(summaries)

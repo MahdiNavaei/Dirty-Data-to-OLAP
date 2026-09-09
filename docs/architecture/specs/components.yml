@@ -183,6 +183,22 @@ components:
     persistence_access: ArtifactStorePort
     optional: false
     failure_behavior: preserve issue evidence; staged integrity and unresolved semantics are explicit; no source writes
+  - component_id: application.privacy_policy
+    name: Privacy Policy Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [classify sensitive data, minimize values, guard exposure contexts, sanitize logs, manage privacy-owned ephemeral retention]
+    input_contracts: [PrivacyPolicy, PrivacyRule, PrivacyClassification, ArtifactSensitivity, ExposureRequest]
+    output_contracts: [PrivacyClassification, PrivacyDecision, ExternalProcessingDecision, PrivacyFailure, PrivacyScanResult, PrivacyManifest]
+    depends_on: [domain.contracts]
+    ports_used: []
+    implementation_owner: Step10 Data Security / Privacy Engineer
+    implementation_step: 10
+    implementation_status: IMPLEMENTED
+    side_effect_class: policy_and_privacy_owned_cleanup
+    persistence_access: none; callers own artifact persistence through ArtifactStorePort
+    optional: false
+    failure_behavior: unknown and sensitive exposure is blocked or masked; key/path failures fail closed
   - component_id: application.semantic_evidence
     name: Optional Semantic Evidence Service
     layer: application

@@ -15,6 +15,7 @@ contract_family_owners:
   source_and_database: "Step06 Database Engineer / DBA bootstrap; Step07 Senior Data Engineer runtime source implementation"
   profiling: "Step08 Data Profiling Specialist"
   quality: "Step09 Data Quality Engineer"
+  privacy: "Step10 Data Security / Privacy Engineer"
   dependency_evidence: "Step12 Dependency Discovery Engineer"
   schema_matching: "Step13 Schema Matching Engineer"
   entity_resolution: "Step14 Entity Resolution Engineer"
@@ -36,6 +37,7 @@ components:
   - {component_id: application.dependency_discovery, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, test_strategy: "key, FD, IND and trap evaluation"}
   - {component_id: application.schema_matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, test_strategy: "labeled matching evaluation"}
   - {component_id: application.quality, primary_specialist: "Step09 Data Quality Engineer", implementation_step: 9, test_strategy: "quality taxonomy fixtures and negatives"}
+  - {component_id: application.privacy_policy, primary_specialist: "Step10 Data Security / Privacy Engineer", implementation_step: 10, implementation_status: IMPLEMENTED, test_strategy: "privacy contract, canary, exposure and retention tests"}
   - {component_id: application.semantic_evidence, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "bounded optional-provider contract"}
   - {component_id: application.evidence_fusion, primary_specialist: "Step17 Evidence Fusion Engineer", implementation_step: 17, test_strategy: "evidence, conflict and decision evaluation"}
   - {component_id: application.canonical_hypotheses, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "canonical contract and lineage tests"}
