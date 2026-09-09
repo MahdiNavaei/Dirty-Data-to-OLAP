@@ -108,6 +108,7 @@ def test_real_dataprofiler_full_profile_is_project_owned_and_privacy_safe(profil
     assert note.physical_null_count == 0
     assert note.configured_null_marker_count == 2
     assert note.non_missing_observed_count == 3
+    assert note.primitive_type_observations == {"string": 3}
     assert note.observed_distinct_count == 3
     json.dumps([item.model_dump(mode="json") for item in note.engine_observations])
     assert all(item.engine == "dataprofiler" for item in note.engine_observations)

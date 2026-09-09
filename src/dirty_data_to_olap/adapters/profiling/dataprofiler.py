@@ -138,7 +138,6 @@ class _ColumnAccumulator:
     def add(self, value: Any) -> None:
         self.rows += 1
         kind = _primitive(value)
-        self.primitive[kind] += 1
         configured_marker = isinstance(value, str) and value in self.markers
         if value is None:
             self.physical_nulls += 1
@@ -147,6 +146,7 @@ class _ColumnAccumulator:
         if value is None or configured_marker:
             return
         self.non_missing += 1
+        self.primitive[kind] += 1
         key = _value_key(value)
         if not self.distinct_overflow:
             self.distinct.add(key)
