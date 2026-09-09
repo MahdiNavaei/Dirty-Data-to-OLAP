@@ -330,6 +330,53 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
 - blocking_issues: `none known`
 - handoff_to: `Step 04 — Software / Solution Architect`
 
+## Post-Step-03 Architecture Integrity Repair
+
+- execution_step: `post-step-03 repair`
+- owning_context: `Step 03 — Principal Data Architect`
+- status: `PASS`
+- content_commit_shas:
+  - `6ba340da3bf85ccfd33560d275debbafb2095ca3` (`docs: repair step03 architecture integrity`)
+  - `960250f6d41f6bcbe2e1be92faefacec271de3b6` (`docs: constrain future monetary reconciliation guidance`)
+- reason:
+  - `Independent review found terminal record-accounting outcomes mixed with MAPPED/LINKED processing states.`
+  - `The benchmark plan and demo used unsupported revenue/gross-sales semantics despite the Step 02 boundary.`
+- artifacts_created_or_changed:
+  - `docs/data-architecture/specs/record_accounting.yml`
+  - `docs/data-architecture/DATA_ARCHITECTURE_CONTRACT.md`
+  - `docs/data-architecture/LINEAGE_AND_PROVENANCE.md`
+  - `docs/data-architecture/specs/architecture_invariants.yml` (DA-017)
+  - `docs/08_BENCHMARK_AND_VALIDATION_PLAN.md`
+  - `docs/07_CANONICAL_AND_OLAP_MODELING_STRATEGY.md`
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/base_reports/04_INTERNAL_DATA_CONTRACTS.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/base_reports/07_CANONICAL_AND_OLAP_MODELING_STRATEGY.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/base_reports/08_BENCHMARK_AND_VALIDATION_PLAN.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/manifest.json`
+  - `tools/validate_data_architecture.py`
+  - `docs/execution/STEP03_DATA_ARCHITECTURE_REVIEW.md`
+- tests_run:
+  - `python -m py_compile tools/validate_data_architecture.py`
+  - `python tools/validate_domain_docs.py`
+  - `python tools/validate_data_architecture.py`
+  - `Paired report equality checks for top-level and Knowledge Base copies`
+  - `Full Knowledge Base manifest byte/SHA validation`
+  - `Repository-wide active revenue/demo scan`
+  - `git diff --check`
+  - `Secret-like material, src/ and OSS-clone scope checks`
+- tests_passed:
+  - `Domain validator: PASS (10 documents, 5 specs, 6 entities, 5 relationships, 11 rules, 14 ambiguities)`
+  - `Architecture validator: PASS (27 invariants, 6 entities, 5 relationships, 4 dimensions, 2 facts, accounting negative tests 8/8, revenue negative tests 6/6)`
+  - `Affected Knowledge Base copies byte-identical to top-level reports: PASS`
+  - `Manifest: PASS (56/56 entries)`
+  - `Step 04 not started; G2 PENDING; G3-G15 PENDING; blocked false: PASS`
+- remaining_limitations:
+  - `No runtime implementation, generated benchmark rows, physical keys, currency/unit metadata, payment accounting semantics, or future monetary/domain contract was invented.`
+  - `The final execution state remains a Step 04 handoff; G2 remains pending.`
+- blocking_issues: `none known`
+- handoff_to: `Step 04 — Software / Solution Architect`
+
 ## Future specialist entries
 
 Each entry must record:
