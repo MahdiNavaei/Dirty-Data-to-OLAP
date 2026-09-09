@@ -876,7 +876,7 @@ handoff_to:
 - status: `PASS`
 - starting_head: `0d7a50d422e87dd17da422e43066c98bba2f6a0f`
 - content_commit_sha: `ebd80a32d36ac0739aef74757f449bc0d4215022`
-- metadata_commit_sha: pending until this receipt is committed
+- metadata_commit_sha: `e446ccc1d4527d57494fa7d6d7e6af09327c921f`
 - inputs_reviewed: current Git/state, Step09 quality implementation and review, Step08 profiling review, product/domain/data/software/engineering contracts, Step10 playbook, Step11 handoff playbook, and required architecture/specification documents
 - files_changed: privacy contracts/service/configuration, privacy docs and canary tests, privacy validator, architecture ownership/matrix updates, targeted Step09 quality hardening and regressions
 - upstream_step09_hardening: dimension denominator uses one common record-reference population; TableProfile evidence binds to actual profile_id; all PatternType values use one project-owned matcher; composite FK order follows declared columns; partial-null composite keys are inconclusive; staged reader is incremental with bounded detector state; repair/quarantine proposals require explicit authorization and known deterministic policy

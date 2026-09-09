@@ -29,12 +29,12 @@ post_bootstrap_repairs:
 specialist_execution:
   current_step: 11
   current_role: "database_security_specialist"
-  current_specialist: "Step11 - Database Security Specialist"
+  current_specialist: "Step11 — Database Security Specialist"
   last_completed_step: 10
   last_completed_role: "data_security_privacy_engineer"
-  last_completed_specialist: "Step10 - Data Security / Privacy Engineer"
+  last_completed_specialist: "Step10 — Data Security / Privacy Engineer"
   last_completed_content_commit: "ebd80a32d36ac0739aef74757f449bc0d4215022"
-  next_step: "Step11 - Database Security Specialist"
+  next_step: "Step11 — Database Security Specialist"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
