@@ -524,6 +524,6 @@ handoff_to:
   - `Cross-contract negative tests: 7/7`
   - `Domain, data-architecture and solution validators: PASS`
   - `Manifest: PASS (56/56)`
-- content_commit_sha: `recorded after validation`
+- content_commit_sha: `27d080d2d1b379b6b9d9dd23f02c2f5ed5ebe9ba`
 - g2_status: `PENDING`
 - handoff_to: `Step 05 — Technical Lead / Engineering Lead; Step 05 not started`

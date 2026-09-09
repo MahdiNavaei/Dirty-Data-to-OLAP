@@ -16,6 +16,11 @@ post_bootstrap_repairs:
     verified_commit: "960250f6d41f6bcbe2e1be92faefacec271de3b6"
     scope: "Stage-scoped record accounting, conditional monetary semantics, validator enforcement and synchronized Knowledge Base reports"
     specialist_step_started: false
+  - repair: "Post-Step-04 Software Architecture Integrity Repair"
+    status: "PASS"
+    verified_commit: "27d080d2d1b379b6b9d9dd23f02c2f5ed5ebe9ba"
+    scope: "Entity-resolution ownership, conditional ER dependencies, stage state machine, cross-contract validation and execution evidence paths"
+    specialist_step_started: false
 specialist_execution:
   current_step: 5
   current_role: "technical_lead"
@@ -23,7 +28,7 @@ specialist_execution:
   last_completed_step: 4
   last_completed_role: "solution_architect"
   last_completed_specialist: "Step 04 — Software / Solution Architect"
-  last_completed_content_commit: "73874269f70dc81c828b65334bdcd442a1a55f57"
+  last_completed_content_commit: "27d080d2d1b379b6b9d9dd23f02c2f5ed5ebe9ba"
   next_step: "Step 05 — Technical Lead / Engineering Lead"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
@@ -48,8 +53,8 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "73874269f70dc81c828b65334bdcd442a1a55f57"
-  commit_recording_note: "This SHA identifies the final Step 04 content commit; the follow-up commit records execution-state metadata and validator completion."
+  last_verified_commit: "27d080d2d1b379b6b9d9dd23f02c2f5ed5ebe9ba"
+  commit_recording_note: "This SHA identifies the post-Step-04 architecture repair content commit; the follow-up commit records execution-state metadata and final validation."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'
