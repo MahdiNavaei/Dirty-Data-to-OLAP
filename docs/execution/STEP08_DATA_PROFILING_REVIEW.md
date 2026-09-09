@@ -4,8 +4,8 @@
 - role_id: `data_profiling_specialist`
 - status: `PASS`
 - starting_head: `dbf5d9ad34089a63723fafaaee7511921dff9bce`
-- content_commit_sha: `TO_BE_RECORDED`
-- metadata_commit_sha: `TO_BE_RECORDED`
+- content_commit_sha: `38ac4d326d0278f97852075fef9199ad46054732`
+- metadata_commit_sha: `55bbc5456df3e4abcef82ee457986ae36a364a3c`
 - handoff_to: `Step09 — Data Quality Engineer`
 
 ## Scope completed
