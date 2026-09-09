@@ -48,3 +48,30 @@ This receipt does not claim runtime implementation, live source access, adapter 
 Next specialist: `Step06 — Database Engineer / DBA`
 
 Required inputs: G0/G1/G2 PASS, frozen contracts, `docs/engineering/specs/implementation_plan.yml`, `ownership_map.yml`, `integration_contract_matrix.yml` and this receipt.
+
+## Post-Push Independent G2 Integrity Review
+
+The original Step 05 self-review missed material contradictions that were found by an independent post-push review. This repair does not hide that history.
+
+Resolved defects:
+
+- component source discovery/snapshot order now matches the stage DAG;
+- SourceAdapter has explicit discovery and bounded-snapshot operations;
+- all component implementation ownership is explicit, PLANNED and consistent with `ownership_map.yml`;
+- Step06 is the database access/introspection foundation pass, not a generic scaffold or semantic implementation pass;
+- domain contract-family ownership, composition bootstrap ownership and ControlStore bootstrap/platform ownership are scoped;
+- formal G0-G15 names, after-step owners and evidence classes match the Master Sequence;
+- technical risks now have qualitative likelihood/impact, detection, mitigation, owner, future step, gate relevance and status;
+- stale Step04 status wording is historical and current state remains in `MASTER_EXECUTION_STATE.yml`;
+- post-gate evidence is persisted in this receipt, the G2 gate file and the execution log.
+
+Final post-gate validation:
+
+```text
+python tools/validate_engineering_plan.py --post-gate
+PASS: engineering_checks=73 mode=post components=34 interfaces=11 stages=19 contracts=31 gates=16 negative_tests=23/23
+```
+
+The negative suite covers the 23 required lifecycle, ownership, Step06, gate-semantic, risk-schema and evidence regressions. Product, domain, data architecture and software architecture validators also passed. Content repair commit: `9a04bd3e4433d1f8a4a46062440552d61ddba9a1`. The metadata commit SHA will be recorded exactly in the receipt-only follow-up after Commit B exists.
+
+Final decision: `G2_ARCHITECTURE_READY` remains `PASS`; Step06 remains the next authorized specialist. No Step06 implementation was started.

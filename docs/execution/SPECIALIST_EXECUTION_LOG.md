@@ -581,6 +581,60 @@ handoff_to:
 - blocking_issues: `none known`
 - handoff_to: `Step06 — Database Engineer / DBA`
 
+## Post-Step-05 G2 Integrity Repair
+
+- execution_step: `post-step-05-g2-integrity-repair`
+- owning_context: `Step 05 — Technical Lead / Engineering Lead`
+- status: `PASS`
+- reason: `Independent post-push review found material cross-spec contradictions that invalidated the original G2 evidence basis until repaired.`
+- independent_review_defects:
+  - `Source discovery/snapshot component order contradicted the runtime stage DAG.`
+  - `SourceAdapter discovery and bounded snapshot operations were not explicit.`
+  - `Components retained stale deferred-to-Step05 ownership.`
+  - `Step06 was scoped as a generic scaffold instead of the authoritative DBA access/introspection pass.`
+  - `domain.contracts, composition.root and ControlStore ownership were semantically over-broad or unscoped.`
+  - `Formal G0-G15 gate meanings drifted from the Master Sequence.`
+  - `The risk register lacked required governance fields.`
+  - `The original post-gate validator result was not persisted.`
+- files_reread:
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/00_README.md through 05_MASTER_BUILD_SEQUENCE.md`
+  - `specialists/01_TECHNICAL_LEAD.md`
+  - `specialists/07_DATABASE_ENGINEER_DBA.md`
+  - `specialists/05_SENIOR_DATA_ENGINEER.md`
+  - `docs/product/`, `docs/domain/`, `docs/data-architecture/`, `benchmarks/labels/domain-reviewed/`
+  - `docs/architecture/`, `docs/engineering/`, validators and execution receipts
+- files_changed:
+  - `docs/architecture/specs/components.yml`
+  - `docs/architecture/specs/engine_interfaces.yml`
+  - `docs/architecture/COMPONENT_MODEL.md`
+  - `docs/architecture/ENGINE_INTERFACES.md`
+  - `docs/architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md`
+  - `docs/03_SYSTEM_ARCHITECTURE.md` and synchronized Knowledge Base copy
+  - `docs/engineering/` readiness, ownership, Step06, gate and risk artifacts
+  - `tools/validate_engineering_plan.py`
+  - `tools/validate_solution_architecture.py`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/manifest.json`
+- source_lifecycle_correction: `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog -> SOURCE_SNAPSHOT_STAGE -> SourceSnapshot/BatchReference/SourceRecordReference`
+- ownership_correction: `all 34 components now have explicit PLANNED owner/step fields; semantic family owners are separated from DBA bootstrap ownership`
+- step06_handoff_correction: `database access/introspection, read-only policy, timeouts, pooling, transactions/isolation, safe sampling, normalized failures and tested Step07 handoff`
+- gate_map_correction: `G0-G15 canonical names, after-step ownership and evidence classes match the Master Sequence`
+- risk_register_correction: `15 risks now have all required qualitative and governance fields`
+- tests_run:
+  - `python -m py_compile tools/validate_domain_docs.py tools/validate_data_architecture.py tools/validate_solution_architecture.py tools/validate_engineering_plan.py`
+  - `python tools/validate_domain_docs.py`
+  - `python tools/validate_data_architecture.py`
+  - `python tools/validate_solution_architecture.py`
+  - `python tools/validate_engineering_plan.py --post-gate`
+  - `git diff --check`
+  - `56/56 manifest entries and 8/8 paired base reports`
+- tests_passed:
+  - `Engineering post-gate: PASS: engineering_checks=73 mode=post components=34 interfaces=11 stages=19 contracts=31 gates=16 negative_tests=23/23`
+  - `Domain/data/solution validators: PASS`
+  - `Cross-spec source lifecycle, ownership, Step06, gate and risk checks: PASS`
+- content_commit_sha: `9a04bd3e4433d1f8a4a46062440552d61ddba9a1`
+- final_g2_decision: `PASS`
+- handoff: `Step06 — Database Engineer / DBA; not executed during this repair`
+
 ## Post-Step-04 Review-Checkpoint Architecture Repair
 
 - execution_step: `post-step-04 review-checkpoint repair`
