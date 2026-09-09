@@ -720,6 +720,7 @@ handoff_to:
 - status: `PASS`
 - starting_head: `1c4ed5667fdb60b382184d1b6e649c8d60d30401`
 - content_commit_sha: `5e943daa849eba918a5b9b4de33696403c7d2c4d`
+- metadata_commit_sha: `ba8bb21a2c33b88fdcfe7c1a729797550481faff`
 - inputs_reviewed:
   - `docs/execution/MASTER_EXECUTION_STATE.yml`
   - `docs/execution/gates/G2_ARCHITECTURE_READY.md`

@@ -8,6 +8,7 @@ next authorized specialist. G3 remains `PENDING`.
 Starting HEAD: `1c4ed5667fdb60b382184d1b6e649c8d60d30401`
 
 Content commit: `5e943daa849eba918a5b9b4de33696403c7d2c4d`
+Metadata commit: `ba8bb21a2c33b88fdcfe7c1a729797550481faff`
 
 ## Scope implemented
 
