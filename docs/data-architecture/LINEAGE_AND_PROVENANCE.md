@@ -42,4 +42,17 @@ Reversible traceability means an analytical result can be followed back through 
 
 ## Record accounting
 
-Every source record/entity receives explicit accounting status such as `ACCEPTED`, `MAPPED`, `LINKED`, `AGGREGATED`, `FILTERED_BY_EXPLICIT_RULE`, `QUARANTINED`, `REJECTED` or `UNRESOLVED`. Many input records mapped to one output row must be represented as intentional aggregation. No record may disappear without a reason, lineage and applicable reconciliation rule.
+Accounting is evaluated per transformation boundary and accounting scope, not as one global count across heterogeneous sources. The normative machine-readable contract is [record_accounting.yml](specs/record_accounting.yml).
+
+Each input record in a scope has exactly one mutually exclusive terminal disposition:
+
+- `EMITTED_DIRECT` — represented directly in accepted downstream output;
+- `CONSOLIDATED` — contributes to a many-source-record to canonical/entity representation;
+- `AGGREGATED` — contributes to a many-record to analytical aggregate output;
+- `FILTERED_EXPLICIT` — excluded by an explicit versioned rule or policy;
+- `QUARANTINED` — retained outside accepted output because validity or safety requirements failed;
+- `UNRESOLVED` — no final safe disposition exists yet.
+
+`MAPPED`, `LINKED`, `NORMALIZED`, `MATCHED`, `PROFILED` and `REVIEWED` are orthogonal processing annotations and are never terminal accounting outcomes. `REJECTED` remains a decision/review state; when it excludes a record, the terminal disposition must be `FILTERED_EXPLICIT` or `QUARANTINED` with an explicit reason.
+
+Every disposition requires reason and provenance. A contributing record requires an output reference. `CONSOLIDATED` and `AGGREGATED` additionally require input contributor references, an output/group reference and a transformation/policy reference. Required `UNRESOLVED` records block `Completed and validated` unless a versioned product/domain policy classifies them into another accepted terminal disposition. Reconciliation counts input records by terminal disposition; output-row counts are validated separately.

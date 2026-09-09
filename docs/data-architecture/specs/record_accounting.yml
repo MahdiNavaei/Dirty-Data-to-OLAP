@@ -1,0 +1,83 @@
+schema_version: 1
+scope:
+  name: stage_scoped_record_accounting
+  semantics: >-
+    Accounting is evaluated separately for each transformation boundary and
+    accounting scope, such as source-to-staging, source-to-canonical, or
+    canonical-to-analytical. Counts from different heterogeneous scopes are
+    not combined into one global row count.
+  required_scope_fields:
+    - run_id
+    - stage_id
+    - input_object_ref
+    - input_record_ref
+
+terminal_dispositions:
+  - name: EMITTED_DIRECT
+    meaning: Input record is represented directly in accepted downstream output.
+    output_reference_required: true
+  - name: CONSOLIDATED
+    meaning: Input record contributes to a many-source-record to canonical/entity representation.
+    output_reference_required: true
+  - name: AGGREGATED
+    meaning: Input record contributes to a many-record to analytical aggregate output.
+    output_reference_required: true
+  - name: FILTERED_EXPLICIT
+    meaning: Input record is excluded by an explicit versioned rule or policy.
+    output_reference_required: false
+    policy_reference_required: true
+  - name: QUARANTINED
+    meaning: Input record is retained outside accepted output because validity or safety requirements failed.
+    output_reference_required: false
+  - name: UNRESOLVED
+    meaning: No final safe disposition exists yet for the input record.
+    output_reference_required: false
+
+processing_annotations:
+  semantics: Orthogonal stage or decision metadata; annotations do not replace a terminal disposition.
+  terminal_disposition_prohibited: true
+  allowed:
+    - MAPPED
+    - LINKED
+    - NORMALIZED
+    - MATCHED
+    - PROFILED
+    - REVIEWED
+
+contract:
+  exactly_one_terminal_disposition_per_input_record: true
+  terminal_dispositions_mutually_exclusive: true
+  reason_required: true
+  provenance_required: true
+  output_reference_requirement:
+    required_when_input_contributes_to_downstream_output: true
+    required_for:
+      - EMITTED_DIRECT
+      - CONSOLIDATED
+      - AGGREGATED
+  contributor_reference_requirement:
+    required_for:
+      - CONSOLIDATED
+      - AGGREGATED
+    fields:
+      - input_record_refs
+      - output_or_group_ref
+      - transformation_or_policy_ref
+      - provenance
+
+validated_success:
+  required_unresolved_count: 0
+  unresolved_required_records_block_completed_and_validated: true
+  exception: A versioned product or domain policy may classify the records into another accepted terminal disposition.
+
+reconciliation:
+  input_record_count_equals:
+    - count(EMITTED_DIRECT input records)
+    - count(CONSOLIDATED input records)
+    - count(AGGREGATED input records)
+    - count(FILTERED_EXPLICIT input records)
+    - count(QUARANTINED input records)
+    - count(UNRESOLVED input records)
+  output_row_counts_validated_separately: true
+  contributor_counts_are_not_output_row_counts: true
+  canonical_consolidation_and_analytical_aggregation_are_distinct: true

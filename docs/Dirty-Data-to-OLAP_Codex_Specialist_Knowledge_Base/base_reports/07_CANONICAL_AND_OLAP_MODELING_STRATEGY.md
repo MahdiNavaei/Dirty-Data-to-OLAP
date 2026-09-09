@@ -446,7 +446,7 @@ quantity = SUM(qty)
 gross_amount = SUM(qty * price)
 ```
 
-This is a real OLAP-ready output, not merely a cleaned operational schema.
+The `gross_amount` expression is a generic, **CONDITIONAL** modeling example only. It is not an accepted reference-benchmark measure and is not recognized revenue. A monetary expression can be accepted only after a versioned domain/generator contract defines currency/unit semantics, discount behavior where relevant and the exact measure meaning. The currently defined benchmark additive measure is `quantity` at valid OrderLine grain. This example illustrates an OLAP model shape; it does not claim a materialized benchmark output.
 
 ---
 

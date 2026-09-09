@@ -347,15 +347,17 @@ The final output must reconcile with ground-truth business facts.
 
 Examples:
 
-### Revenue reconciliation
+### Defined V1 reconciliation
 
-```text
-expected gross sales from source truth
-=
-SUM(fact_order_line.gross_amount)
-```
+The unconditional V1 benchmark uses semantics already defined by the domain contract:
 
-within exact tolerance for integers/decimals or documented numeric tolerance.
+- input-record accounting by stage;
+- order and canonical-customer counts;
+- accepted relationship integrity;
+- fact-grain uniqueness;
+- `quantity` totals at accepted `OrderLine` event grain.
+
+Monetary arithmetic is not recognized revenue in this benchmark. Monetary reconciliation is **CONDITIONAL** and may be added only after a versioned generator/domain specification defines the monetary measure meaning, currency/unit semantics, discount behavior where relevant and exact derived expression. A value such as `SUM(quantity * unit_price)` must not be called revenue without that authority.
 
 ### Order count
 
@@ -381,18 +383,20 @@ Fact grain keys must be unique.
 
 ### Record-loss accounting
 
-Every excluded/quarantined record must have a reason.
+Record accounting is scoped to one transformation boundary. Every input record has exactly one mutually exclusive terminal disposition, and every disposition has an explicit reason and provenance. Mapping/linking are processing annotations, not terminal outcomes.
 
 ```text
-input rows
+input_record_count
 =
-accepted analytical rows
-+ intentionally aggregated rows
-+ quarantined rows
-+ explicitly filtered rows
+count(EMITTED_DIRECT input records)
++ count(CONSOLIDATED input records)
++ count(AGGREGATED input records)
++ count(FILTERED_EXPLICIT input records)
++ count(QUARANTINED input records)
++ count(UNRESOLVED input records)
 ```
 
-No unexplained disappearance.
+For a validated final run, required `UNRESOLVED` count must be zero unless a versioned product/domain policy classifies those records into another accepted terminal disposition. Output-row counts are validated separately from input-contributor counts. Consolidation and analytical aggregation retain contributor references, output/group references, transformation/policy references and provenance. No unexplained disappearance is accepted.
 
 ---
 
@@ -541,14 +545,14 @@ Open DuckDB and run:
 SELECT
     d.year,
     p.category,
-    SUM(f.net_amount) AS revenue
+    SUM(f.quantity) AS units_ordered
 FROM fact_order_line f
 JOIN dim_date d ON f.date_key = d.date_key
 JOIN dim_product p ON f.product_key = p.product_key
 GROUP BY 1, 2;
 ```
 
-The point is to prove the messy sources became a queryable OLAP model.
+`quantity` is the currently defined additive measure at valid `OrderLine` grain. This demo proves the messy sources became a queryable OLAP model without implying recognized revenue. Any future monetary example must be labeled **CONDITIONAL** and cite the later monetary/domain contract that defines it.
 
 ---
 

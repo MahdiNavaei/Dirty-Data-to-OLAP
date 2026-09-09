@@ -116,10 +116,10 @@ invariants:
     status: DEFINED
   - id: DA-017
     scope: Record accounting
-    statement: Every source record/entity has an explicit accepted, mapped, linked, aggregated, filtered, quarantined, rejected or unresolved outcome.
-    rationale: No record may silently disappear.
-    downstream_risk: Hidden data loss and invalid reconciliation.
-    verification_expectation: Record-accounting reconciliation.
+    statement: Within each transformation boundary and accounting scope, every input record has exactly one mutually exclusive terminal disposition of EMITTED_DIRECT, CONSOLIDATED, AGGREGATED, FILTERED_EXPLICIT, QUARANTINED or UNRESOLVED; MAPPED and LINKED are orthogonal processing annotations, not terminal outcomes.
+    rationale: No input record may silently disappear, and contributor counts must not be confused with output-row counts.
+    downstream_risk: Hidden data loss, invalid reconciliation and false validated-success status.
+    verification_expectation: Validate specs/record_accounting.yml, one terminal disposition per input record, reason/provenance, contributor/output references and zero required unresolved records for validated success.
     status: DEFINED
   - id: DA-018
     scope: Model layers

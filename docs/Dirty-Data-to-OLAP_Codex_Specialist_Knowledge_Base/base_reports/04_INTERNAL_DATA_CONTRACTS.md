@@ -446,6 +446,11 @@ validation:
 
 ### MeasureSpec
 
+The following is a generic contract-shape example only. `net_amount` and the
+expression are not reference-benchmark semantics; a runtime or benchmark
+monetary measure requires an explicit versioned domain contract before it can
+be accepted or described as revenue.
+
 ```yaml
 name: net_amount
 expression: gross_amount - discount_amount

@@ -91,3 +91,27 @@ PASS
 ```
 
 Known unresolved architecture items are exact generator/source physical keys, record-level hidden IDs, runtime unknown-member policy, full temporal/SCD history, currency/unit metadata and payment amount semantics. These remain explicit and prevent premature physical implementation; they do not invalidate the logical architecture contract.
+
+## Post-Step-03 independent-review correction
+
+An independent post-push review found two semantic defects in the otherwise valid Step 03 package:
+
+1. The original record-accounting wording mixed terminal outcomes with process annotations. `MAPPED` and `LINKED` could be read as mutually exclusive outcomes even though one input may be linked, mapped and then consolidated or emitted.
+2. The benchmark plan still used active gross-sales/revenue reconciliation and a `net_amount AS revenue` demo even though the Step 02 domain contract leaves recognized revenue, currency/unit semantics, discount behavior and payment amount meaning unresolved.
+
+The correction preserves the original Step 03 history and applies these changes:
+
+- `docs/data-architecture/specs/record_accounting.yml` defines stage-scoped accounting, exactly one mutually exclusive terminal disposition per input record, orthogonal processing annotations, reason/provenance, output/contributor references, reconciliation and the validated-success unresolved rule.
+- Terminal dispositions are `EMITTED_DIRECT`, `CONSOLIDATED`, `AGGREGATED`, `FILTERED_EXPLICIT`, `QUARANTINED` and `UNRESOLVED`. `MAPPED`, `LINKED`, `NORMALIZED`, `MATCHED`, `PROFILED` and `REVIEWED` are processing annotations. `REJECTED` remains a decision/review state and must map to an explicit terminal disposition when it excludes a record.
+- DA-017, the architecture contract, lineage contract and benchmark record-loss section now use input-record dispositions. Output-row counts are reconciled separately; consolidation and aggregation retain contributor and output/group references.
+- Required `UNRESOLVED` records block `Completed and validated` unless a later versioned product/domain policy classifies them into another accepted terminal disposition.
+- V1 reconciliation now uses defined counts, relationship/grain checks and `quantity` totals. Monetary reconciliation is conditional on a future versioned monetary/domain specification, and the demo uses `SUM(f.quantity) AS units_ordered`.
+- The modeling and internal-contract examples explicitly mark monetary arithmetic as generic/conditional rather than accepted benchmark semantics or recognized revenue.
+
+Deterministic correction checks executed:
+
+- accounting negative cases: `8/8` rejected, including terminal `MAPPED`/`LINKED`, multiple terminal dispositions, missing contributor/output references, missing filter policy, unresolved validated success, output-row substitution and conflated consolidation/aggregation;
+- revenue-semantic negative cases: `6/6` rejected, including unsupported revenue naming, uncontracted `qty * unit_price`, assumed currency conversion, payment-as-revenue, invented discount behavior and unconditional monetary acceptance;
+- paired top-level/Knowledge Base reports are byte-identical for affected copies and all `manifest.json` entries validate.
+
+This correction does not start Step 04 and does not change G0/G1, G2 or later gate status. Step 03 remains `PASS` after correction.

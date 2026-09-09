@@ -52,7 +52,11 @@ Unknown-member behavior is never an implicit `-1`, `0` or `UNKNOWN` mapping. For
 
 Every persisted semantic artifact records origin, time/snapshot/run, engine/policy/actor, evidence and upstream dependencies. Lineage separately tracks table/object, column/attribute, record/entity, transformation and decision paths. “Reversible traceability” means an analytical result can be traced back through canonical mappings and decisions to source/evidence; it does not promise mathematical inversion of every transformation.
 
-Every source record must end in an explicit accounting state such as accepted, mapped, linked, aggregated, explicitly filtered, quarantined, rejected or unresolved. Aggregation must explain many inputs to one output.
+Record accounting is scoped to one transformation boundary and accounting scope; heterogeneous source row counts must not be combined into one vague global count. The machine-readable contract is [record_accounting.yml](specs/record_accounting.yml).
+
+For each input record in that scope, exactly one mutually exclusive terminal disposition is required: `EMITTED_DIRECT`, `CONSOLIDATED`, `AGGREGATED`, `FILTERED_EXPLICIT`, `QUARANTINED` or `UNRESOLVED`. Each disposition carries an explicit reason and provenance. `MAPPED`, `LINKED`, `NORMALIZED`, `MATCHED`, `PROFILED` and `REVIEWED` are orthogonal processing annotations, not terminal accounting outcomes. `REJECTED` is a review/decision state; if it excludes a record, the terminal disposition must be `FILTERED_EXPLICIT` or `QUARANTINED` with the applicable reason/policy.
+
+When a record contributes to downstream output, an output reference is required. `CONSOLIDATED` and `AGGREGATED` records additionally retain contributor references, an output or group reference, a transformation/policy reference and provenance. Required `UNRESOLVED` records prevent a run from being marked `Completed and validated` unless a versioned product/domain policy classifies them into another accepted terminal disposition. Output-row counts are reconciled separately from input-contributor counts.
 
 ## 7. Temporal and evolution boundary
 
