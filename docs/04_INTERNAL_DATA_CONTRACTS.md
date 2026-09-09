@@ -2,13 +2,13 @@
 
 ## 1. Why this report is critical
 
-DataFoundry integrates engines with incompatible outputs. If their native objects are passed directly between stages, the system becomes brittle and impossible to reason about.
+Dirty Data to OLAP integrates engines with incompatible outputs. If their native objects are passed directly between stages, the system becomes brittle and impossible to reason about.
 
-Therefore DataFoundry owns a canonical internal language.
+Therefore Dirty Data to OLAP owns a canonical internal language.
 
 The rule is:
 
-> **External tools produce evidence; DataFoundry contracts define meaning.**
+> **External tools produce evidence; Dirty Data to OLAP contracts define meaning.**
 
 Contracts should initially be implemented with Pydantic models plus explicit schema versioning.
 
@@ -191,7 +191,7 @@ status: CANDIDATE
 evidence_refs: [...]
 ```
 
-`confidence` is not assigned by the adapter. It is assigned by DataFoundry evidence fusion/policy.
+`confidence` is not assigned by the adapter. It is assigned by Dirty Data to OLAP evidence fusion/policy.
 
 ### 6.2 InclusionDependencyEvidence
 

@@ -1,6 +1,6 @@
-# DataFoundry V1 — Pre-Implementation Documentation Pack
+# Dirty Data to OLAP V1 — Pre-Implementation Documentation Pack
 
-> Working title: **DataFoundry**  
+> Canonical product name: **Dirty Data to OLAP**
 > Goal of V1: turn fragmented, dirty tabular data into a validated, unified, OLAP-ready analytical layer.
 
 ## Purpose of this pack
@@ -20,14 +20,14 @@ The eight required reports are:
 
 ## Core design rule
 
-The project does **not** directly chain third-party tools together. Every external component is wrapped by an adapter and converted into DataFoundry's own internal contracts.
+The project does **not** directly chain third-party tools together. Every external component is wrapped by an adapter and converted into Dirty Data to OLAP's own internal contracts.
 
 ```text
 External sources
    ↓
 Adapters
    ↓
-DataFoundry contracts
+Dirty Data to OLAP contracts
    ↓
 Evidence engine
    ↓

@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This report defines how DataFoundry moves from discovered/matched source structures to a business-level canonical model and then to an OLAP-ready dimensional model.
+This report defines how Dirty Data to OLAP moves from discovered/matched source structures to a business-level canonical model and then to an OLAP-ready dimensional model.
 
 The key separation is:
 
@@ -30,7 +30,7 @@ Website.User
 
 Directly building a warehouse from all three creates duplicated semantics and brittle joins.
 
-DataFoundry first proposes:
+Dirty Data to OLAP first proposes:
 
 ```text
 CanonicalEntity: Customer
@@ -119,7 +119,7 @@ ERP.ClientNo C443
 Website.UserId 8821
 ```
 
-This lets DataFoundry unify entities without rewriting source keys.
+This lets Dirty Data to OLAP unify entities without rewriting source keys.
 
 ---
 
@@ -195,7 +195,7 @@ Do not infer fact status from table name alone.
 
 ## 9. Grain inference — critical V1 capability
 
-For every fact, DataFoundry must answer:
+For every fact, Dirty Data to OLAP must answer:
 
 > What exactly does one row represent?
 
@@ -228,7 +228,7 @@ If no stable grain can be identified, the fact model cannot be auto-accepted.
 - semantics of numeric/date fields;
 - known source PKs.
 
-This is one of the highest-value DataFoundry-owned reasoning components.
+This is one of the highest-value Dirty Data to OLAP-owned reasoning components.
 
 ---
 
@@ -452,7 +452,7 @@ This is a real OLAP-ready output, not merely a cleaned operational schema.
 
 ## 17. Canonical graph vs star schema
 
-DataFoundry should preserve both.
+Dirty Data to OLAP should preserve both.
 
 Canonical graph answers:
 

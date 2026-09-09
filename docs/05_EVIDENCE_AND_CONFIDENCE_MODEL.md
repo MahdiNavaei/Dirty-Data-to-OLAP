@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This report defines the central reasoning layer of DataFoundry.
+This report defines the central reasoning layer of Dirty Data to OLAP.
 
 Third-party engines can answer narrow questions:
 
@@ -15,7 +15,7 @@ None of these alone should decide:
 
 > “`orders.client_no` is the foreign key to `customers.customer_code`.”
 
-DataFoundry must combine evidence, represent conflict and make a decision whose reasoning can be inspected.
+Dirty Data to OLAP must combine evidence, represent conflict and make a decision whose reasoning can be inspected.
 
 ---
 
@@ -297,13 +297,13 @@ An important higher-order signal is **relationship neighborhood**.
 
 If both columns participate in structurally similar customer→order relationships, semantic equivalence becomes more plausible.
 
-This is a DataFoundry-owned feature and worth implementing after the baseline.
+This is a Dirty Data to OLAP-owned feature and worth implementing after the baseline.
 
 ---
 
 ## 11. Entity-resolution confidence
 
-Splink match probabilities should be stored as Splink evidence, not copied directly into DataFoundry relationship confidence.
+Splink match probabilities should be stored as Splink evidence, not copied directly into Dirty Data to OLAP relationship confidence.
 
 Entity-resolution decisions need separate policies:
 
@@ -323,7 +323,7 @@ Such records should not merge automatically even if fuzzy-name similarity is hig
 
 ## 12. Canonical attribute source selection
 
-After records are linked, DataFoundry still needs to choose values.
+After records are linked, Dirty Data to OLAP still needs to choose values.
 
 Do not simply choose the most common value.
 

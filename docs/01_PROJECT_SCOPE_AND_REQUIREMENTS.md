@@ -2,7 +2,7 @@
 
 ## 1. Executive definition
 
-DataFoundry V1 receives one or more **tabular data sources** whose schemas, relationships, naming conventions and data quality may be inconsistent or partially broken. It discovers the data estate, profiles columns, infers hidden keys and relationships, matches semantically equivalent fields across sources, resolves duplicate entities when evidence is sufficient, proposes a canonical business model, and materializes a validated **OLAP-ready analytical layer**.
+Dirty Data to OLAP V1 receives one or more **tabular data sources** whose schemas, relationships, naming conventions and data quality may be inconsistent or partially broken. It discovers the data estate, profiles columns, infers hidden keys and relationships, matches semantically equivalent fields across sources, resolves duplicate entities when evidence is sufficient, proposes a canonical business model, and materializes a validated **OLAP-ready analytical layer**.
 
 The shortest correct definition is:
 
@@ -36,7 +36,7 @@ Common problems include:
 
 The result is that building a Data Warehouse or an AI/ML system starts with weeks or months of manual discovery and cleaning.
 
-DataFoundry V1 targets this **pre-warehouse ambiguity**.
+Dirty Data to OLAP V1 targets this **pre-warehouse ambiguity**.
 
 ---
 
@@ -279,7 +279,7 @@ The system must expose ambiguous decisions for review. A reviewer can:
 
 Every run must store:
 
-- DataFoundry version;
+- Dirty Data to OLAP version;
 - external adapter versions;
 - model/algorithm settings;
 - source snapshot identifiers where possible;

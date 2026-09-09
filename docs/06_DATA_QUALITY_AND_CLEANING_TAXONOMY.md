@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-“Dirty data” is too vague to implement. DataFoundry needs a precise taxonomy that separates:
+“Dirty data” is too vague to implement. Dirty Data to OLAP needs a precise taxonomy that separates:
 
 - what is observed;
 - why it matters;

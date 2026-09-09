@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-DataFoundry can easily produce an impressive demo while being wrong. Therefore the project must have a benchmark estate with known ground truth before major claims are made.
+Dirty Data to OLAP can easily produce an impressive demo while being wrong. Therefore the project must have a benchmark estate with known ground truth before major claims are made.
 
 The benchmark has two jobs:
 
@@ -418,7 +418,7 @@ Example regression cases:
 
 ## 10. Adapter contract tests
 
-For each external engine, create tests that confirm DataFoundry's normalized output remains stable.
+For each external engine, create tests that confirm Dirty Data to OLAP's normalized output remains stable.
 
 Examples:
 

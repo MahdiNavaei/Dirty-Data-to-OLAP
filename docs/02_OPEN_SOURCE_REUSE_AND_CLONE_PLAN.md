@@ -2,7 +2,7 @@
 
 ## 1. Objective
 
-The project must not reimplement mature algorithms or infrastructure unless there is a clear reason. This report maps each external repository to a specific responsibility in DataFoundry V1 and defines how it is integrated without creating tight coupling.
+The project must not reimplement mature algorithms or infrastructure unless there is a clear reason. This report maps each external repository to a specific responsibility in Dirty Data to OLAP V1 and defines how it is integrated without creating tight coupling.
 
 The central rule is:
 
@@ -17,7 +17,7 @@ We are not building a wrapper that blindly chains libraries. We are building a s
 Recommended repository layout during research and integration:
 
 ```text
-DataFoundry/
+Dirty-Data-to-OLAP/
 ├── src/
 ├── tests/
 ├── docs/
@@ -85,7 +85,7 @@ These clones are for source review and integration tests. The application itself
 
 ## 5.1 Why it is useful
 
-dlt solves boring but difficult infrastructure work around loading and schema reflection. DataFoundry should not maintain one custom connector per SQL dialect in V1.
+dlt solves boring but difficult infrastructure work around loading and schema reflection. Dirty Data to OLAP should not maintain one custom connector per SQL dialect in V1.
 
 Relevant reviewed paths include:
 
@@ -133,7 +133,7 @@ The adapter converts dlt-specific objects into:
 - `DeclaredConstraint`
 - `BatchReference`
 
-No other DataFoundry module imports dlt types.
+No other Dirty Data to OLAP module imports dlt types.
 
 ## 5.5 Example
 
@@ -217,7 +217,7 @@ N/A
 NULL
 ```
 
-Normalized DataFoundry output may be:
+Normalized Dirty Data to OLAP output may be:
 
 ```yaml
 column: customers.mobile
@@ -278,7 +278,7 @@ values(orders.customer_no) ⊆ values(customers.customer_no)
 
 may strongly support a relationship, but coincidental domains can create false positives.
 
-Therefore DataFoundry must combine IND with:
+Therefore Dirty Data to OLAP must combine IND with:
 
 - target uniqueness;
 - type compatibility;
@@ -359,7 +359,7 @@ CRM.customer_code
 ERP.client_no
 ```
 
-Valentine may return a strong match because values overlap and names/tokens are compatible. DataFoundry then combines that score with Desbordante/DataProfiler evidence before accepting a canonical mapping.
+Valentine may return a strong match because values overlap and names/tokens are compatible. Dirty Data to OLAP then combines that score with Desbordante/DataProfiler evidence before accepting a canonical mapping.
 
 ---
 
@@ -415,7 +415,7 @@ CRM:  C124, "مهدی نوایی", 0912...
 Shop: U882, "Mahdi Navaei", +98912...
 ```
 
-Splink estimates whether records represent the same person. DataFoundry later decides how the cluster becomes `canonical_customer_id` and which attributes survive.
+Splink estimates whether records represent the same person. Dirty Data to OLAP later decides how the cluster becomes `canonical_customer_id` and which attributes survive.
 
 ---
 
@@ -450,7 +450,7 @@ The implementation should be our own and governed by report 07.
 
 ## 11. Integration matrix
 
-| DataFoundry capability | Reuse | Our responsibility |
+| Dirty Data to OLAP capability | Reuse | Our responsibility |
 |---|---|---|
 | SQL source reflection | dlt | normalize metadata, policies |
 | extraction/chunking | dlt | orchestration, run manifests |
@@ -459,11 +459,11 @@ The implementation should be our own and governed by report 07.
 | hidden dependencies | Desbordante | convert to relationship hypotheses |
 | schema matching | Valentine | evidence fusion and acceptance policy |
 | entity resolution | Splink | configure, choose canonical attributes, preserve lineage |
-| evidence fusion | none | **DataFoundry core** |
-| canonical business model | none | **DataFoundry core** |
-| fact/dimension/grain inference | no adequate reusable core | **DataFoundry core** |
-| materialization | DuckDB/SQL | DataFoundry compiler |
-| validation | SQL + our tests | **DataFoundry core** |
+| evidence fusion | none | **Dirty Data to OLAP core** |
+| canonical business model | none | **Dirty Data to OLAP core** |
+| fact/dimension/grain inference | no adequate reusable core | **Dirty Data to OLAP core** |
+| materialization | DuckDB/SQL | Dirty Data to OLAP compiler |
+| validation | SQL + our tests | **Dirty Data to OLAP core** |
 
 ---
 
@@ -520,7 +520,7 @@ Splink intentionally comes after schema/relationship understanding because entit
 
 ### Problem E — star-schema-generator could tempt us into “LLM designs the warehouse”
 
-**Correction:** use only its contract/validation ideas; analytical planning is DataFoundry-owned.
+**Correction:** use only its contract/validation ideas; analytical planning is Dirty Data to OLAP-owned.
 
 ### Problem F — upstream changes could make research irreproducible
 

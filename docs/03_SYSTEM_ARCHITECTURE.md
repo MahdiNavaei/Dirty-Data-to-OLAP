@@ -2,11 +2,11 @@
 
 ## 1. Architectural objective
 
-DataFoundry V1 must integrate several specialized engines without becoming a tightly coupled pipeline. The architecture is therefore organized around **stable internal artifacts** and a staged control plane.
+Dirty Data to OLAP V1 must integrate several specialized engines without becoming a tightly coupled pipeline. The architecture is therefore organized around **stable internal artifacts** and a staged control plane.
 
 The most important design decision is:
 
-> Every stage reads and writes DataFoundry contracts. No stage depends directly on another stage's third-party library types.
+> Every stage reads and writes Dirty Data to OLAP contracts. No stage depends directly on another stage's third-party library types.
 
 ---
 
@@ -36,14 +36,14 @@ The most important design decision is:
                        │                     │
                ┌───────▼─────────┐   ┌──────▼──────────┐
                │ Schema Matching │   │ Quality Engine   │
-               │ Valentine       │   │ DataFoundry      │
+               │ Valentine       │   │ Dirty Data to OLAP│
                └───────┬─────────┘   └──────┬──────────┘
                        │                     │
                        └──────────┬──────────┘
                                   │
                       ┌───────────▼────────────┐
                       │ Evidence Fusion Engine │
-                      │     DataFoundry Core   │
+                      │  Dirty Data to OLAP Core│
                       └───────────┬────────────┘
                                   │
                      Relationship/Mapping Decisions
@@ -487,7 +487,7 @@ Some stages can fail or be rerun independently. A direct function chain would be
 
 ### Problem B — External libraries could leak types everywhere
 
-**Correction:** all external engines are adapters into DataFoundry contracts.
+**Correction:** all external engines are adapters into Dirty Data to OLAP contracts.
 
 ### Problem C — Profiling full enterprise tables could exhaust memory
 
