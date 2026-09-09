@@ -808,3 +808,20 @@ handoff_to:
 - blocking_issues: none
 - handoff_to: `Step08 — Data Profiling Specialist`
 - next_state: `last_completed_step=7`, `current_step=8`, `current_role=data_profiling_specialist`, `G3-G15=PENDING`, `blocked=false`
+
+## Specialist Step08 — Data Profiling Specialist
+
+- execution_step: 8
+- role_id: `data_profiling_specialist`
+- status: `PASS`
+- starting_head: `dbf5d9ad34089a63723fafaaee7511921dff9bce`
+- content_commit_sha: `38ac4d326d0278f97852075fef9199ad46054732`
+- metadata_commit_sha: `TO_BE_RECORDED`
+- inputs_reviewed: Step07 source contracts and review, architecture and product contracts, Step08 playbook, exact DataProfiler source/tests/license at `4b5ab37bb28a2104d0898d21a8c9681b5c5deed1`
+- files_changed: project profiling contracts/application/adapter/artifacts, Step07 hardening, profiling tests, validators, docs and OSS ledger
+- tests_passed: profiling/unit/architecture focused suite 9 passed; Step07 source/contract suite 11 passed; compileall passed
+- research: official `DataProfiler==0.13.4` executed; temporary research clone deleted before final regression
+- limitations: profiling is bounded by the available staged snapshot; formal G3 and G4-G15 remain pending; Step09 quality semantics are not implemented
+- blocking_issues: none
+- handoff_to: `Step09 — Data Quality Engineer`
+- next_state: `last_completed_step=8`, `current_step=9`, `current_role=data_quality_engineer`, `G3-G15=PENDING`, `blocked=false`
