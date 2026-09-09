@@ -33,7 +33,7 @@ specialist_execution:
   last_completed_step: 9
   last_completed_role: "data_quality_engineer"
   last_completed_specialist: "Step09 — Data Quality Engineer"
-  last_completed_content_commit: "201c2f65d9830f4d06c9eccb761cb4975e81bad2"
+  last_completed_content_commit: "1f17447ba1f32afc21ea34f32011dcc56b78271d"
   next_step: "Step10 — Data Security / Privacy Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
