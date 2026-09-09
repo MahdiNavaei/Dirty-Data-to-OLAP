@@ -11,7 +11,7 @@ Starting HEAD: `9a4a69e3838fc8be8cb96270d532be16ccf98586`
 
 Content commit: `0f49fd3a48ec0a989da7cc896149f236458fce1f`
 
-Metadata commit: recorded after the content commit.
+Metadata commit: `c3293c60f5de6178d155d5926d358c6cb7d55a82`
 
 ## Scope implemented
 

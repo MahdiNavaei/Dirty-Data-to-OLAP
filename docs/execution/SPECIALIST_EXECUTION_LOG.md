@@ -775,7 +775,7 @@ handoff_to:
 - status: `PASS`
 - starting_head: `9a4a69e3838fc8be8cb96270d532be16ccf98586`
 - content_commit_sha: `0f49fd3a48ec0a989da7cc896149f236458fce1f`
-- metadata_commit_sha: `recorded after the content commit`
+- metadata_commit_sha: `c3293c60f5de6178d155d5926d358c6cb7d55a82`
 - inputs_reviewed:
   - `docs/execution/MASTER_EXECUTION_STATE.yml`
   - `docs/execution/gates/G2_ARCHITECTURE_READY.md`
