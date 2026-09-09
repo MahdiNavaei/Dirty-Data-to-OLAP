@@ -52,3 +52,12 @@ semantics:
   NEEDS_REVIEW: evidence exists but a human/domain decision is required
   BLOCKED: prerequisite, access or required capability is unavailable
   FAILED: attempted operation failed or validation proved output invalid
+review_interaction:
+  unresolved_required_checkpoint_drives_run_needs_review: true
+  unresolved_required_checkpoint_blocks_guarded_stage: true
+  accepted_compatible_decision_allows_downstream_attempt: true
+  rejected_decision_satisfies_no_acceptance_guard: false
+  deferred_decision_satisfies_no_acceptance_guard: false
+  invalidated_replay_decision_satisfies_no_acceptance_guard: false
+  review_action_is_not_engine_failure: true
+  validation_failure_cannot_be_manually_promoted_to_success: true

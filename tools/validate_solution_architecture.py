@@ -40,6 +40,7 @@ SPEC_NAMES = [
     "stage_graph.yml",
     "stage_state_machine.yml",
     "artifact_lifecycle.yml",
+    "review_checkpoints.yml",
 ]
 ADR_NAMES = [
     "ADR-0001_PROJECT_OWNED_CONTRACTS.md",
@@ -48,6 +49,7 @@ ADR_NAMES = [
     "ADR-0004_EXTERNAL_ADAPTERS_AND_CAPABILITIES.md",
     "ADR-0005_ARTIFACT_PUBLICATION_CACHE_AND_INVALIDATION.md",
     "ADR-0006_TWO_PHASE_CANONICALIZATION.md",
+    "ADR-0007_STAGE_SCOPED_REVIEW_CHECKPOINTS.md",
 ]
 
 errors: list[str] = []
@@ -90,6 +92,30 @@ def has_cycle(nodes: set[str], edges: dict[str, list[str]]) -> bool:
         return False
 
     return any(visit(node) for node in nodes)
+
+
+def topological_positions(nodes: set[str], dependencies: dict[str, list[str]]) -> dict[str, int]:
+    """Return dependency-before-consumer positions for the stage graph."""
+    children = {node: [] for node in nodes}
+    indegree = {node: 0 for node in nodes}
+    for child, parents in dependencies.items():
+        for parent in parents:
+            if parent not in nodes:
+                continue
+            children[parent].append(child)
+            indegree[child] += 1
+    ready = sorted(node for node, degree in indegree.items() if degree == 0)
+    order: list[str] = []
+    while ready:
+        node = ready.pop(0)
+        order.append(node)
+        for child in sorted(children[node]):
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                ready.append(child)
+                ready.sort()
+    require(len(order) == len(nodes), "stage DAG cannot be topologically ordered")
+    return {node: index for index, node in enumerate(order)}
 
 
 def strings(value: Any) -> str:
@@ -284,6 +310,17 @@ def check_run_machine(data: dict[str, Any]) -> None:
     require("BLOCKED" in semantics and ("unavailable" in str(semantics["BLOCKED"]).lower() or "prerequisite" in str(semantics["BLOCKED"]).lower()), "BLOCKED semantics are missing")
     require("FAILED" in semantics and ("failed" in str(semantics["FAILED"]).lower() or "invalid" in str(semantics["FAILED"]).lower()), "FAILED semantics are missing")
     require("FAILED" in data.get("resumable_states", []), "FAILED must be resumable only with a new attempt")
+    review = data.get("review_interaction", {})
+    for key in (
+        "unresolved_required_checkpoint_drives_run_needs_review",
+        "unresolved_required_checkpoint_blocks_guarded_stage",
+        "accepted_compatible_decision_allows_downstream_attempt",
+        "review_action_is_not_engine_failure",
+        "validation_failure_cannot_be_manually_promoted_to_success",
+    ):
+        require(review.get(key) is True, f"run review interaction is missing {key}")
+    for key in ("rejected_decision_satisfies_no_acceptance_guard", "deferred_decision_satisfies_no_acceptance_guard", "invalidated_replay_decision_satisfies_no_acceptance_guard"):
+        require(review.get(key) is False, f"run review interaction must reject {key}")
 
 
 def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
@@ -297,11 +334,14 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
     required_ids = {
         "SOURCE_DISCOVERY", "SOURCE_SNAPSHOT_STAGE", "PROFILING",
         "DEPENDENCY_DISCOVERY", "SCHEMA_MATCHING", "QUALITY_ANALYSIS",
-        "EVIDENCE_FUSION", "REVIEW_DECISIONS", "CANONICAL_HYPOTHESES",
+        "EVIDENCE_FUSION", "REVIEW_EVIDENCE_DECISIONS", "CANONICAL_HYPOTHESES",
+        "REVIEW_CANONICAL_IDENTITY", "REVIEW_ANALYTICAL_PLAN",
+        "REVIEW_MATERIALIZATION_PLAN",
         "CANONICAL_FINALIZATION", "ANALYTICAL_PLANNING", "COMPILATION",
         "MATERIALIZATION", "VALIDATION_RECONCILIATION",
     }
     require(required_ids <= stage_ids, "stage DAG is missing a required semantic stage")
+    require("REVIEW_DECISIONS" not in stage_ids, "generic early REVIEW_DECISIONS stage remains active")
     edges = {}
     by_id = {stage.get("stage_id"): stage for stage in stages}
     for stage in stages:
@@ -331,7 +371,86 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
     fusion = by_id["EVIDENCE_FUSION"]
     require("SCHEMA_MATCHING" in fusion.get("optional_dependencies", []), "schema matching must be conditional for evidence fusion")
     require(any(g.get("dependency") == "SCHEMA_MATCHING" and g.get("when") == "cross_source_mapping_scope == true" for g in fusion.get("conditional_dependencies", [])), "evidence fusion lacks schema matching guard")
+    for guarded_stage, checkpoint in {
+        "CANONICAL_HYPOTHESES": "REVIEW_EVIDENCE_DECISIONS",
+        "CANONICAL_FINALIZATION": "REVIEW_CANONICAL_IDENTITY",
+        "COMPILATION": "REVIEW_ANALYTICAL_PLAN",
+        "MATERIALIZATION": "REVIEW_MATERIALIZATION_PLAN",
+    }.items():
+        require(by_id[guarded_stage].get("required_review_checkpoint") == checkpoint, f"{guarded_stage} has the wrong review checkpoint guard")
+        require(checkpoint in by_id[guarded_stage].get("dependencies", []), f"{guarded_stage} must depend on {checkpoint}")
     return stage_ids, len(stages)
+
+
+def check_review_checkpoints(data: dict[str, Any], stage_graph: dict[str, Any]) -> tuple[int, int]:
+    required = {
+        "checkpoint_id", "checkpoint_stage", "subject_stage", "subject_artifact_types",
+        "review_types", "required_when", "downstream_guarded_stage", "decision_contract",
+        "compatibility_fields", "invalidating_changes", "unresolved_run_state",
+        "reject_behavior", "skip_or_auto_policy",
+    }
+    checkpoints = data.get("checkpoints", [])
+    require(isinstance(checkpoints, list) and len(checkpoints) == 4, "review checkpoint spec must define exactly four checkpoints")
+    stages = stage_graph.get("stages", [])
+    by_id = {stage.get("stage_id"): stage for stage in stages}
+    stage_ids = set(by_id)
+    dependencies = {
+        stage_id: list(stage.get("dependencies", [])) + list(stage.get("optional_dependencies", []))
+        for stage_id, stage in by_id.items()
+    }
+    positions = topological_positions(stage_ids, dependencies)
+    checkpoint_ids: set[str] = set()
+    required_compatibility = {
+        "subject_artifact_id", "subject_content_hash", "subject_schema_version",
+        "model_version", "source_schema_fingerprints", "policy_version",
+        "domain_assertion_refs", "subject_semantic_id",
+    }
+    for checkpoint in checkpoints:
+        require(isinstance(checkpoint, dict), "review checkpoint entries must be mappings")
+        if not isinstance(checkpoint, dict):
+            continue
+        require(required <= set(checkpoint), f"review checkpoint {checkpoint.get('checkpoint_id')} is missing required fields")
+        checkpoint_id = checkpoint.get("checkpoint_id")
+        require(checkpoint_id not in checkpoint_ids, f"duplicate review checkpoint ID: {checkpoint_id}")
+        checkpoint_ids.add(checkpoint_id)
+        checkpoint_stage = checkpoint.get("checkpoint_stage")
+        subject_stage = checkpoint.get("subject_stage")
+        guarded_stage = checkpoint.get("downstream_guarded_stage")
+        require(checkpoint_stage in stage_ids, f"review checkpoint {checkpoint_id} references missing checkpoint stage")
+        require(subject_stage in stage_ids, f"review checkpoint {checkpoint_id} references missing subject stage")
+        require(guarded_stage in stage_ids, f"review checkpoint {checkpoint_id} references missing guarded stage")
+        if checkpoint_stage in by_id:
+            stage = by_id[checkpoint_stage]
+            require(stage.get("review_checkpoint_id") == checkpoint_id, f"checkpoint stage {checkpoint_stage} is not bound to {checkpoint_id}")
+            require("ReviewDecision" in stage.get("output_artifact_types", []), f"checkpoint stage {checkpoint_stage} must output ReviewDecision")
+            require(stage.get("conditional") is True and "skip" in strings(stage).lower(), f"checkpoint stage {checkpoint_stage} lacks policy-conditional skip semantics")
+        require(positions.get(subject_stage, -1) < positions.get(checkpoint_stage, -1), f"{checkpoint_id}: subject stage must precede checkpoint")
+        require(positions.get(checkpoint_stage, -1) < positions.get(guarded_stage, -1), f"{checkpoint_id}: checkpoint must precede guarded stage")
+        subject_types = checkpoint.get("subject_artifact_types", [])
+        require(subject_types, f"{checkpoint_id} must declare subject artifacts")
+        for artifact_type in subject_types:
+            require(artifact_type in by_id.get(subject_stage, {}).get("output_artifact_types", []), f"{checkpoint_id}: {artifact_type} is not produced by {subject_stage}")
+        for additional in checkpoint.get("additional_subject_stages", []):
+            additional_stage = additional.get("stage") if isinstance(additional, dict) else None
+            additional_types = additional.get("artifact_types", []) if isinstance(additional, dict) else []
+            require(additional_stage in stage_ids, f"{checkpoint_id}: additional subject stage is missing")
+            require(positions.get(additional_stage, -1) < positions.get(checkpoint_stage, -1), f"{checkpoint_id}: additional subject stage must precede checkpoint")
+            for artifact_type in additional_types:
+                require(artifact_type in by_id.get(additional_stage, {}).get("output_artifact_types", []), f"{checkpoint_id}: {artifact_type} is not produced by {additional_stage}")
+        require(checkpoint.get("decision_contract") == "ReviewDecision", f"{checkpoint_id} must use ReviewDecision")
+        require(set(checkpoint.get("compatibility_fields", [])) >= required_compatibility, f"{checkpoint_id} lacks artifact/version compatibility fields")
+        require(checkpoint.get("unresolved_run_state") == "NEEDS_REVIEW", f"{checkpoint_id} must map unresolved review to NEEDS_REVIEW")
+        require("policy" in str(checkpoint.get("required_when", "")).lower(), f"{checkpoint_id} required_when must be policy-driven")
+        require("policy" in str(checkpoint.get("skip_or_auto_policy", "")).lower(), f"{checkpoint_id} skip/auto behavior must be policy-driven")
+    require(checkpoint_ids == {"REVIEW_EVIDENCE_DECISIONS", "REVIEW_CANONICAL_IDENTITY", "REVIEW_ANALYTICAL_PLAN", "REVIEW_MATERIALIZATION_PLAN"}, "review checkpoint set is incomplete or contains extras")
+    require(data.get("reusable_service") == "application.review_policy", "review checkpoints must use the single Review / Policy Service")
+    require(set(data.get("compatibility_fields", [])) >= required_compatibility, "review spec compatibility contract is incomplete")
+    require(data.get("unresolved_run_state") == "NEEDS_REVIEW", "review spec unresolved state must be NEEDS_REVIEW")
+    require(data.get("rejected_decision_satisfies_guard") is False and data.get("deferred_decision_satisfies_guard") is False, "rejected/deferred decisions must not satisfy guards")
+    require(data.get("validation_failure_can_be_manually_promoted_to_success") is False, "validation failure must not be manually promoted to success")
+    canonical = next((item for item in checkpoints if item.get("checkpoint_id") == "REVIEW_CANONICAL_IDENTITY"), {})
+    require(any(item.get("stage") == "ENTITY_RESOLUTION" for item in canonical.get("additional_subject_stages", [])), "canonical checkpoint lacks conditional ER subject")
+    return len(checkpoints), len(positions)
 
 
 def check_stage_state_machine(data: dict[str, Any]) -> tuple[int, int]:
@@ -500,6 +619,45 @@ def cross_contract_rejects(proposal: dict[str, Any]) -> bool:
             "validation_mutates_source",
         )
     )
+
+
+def review_rejects(proposal: dict[str, Any]) -> bool:
+    return any(
+        proposal.get(key) for key in (
+            "linkage_review_before_entity_cluster",
+            "evidence_review_used_as_linkage_approval",
+            "analytical_review_before_plan",
+            "materialization_uses_generic_approval",
+            "missing_subject_hash",
+            "replay_after_schema_version_change",
+            "er_required_finalized_with_unresolved_linkage_review",
+            "grain_changed_without_review_invalidation",
+            "sql_changed_without_materialization_invalidation",
+            "rejected_plan_allows_materialization",
+            "unresolved_review_keeps_run_running",
+            "failed_validation_manually_promoted",
+        )
+    )
+
+
+def check_review_negative_tests() -> int:
+    cases = [
+        {"linkage_review_before_entity_cluster": True},
+        {"evidence_review_used_as_linkage_approval": True},
+        {"analytical_review_before_plan": True},
+        {"materialization_uses_generic_approval": True},
+        {"missing_subject_hash": True},
+        {"replay_after_schema_version_change": True},
+        {"er_required_finalized_with_unresolved_linkage_review": True},
+        {"grain_changed_without_review_invalidation": True},
+        {"sql_changed_without_materialization_invalidation": True},
+        {"rejected_plan_allows_materialization": True},
+        {"unresolved_review_keeps_run_running": True},
+        {"failed_validation_manually_promoted": True},
+    ]
+    passed = sum(review_rejects(case) for case in cases)
+    require(passed == 12, f"review negative tests {passed}/12")
+    return passed
 
 
 def check_manifest() -> None:
@@ -677,6 +835,8 @@ def main() -> int:
     check_dependency_rules(loaded["dependency_rules.yml"])
     interface_count = check_interfaces(loaded["engine_interfaces.yml"], components)
     stage_ids, stage_count = check_stage_graph(loaded["stage_graph.yml"])
+    checkpoint_count, topological_stage_count = check_review_checkpoints(loaded["review_checkpoints.yml"], loaded["stage_graph.yml"])
+    require(topological_stage_count == stage_count, "review topology did not cover every stage")
     check_optionality_consistency(
         {item["interface_id"]: item for item in loaded["engine_interfaces.yml"].get("interfaces", [])},
         components,
@@ -690,6 +850,7 @@ def main() -> int:
     check_manifest()
     check_state()
     negative_counts = check_negative_tests()
+    review_negative_count = check_review_negative_tests()
     if errors:
         for error in errors:
             print(f"FAIL: {error}")
@@ -697,13 +858,15 @@ def main() -> int:
     print(
         "PASS: "
         f"components={component_count} interfaces={interface_count} stages={stage_count} "
+        f"review_checkpoints={checkpoint_count} "
         f"run_states=7 logical_stage_states={logical_count} attempt_states={attempt_count} accounting=preserved "
         f"lifecycle_negative_tests={negative_counts[0]}/10 "
         f"dependency_negative_tests={negative_counts[1]}/10 "
         f"artifact_cache_negative_tests={negative_counts[2]}/7 "
         f"er_negative_tests={negative_counts[3]}/8 "
         f"stage_lifecycle_negative_tests={negative_counts[4]}/10 "
-        f"cross_contract_negative_tests={negative_counts[5]}/7"
+        f"cross_contract_negative_tests={negative_counts[5]}/7 "
+        f"review_negative_tests={review_negative_count}/12"
     )
     return 0
 

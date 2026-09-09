@@ -42,8 +42,18 @@ A semantic cache key includes stage version, ordered upstream artifact IDs and h
 - Accepted semantic mapping change invalidates canonical, ER and analytical descendants as applicable.
 - Entity-resolution policy/configuration change invalidates ER and dependent canonical/analytical artifacts.
 - Fact-grain decision change invalidates analytical planning, compilation, materialization and validation.
+- Review subject artifact, schema/model version, policy/domain scope or applicability fingerprint change invalidates the dependent review decision and its guarded descendants.
+- Generated SQL or compiled-plan hash change invalidates materialization approval and requires a new materialization checkpoint decision.
 - Documentation-only changes do not invalidate runtime artifacts.
 
 ## Decision replay
 
-Human decisions are persisted with subject stable IDs, source/schema fingerprints, policy version, domain assertion scope and upstream semantic references. Replay is allowed only when compatibility checks pass. An incompatible override becomes review-required rather than silently surviving structural change.
+Human decisions are persisted in a stage-scoped `ReviewDecision` envelope with
+the subject artifact ID, content hash, schema/model version, run/stage/attempt
+identity, policy version, domain assertion references, source/schema
+fingerprints, semantic subject ID and an applicability fingerprint. Replay is
+allowed only when those fields remain semantically compatible. A changed
+mapping, ER configuration, canonical hypothesis, grain, compiled plan or SQL
+hash preserves the old decision but marks it invalid for replay and makes the
+guard `NEEDS_REVIEW`; it is never silently reused by display name or review
+type alone.

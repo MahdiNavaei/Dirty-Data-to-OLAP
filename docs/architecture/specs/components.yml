@@ -51,9 +51,9 @@ components:
     name: Review and Policy Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [record decisions, validate replay compatibility, expose review state]
-    input_contracts: [ReviewDecision, CompatibilityContext]
-    output_contracts: [DecisionArtifact, ReviewStatus]
+    responsibilities: [present and record stage-scoped review requests, bind decisions to exact subject artifacts, validate replay compatibility, invalidate incompatible decisions, expose unresolved checkpoint state, retain review history]
+    input_contracts: [ReviewCheckpointRequest, ReviewDecision, CompatibilityContext]
+    output_contracts: [ReviewDecision, ReviewCheckpointStatus, ReviewStatus]
     depends_on: [domain.contracts]
     ports_used: [ControlStorePort, ArtifactStorePort]
     implemented_by: deferred to Step 05
@@ -178,8 +178,8 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [combine evidence, preserve conflicts, emit decisions and hypotheses]
-    input_contracts: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, LLMEvidence]
-    output_contracts: [RelationshipDecision, SemanticMappingDecision, Conflict]
+    input_contracts: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal, LLMEvidence]
+    output_contracts: [RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
     depends_on: [application.profiling, application.dependency_discovery, application.quality, domain.contracts]
     conditional_dependencies:
       - dependency: application.schema_matching
@@ -197,7 +197,7 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [entity type hypotheses, attributes, identity candidates, ER specifications]
-    input_contracts: [RelationshipDecision, SemanticMappingDecision, DomainAssertion]
+    input_contracts: [RelationshipDecision, SemanticMappingDecision, RepairProposal, ReviewDecision from REVIEW_EVIDENCE_DECISIONS, DomainAssertion]
     output_contracts: [CanonicalModelHypothesis, EntityResolutionSpec]
     depends_on: [application.evidence_fusion, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
@@ -234,12 +234,12 @@ components:
       - dependency: application.entity_resolution
         scope: entity_family
         when: entity_resolution_required(entity_family) == true
-        requires: [complete EntityMatchEdge/EntityCluster artifact, accepted_or_review_acceptable linkage decision]
+        requires: [complete EntityMatchEdge/EntityCluster artifact, post-ER REVIEW_CANONICAL_IDENTITY checkpoint, accepted_or_review_acceptable linkage decision bound to that artifact]
         on_failure: family_scoped BLOCKED or NEEDS_REVIEW; no SourceRecordCanonicalMap is published
       - dependency: application.entity_resolution
         scope: entity_family
         when: entity_resolution_required(entity_family) == false
-        requires: no Entity Resolution output
+        requires: ER may be absent or policy-recorded SKIPPED
         on_success: finalization may proceed when all other guards hold
     ports_used: [ArtifactStorePort, ControlStorePort]
     implemented_by: deferred to Step 05
@@ -266,7 +266,7 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [compile approved analytical plan into execution artifacts]
-    input_contracts: [AnalyticalPlan, ReviewDecision]
+    input_contracts: [AnalyticalPlan, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
     output_contracts: [CompiledPlan, GeneratedSQL]
     depends_on: [application.analytical_planner, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
@@ -274,13 +274,13 @@ components:
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: compilation failure is FAILED; no execution occurs
+    failure_behavior: unresolved or incompatible analytical-plan review is NEEDS_REVIEW; compilation failure is FAILED; no execution occurs
   - component_id: application.materializer
     name: Materializer Service
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [execute approved compiled plan into controlled target]
-    input_contracts: [CompiledPlan, ReviewDecision]
+    input_contracts: [CompiledPlan, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
     output_contracts: [MaterializationArtifact]
     depends_on: [application.compiler, application.review_policy, domain.contracts]
     ports_used: [MaterializerPort, ArtifactStorePort]
@@ -288,7 +288,7 @@ components:
     side_effect_class: controlled_target_write
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: incomplete target is non-consumable and stage FAILED
+    failure_behavior: unresolved or incompatible materialization approval is NEEDS_REVIEW; incomplete target is non-consumable and stage FAILED
   - component_id: application.validation
     name: Validation and Reconciliation Service
     layer: application

@@ -527,3 +527,81 @@ handoff_to:
 - content_commit_sha: `27d080d2d1b379b6b9d9dd23f02c2f5ed5ebe9ba`
 - g2_status: `PENDING`
 - handoff_to: `Step 05 — Technical Lead / Engineering Lead; Step 05 not started`
+
+## Post-Step-04 Review-Checkpoint Architecture Repair
+
+- execution_step: `post-step-04 review-checkpoint repair`
+- owning_context: `Step 04 — Software / Solution Architect`
+- status: `PASS`
+- reason: `Independent review found that one early REVIEW_DECISIONS stage could not temporally review later ER, analytical-plan or compiled-plan artifacts.`
+- files_reread:
+  - `docs/product/PRODUCT_CONTRACT.md`
+  - `docs/product/USER_JOURNEYS.md`
+  - `docs/product/ACCEPTANCE_CRITERIA.md`
+  - `docs/product/TERMINOLOGY.md`
+  - `docs/domain/DOMAIN_CONTRACT.md`
+  - `docs/domain/DOMAIN_ASSERTION_MODEL.md`
+  - `docs/domain/IDENTITY_AND_KEYS.md`
+  - `docs/domain/AMBIGUITY_CATALOGUE.md`
+  - `docs/data-architecture/DATA_ARCHITECTURE_CONTRACT.md`
+  - `docs/data-architecture/CANONICAL_MODEL_PRINCIPLES.md`
+  - `docs/data-architecture/CONFLICT_AND_SURVIVORSHIP.md`
+  - `docs/data-architecture/DIMENSIONAL_MODELING_RULES.md`
+  - `docs/data-architecture/LINEAGE_AND_PROVENANCE.md`
+  - `docs/03_SYSTEM_ARCHITECTURE.md`
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md`
+  - `docs/architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md`
+  - `docs/architecture/COMPONENT_MODEL.md`
+  - `docs/architecture/ENGINE_INTERFACES.md`
+  - `docs/architecture/RUN_AND_STAGE_LIFECYCLE.md`
+  - `docs/architecture/FAILURE_RETRY_IDEMPOTENCY.md`
+  - `docs/architecture/ARTIFACT_AND_CACHE_LIFECYCLE.md`
+  - `docs/architecture/PERSISTENCE_BOUNDARIES.md`
+  - `docs/architecture/specs/components.yml`
+  - `docs/architecture/specs/engine_interfaces.yml`
+  - `docs/architecture/specs/run_state_machine.yml`
+  - `docs/architecture/specs/stage_graph.yml`
+  - `docs/architecture/specs/stage_state_machine.yml`
+  - `docs/architecture/specs/artifact_lifecycle.yml`
+  - `docs/architecture/specs/review_checkpoints.yml`
+  - `docs/adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md`
+  - `tools/validate_solution_architecture.py`
+- files_changed:
+  - `docs/architecture/specs/stage_graph.yml`
+  - `docs/architecture/specs/review_checkpoints.yml`
+  - `docs/architecture/specs/components.yml`
+  - `docs/architecture/specs/engine_interfaces.yml`
+  - `docs/architecture/specs/run_state_machine.yml`
+  - `docs/architecture/specs/artifact_lifecycle.yml`
+  - `docs/architecture/COMPONENT_MODEL.md`
+  - `docs/architecture/ENGINE_INTERFACES.md`
+  - `docs/architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md`
+  - `docs/architecture/RUN_AND_STAGE_LIFECYCLE.md`
+  - `docs/architecture/FAILURE_RETRY_IDEMPOTENCY.md`
+  - `docs/architecture/ARTIFACT_AND_CACHE_LIFECYCLE.md`
+  - `docs/architecture/PERSISTENCE_BOUNDARIES.md`
+  - `docs/adr/ADR-0007_STAGE_SCOPED_REVIEW_CHECKPOINTS.md`
+  - `docs/03_SYSTEM_ARCHITECTURE.md` and synchronized Knowledge Base copy
+  - `docs/04_INTERNAL_DATA_CONTRACTS.md` and synchronized Knowledge Base copy
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/manifest.json`
+  - `docs/execution/STEP04_SOLUTION_ARCHITECTURE_REVIEW.md`
+  - `tools/validate_solution_architecture.py`
+- review_checkpoints:
+  - `REVIEW_EVIDENCE_DECISIONS`: after `EVIDENCE_FUSION`, before `CANONICAL_HYPOTHESES`
+  - `REVIEW_CANONICAL_IDENTITY`: after canonical hypotheses and required ER output, before `CANONICAL_FINALIZATION`
+  - `REVIEW_ANALYTICAL_PLAN`: after `ANALYTICAL_PLANNING`, before `COMPILATION`
+  - `REVIEW_MATERIALIZATION_PLAN`: after `COMPILATION`, before `MATERIALIZATION` when policy requires
+- tests_run:
+  - `python -m py_compile tools/validate_solution_architecture.py`
+  - `python tools/validate_solution_architecture.py`
+  - `python tools/validate_domain_docs.py`
+  - `python tools/validate_data_architecture.py`
+  - full Knowledge Base manifest byte/SHA validation
+  - paired changed base-report equality
+  - stage-DAG topology and review-checkpoint temporal validation
+  - secret-like, source-tree and OSS-clone scope checks
+  - `git diff --check`
+- tests_passed:
+  - `Solution architecture validator: PASS (34 components, 11 interfaces, 19 stages, 4 review checkpoints; old negative suites preserved; review negative tests 12/12)`
+- g2_status: `PENDING`
+- handoff_to: `Step 05 — Technical Lead / Engineering Lead; Step 05 not started`

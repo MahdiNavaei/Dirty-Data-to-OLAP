@@ -1,0 +1,77 @@
+schema_version: 1
+scope: v1_stage_scoped_review_checkpoint_contract
+provenance: Specialist Step 04 post-Step-04 review-checkpoint architecture repair
+decision_contract: ReviewDecision
+reusable_service: application.review_policy
+compatibility_fields:
+  - subject_artifact_id
+  - subject_content_hash
+  - subject_schema_version
+  - model_version
+  - source_schema_fingerprints
+  - policy_version
+  - domain_assertion_refs
+  - subject_semantic_id
+replay_rule: replay is valid only when every compatibility field and the applicability_fingerprint remain semantically compatible
+invalidation_rule: an incompatible subject or policy change preserves the old decision and marks it INVALIDATED or requires a new review decision
+unresolved_run_state: NEEDS_REVIEW
+rejected_decision_satisfies_guard: false
+deferred_decision_satisfies_guard: false
+validation_failure_can_be_manually_promoted_to_success: false
+checkpoints:
+  - checkpoint_id: REVIEW_EVIDENCE_DECISIONS
+    checkpoint_stage: REVIEW_EVIDENCE_DECISIONS
+    subject_stage: EVIDENCE_FUSION
+    subject_artifact_types: [RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
+    review_types: [relationship, schema_mapping, semantic_conflict, repair_proposal]
+    required_when: policy requires review for ambiguous, conflicting or otherwise non-automatable evidence/mapping/repair decisions
+    downstream_guarded_stage: CANONICAL_HYPOTHESES
+    decision_contract: ReviewDecision
+    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id]
+    invalidating_changes: [evidence_content_change, mapping_change, repair_category_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
+    unresolved_run_state: NEEDS_REVIEW
+    reject_behavior: rejected evidence decision cannot feed canonical hypotheses; revise the upstream decision or policy and rerun affected stages
+    skip_or_auto_policy: versioned policy may record SKIPPED only when manual review is not required; no arbitrary numeric confidence threshold is defined
+  - checkpoint_id: REVIEW_CANONICAL_IDENTITY
+    checkpoint_stage: REVIEW_CANONICAL_IDENTITY
+    subject_stage: CANONICAL_HYPOTHESES
+    additional_subject_stages:
+      - stage: ENTITY_RESOLUTION
+        artifact_types: [EntityMatchEdge, EntityCluster]
+        required_when: entity_resolution_required(entity_family) == true
+    subject_artifact_types: [CanonicalModelHypothesis]
+    review_types: [canonical_identity, entity_merge, linkage, survivorship, canonical_conflict, identity_ambiguity]
+    required_when: policy requires identity or linkage review; ER-required families require this checkpoint after complete ER output
+    downstream_guarded_stage: CANONICAL_FINALIZATION
+    decision_contract: ReviewDecision
+    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id]
+    invalidating_changes: [canonical_hypothesis_change, entity_resolution_configuration_change, linkage_artifact_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change, survivorship_policy_change]
+    unresolved_run_state: NEEDS_REVIEW
+    reject_behavior: rejected identity or linkage review cannot satisfy finalization; revise the hypothesis, ER policy or decision and create a new compatible review
+    skip_or_auto_policy: ER-not-required or unambiguous families may be policy-recorded SKIPPED; ER-required families cannot skip this guard
+  - checkpoint_id: REVIEW_ANALYTICAL_PLAN
+    checkpoint_stage: REVIEW_ANALYTICAL_PLAN
+    subject_stage: ANALYTICAL_PLANNING
+    subject_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
+    review_types: [fact_dimension_interpretation, grain, measure_semantics, aggregation_semantics, analytical_key_strategy, unit_currency_semantics, analytical_conflict]
+    required_when: policy requires review of the analytical interpretation or unresolved model semantics
+    downstream_guarded_stage: COMPILATION
+    decision_contract: ReviewDecision
+    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id]
+    invalidating_changes: [analytical_plan_change, fact_grain_change, measure_semantics_change, dimensional_interpretation_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
+    unresolved_run_state: NEEDS_REVIEW
+    reject_behavior: rejected plan review prevents compilation; revise the analytical plan and create a new review decision
+    skip_or_auto_policy: versioned policy may record SKIPPED when manual analytical review is not required; no arbitrary numeric confidence threshold is defined
+  - checkpoint_id: REVIEW_MATERIALIZATION_PLAN
+    checkpoint_stage: REVIEW_MATERIALIZATION_PLAN
+    subject_stage: COMPILATION
+    subject_artifact_types: [CompiledPlan, GeneratedSQL]
+    review_types: [materialization_approval, compiled_plan, generated_sql, target_configuration, controlled_target_risk]
+    required_when: materialization approval policy requires a human decision for the compiled target plan
+    downstream_guarded_stage: MATERIALIZATION
+    decision_contract: ReviewDecision
+    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id]
+    invalidating_changes: [compiled_plan_change, generated_sql_hash_change, target_configuration_change, analytical_plan_change, policy_version_change]
+    unresolved_run_state: NEEDS_REVIEW
+    reject_behavior: rejected materialization approval prevents target execution; source-write authority is never introduced
+    skip_or_auto_policy: versioned policy may record SKIPPED when manual materialization approval is not required; this never permits source writes

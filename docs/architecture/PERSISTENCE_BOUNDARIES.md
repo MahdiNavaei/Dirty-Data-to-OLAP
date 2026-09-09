@@ -30,6 +30,13 @@ Path resolution remains inside the Artifact Store. Core services use logical art
 
 ControlStorePort supports create/get run, compare-and-transition run state, create/update stage attempt, register/read artifact metadata, record/retrieve decisions, record validation status and record cache metadata.
 
+No dedicated `ReviewDecisionPort` is introduced in V1. Review decisions and
+checkpoint status are control-plane metadata with the same transactional
+lifecycles as stage attempts, artifact references and run transitions, so
+`ControlStorePort` is the single persistence boundary. The application-level
+Review / Policy Service remains the only semantic authority: entrypoints and
+checkpoint stages call that service and never write decision records directly.
+
 ArtifactStorePort supports allocate attempt-local location, publish complete artifact, read published artifact, verify content hash, list artifacts, invalidate, supersede and resolve a project-relative logical location.
 
 Later PostgreSQL, object-storage and other implementations must satisfy these semantics without changing application or domain contracts.

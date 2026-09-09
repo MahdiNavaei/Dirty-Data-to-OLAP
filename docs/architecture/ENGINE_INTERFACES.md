@@ -2,6 +2,18 @@
 
 These are logical ports for Step 05. They are not Python signatures and do not define implementation modules.
 
+## Review / Policy Service boundary
+
+Review interaction is one reusable project-owned application service, not an
+engine adapter. The runtime graph invokes it through four stage-scoped
+checkpoints: evidence/mapping, canonical identity/linkage, analytical plan and
+materialization approval. Each checkpoint is entered only after its subject
+artifact is complete and submits a `ReviewCheckpointRequest` containing the
+exact artifact ID, content hash, schema/model version, source/schema
+fingerprints, policy/domain scope and semantic subject ID. Entry points and
+future UI/API transports call this service; they do not mutate decision records
+directly.
+
 ## SourceAdapter
 
 - Purpose: discover and read a bounded source snapshot using read-only access.
@@ -60,10 +72,23 @@ These are logical ports for Step 05. They are not Python signatures and do not d
 ## Canonical Finalization Service
 
 - Purpose: turn a reviewed canonical hypothesis and acceptable linkage evidence into accepted canonical identity and source mappings.
-- Input: CanonicalModelHypothesis, EntityMatchEdge/EntityCluster where the family requires ER, ReviewDecision, domain assertion, identity policy and conflict/provenance references.
+- Input: CanonicalModelHypothesis, EntityMatchEdge/EntityCluster where the family requires ER, the post-ER `REVIEW_CANONICAL_IDENTITY` ReviewDecision, domain assertion, identity policy and conflict/provenance references.
 - Output: CanonicalModel, CanonicalAttribute and `SourceRecordCanonicalMap`.
 - Ownership: this is the sole producer of accepted source-record-to-canonical mappings. An EntityCluster is evidence and is never reused as a canonical ID.
-- Conditional dependency: when `entity_resolution_required(entity_family) == true`, an acceptable complete ER result and linkage decision are required; when false, absent or policy-recorded SKIPPED ER is legal.
+- Conditional dependency: when `entity_resolution_required(entity_family) == true`, an acceptable complete ER result and a compatible post-ER linkage decision are required; when false, absent or policy-recorded SKIPPED ER and identity review are legal according to policy.
+
+## ReviewCheckpoint
+
+- Purpose: pause a dependent stage until a policy-required review decision is
+  accepted for the artifact that already exists.
+- Stages: `REVIEW_EVIDENCE_DECISIONS`, `REVIEW_CANONICAL_IDENTITY`,
+  `REVIEW_ANALYTICAL_PLAN` and `REVIEW_MATERIALIZATION_PLAN`.
+- Semantics: unresolved or deferred required review drives `NEEDS_REVIEW`;
+  rejected review cannot satisfy a downstream guard; policy-recorded `SKIPPED`
+  is allowed only where the checkpoint specification permits it.
+- Replay: a prior decision is reusable only when its applicability fingerprint
+  remains compatible. Subject hash/schema/model/policy/domain/source changes
+  invalidate the old decision while retaining its history.
 
 ## OptionalSemanticEvidenceAdapter
 

@@ -30,13 +30,16 @@ The authoritative component list and dependency graph are in [components.yml](/d
 
 ```text
 SOURCE_DISCOVERY -> SOURCE_SNAPSHOT_STAGE -> {PROFILING, DEPENDENCY_DISCOVERY,
-SCHEMA_MATCHING, QUALITY_ANALYSIS} -> EVIDENCE_FUSION -> REVIEW_DECISIONS
--> CANONICAL_HYPOTHESES -> [ENTITY_RESOLUTION] -> CANONICAL_FINALIZATION
--> ANALYTICAL_PLANNING -> COMPILATION -> MATERIALIZATION
+SCHEMA_MATCHING, QUALITY_ANALYSIS} -> EVIDENCE_FUSION
+-> REVIEW_EVIDENCE_DECISIONS -> CANONICAL_HYPOTHESES
+-> [ENTITY_RESOLUTION] -> REVIEW_CANONICAL_IDENTITY
+-> CANONICAL_FINALIZATION -> ANALYTICAL_PLANNING
+-> REVIEW_ANALYTICAL_PLAN -> COMPILATION
+-> REVIEW_MATERIALIZATION_PLAN -> MATERIALIZATION
 -> VALIDATION_RECONCILIATION
 ```
 
-Optional semantic evidence is a declared branch into evidence fusion. Entity resolution is conditional and produces linkage evidence only: `EntityMatchEdge` and `EntityCluster`. It never produces `canonical_entity_id` or `SourceRecordCanonicalMap`. Canonical Finalization is the sole producer of accepted canonical identity and `SourceRecordCanonicalMap`. For an ER-required entity family, finalization requires complete acceptable ER output and an accepted/review-acceptable linkage decision; for an ER-not-required family, absent or policy-recorded skipped ER is legal. The graph is acyclic and all stage outputs are typed project-owned artifacts.
+Optional semantic evidence is a declared branch into evidence fusion. Each review checkpoint is a first-class stage boundary backed by the one reusable Review / Policy Service; it is entered only after its subject artifact exists. Evidence review covers relationships, mappings, conflicts and repairs before canonical hypotheses. Entity resolution is conditional and produces linkage evidence only: `EntityMatchEdge` and `EntityCluster`; identity/linkage review follows those artifacts when ER is required. Analytical-plan review follows `AnalyticalPlan`, and materialization approval follows `CompiledPlan`/`GeneratedSQL`. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`; a policy-recorded skip is explicit and versioned. Entity resolution never produces `canonical_entity_id` or `SourceRecordCanonicalMap`. Canonical Finalization is the sole producer of accepted canonical identity and `SourceRecordCanonicalMap`. For an ER-required entity family, finalization requires complete acceptable ER output and a compatible post-ER identity/linkage decision; for an ER-not-required family, absent or policy-recorded skipped ER and policy-permitted identity-review skip are legal. The graph is acyclic and all stage outputs are typed project-owned artifacts.
 
 ## Run and stage lifecycle
 
@@ -44,7 +47,7 @@ Run states are `CREATED`, `RUNNING`, `NEEDS_REVIEW`, `BLOCKED`, `FAILED`, `CANCE
 
 Every execution has a stage attempt with pinned inputs, upstream hashes, configuration, adapter version, error/cancellation details, and output references. Retries create a new attempt. A run can become `SUCCEEDED` only after final validation passes, required work is complete, required unresolved conditions are zero, and complete required artifacts are published.
 
-The canonical path is deliberately two phase: evidence produces canonical hypotheses; optional entity resolution produces linkage evidence; review and policy validation allow Canonical Finalization to bind accepted source records to canonical instances. Hypotheses, clusters and accepted mappings are not interchangeable.
+The canonical path is deliberately two phase: evidence produces canonical hypotheses; optional entity resolution produces linkage evidence; the canonical identity checkpoint and policy validation allow Canonical Finalization to bind accepted source records to canonical instances. Review decisions are artifact-scoped and carry subject ID, content hash, schema/model version, semantic identity and applicability fingerprint. Hypotheses, clusters and accepted mappings are not interchangeable.
 
 ## Control plane and Artifact/Data Plane
 
@@ -52,7 +55,7 @@ The Control Store contains run, stage, attempt, capability, configuration, index
 
 ## Caching, replay, and failure semantics
 
-Cache identity includes stage/version, upstream artifact references and hashes, source schema and sample fingerprints, configuration, adapter version, domain/policy version, and deterministic seed. Schema, grain, policy, adapter, configuration, or upstream changes invalidate descendants. Decisions retain the exact input and artifact references needed for replay. Required capability absence is `BLOCKED`; optional capability absence is an explicit skip with a reason. There is no fake fallback for missing evidence. External failures are isolated by stage/attempt and do not overwrite a valid prior artifact.
+Cache identity includes stage/version, upstream artifact references and hashes, source schema and sample fingerprints, configuration, adapter version, domain/policy version, and deterministic seed. Schema, grain, policy, adapter, configuration, or upstream changes invalidate descendants. Review decisions retain the exact subject artifact/version/fingerprint needed for compatibility-checked replay; incompatible decisions are retained as history but invalidated and cannot satisfy a guard. Required capability absence is `BLOCKED`; optional capability absence is an explicit skip with a reason. There is no fake fallback for missing evidence. External failures are isolated by stage/attempt and do not overwrite a valid prior artifact.
 
 ## Runtime topology and safety
 
@@ -76,8 +79,10 @@ New source, profiler, dependency, matching, semantic, entity-resolution, materia
 - [Extension points](/docs/architecture/EXTENSION_POINTS.md)
 - [Machine-readable specifications](/docs/architecture/specs/components.yml)
 - [Stage state machine](/docs/architecture/specs/stage_state_machine.yml)
+- [Review checkpoint specification](/docs/architecture/specs/review_checkpoints.yml)
 - [Architecture decisions](/docs/adr/ADR-0001_PROJECT_OWNED_CONTRACTS.md)
 - [Two-phase canonicalization ADR](/docs/adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md)
+- [Stage-scoped review checkpoints ADR](/docs/adr/ADR-0007_STAGE_SCOPED_REVIEW_CHECKPOINTS.md)
 
 ## Deferred implementation
 

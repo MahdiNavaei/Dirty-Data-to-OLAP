@@ -98,3 +98,35 @@ An independent review found four integrity defects in the pushed Step 04 archite
 The cross-spec audit also aligned `RelationshipCandidate` across dependency-discovery interface, component and stage outputs, and made V1 capability-required versus per-run conditional semantics explicit for dependency discovery, schema matching, entity resolution and semantic evidence.
 
 Corrective artifacts include the ER/interface/component/stage specs, stage state machine, internal contract clarification, synchronized system and internal-contract reports, narrative architecture updates, validator semantic checks and explicit negative tests. Step 04 remains `PASS`; this repair does not start Step 05 and does not change G2 from `PENDING`.
+
+## Post-Step-04 Review-Checkpoint Integrity Correction
+
+An additional independent review found a temporal review defect: the former
+single early `REVIEW_DECISIONS` node followed `EVIDENCE_FUSION` but was also
+implicitly used to approve Entity Resolution/linkage, analytical grain and
+measure semantics, and later materialization. Those artifacts did not exist
+when that decision could have been created. The impossible dependencies were:
+
+- ER linkage review before `EntityMatchEdge`/`EntityCluster` existed;
+- Canonical Finalization relying on a pre-ER decision as linkage approval;
+- analytical-plan/grain/measure approval before `AnalyticalPlan` existed;
+- materialization approval not bound to the post-compilation plan/SQL hash.
+
+The correction keeps one reusable Review / Policy Service and adds four explicit
+stage-scoped checkpoints: `REVIEW_EVIDENCE_DECISIONS` after `EVIDENCE_FUSION`,
+`REVIEW_CANONICAL_IDENTITY` after canonical hypotheses and required ER output,
+`REVIEW_ANALYTICAL_PLAN` after `ANALYTICAL_PLANNING`, and
+`REVIEW_MATERIALIZATION_PLAN` after `COMPILATION`. Each checkpoint is
+policy-conditional, binds its `ReviewDecision` to the exact artifact ID/content
+hash/schema-model version and applicability fingerprint, pauses required
+unresolved work in `NEEDS_REVIEW`, and invalidates incompatible replay while
+retaining history. Rejected/deferred review cannot satisfy a guard, and failed
+validation cannot be manually promoted to success.
+
+The machine-readable stage graph now contains `19` runtime stages and the
+review checkpoint specification contains `4` checkpoints. The validator now
+performs topological subject < checkpoint < guarded-stage checks, artifact
+producer checks, ER/analytical/materialization guard checks, replay and
+invalidation checks, required-review state checks and `12/12` review negative
+tests. Existing negative suites remain preserved. G2 remains `PENDING` and
+Step 05 remains untouched.

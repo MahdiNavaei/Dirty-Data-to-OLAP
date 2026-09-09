@@ -48,5 +48,10 @@ invalidation_triggers:
   - accepted_semantic_mapping_change
   - entity_resolution_policy_change
   - fact_grain_decision_change
+  - review_subject_content_hash_change
+  - review_subject_schema_or_model_version_change
+  - review_policy_or_domain_scope_change
+  - generated_sql_hash_change
   - validation_failure
 supersession_rule: newer compatible COMPLETE artifact replaces an older artifact without deleting history
+review_decision_rule: a ReviewDecision is retained as history but cannot satisfy a checkpoint after an incompatible subject or applicability fingerprint change

@@ -34,3 +34,14 @@ Cancellation is recorded in the Control Store and honored at safe checkpoints. C
 ## Resume
 
 NEEDS_REVIEW resumes after a compatible decision. BLOCKED resumes after a prerequisite/capability resolution. FAILED resumes only through a new attempt. Unrelated valid upstream artifacts are reused through cache/invalidation rules; earlier failure evidence is retained.
+
+## Review checkpoint behavior
+
+Each runtime review checkpoint is stage-scoped and consumes only artifacts
+already published by its subject stage. A required unresolved checkpoint keeps
+the guarded stage and run in `NEEDS_REVIEW`; it is not an engine failure. An
+accepted decision must match the subject artifact ID, content hash,
+schema/model version, source/schema fingerprints, policy/domain scope and
+semantic subject ID. A rejected or deferred decision cannot satisfy a guard.
+When any of those compatibility inputs changes, the old decision is retained
+for audit but invalidated for replay and the affected descendants are rerun.

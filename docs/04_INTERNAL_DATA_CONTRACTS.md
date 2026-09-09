@@ -522,7 +522,75 @@ Avoid pickle for persisted cross-version artifacts.
 
 ---
 
-## 16. Critical review applied before approval
+## 16. Review decision contract
+
+`ReviewDecision` is a project-owned decision envelope, not a generic approval
+flag and not a permanent approval of a concept. It is created by the reusable
+Review / Policy Service at a stage-scoped checkpoint only after the subject
+artifact exists.
+
+```yaml
+schema_version: 1
+review_decision_id: review_...
+review_type: linkage
+subject_artifact_id: artifact_...
+subject_artifact_type: EntityCluster
+subject_content_hash: sha256:...
+subject_schema_version: 1
+model_version: canonical-model-v1
+run_id: run_...
+subject_stage_id: ENTITY_RESOLUTION
+subject_attempt_id: attempt_...
+decision: ACCEPT   # ACCEPT | REJECT | OVERRIDE | LABEL | LOCK | DEFER | REVIEW_REQUIRED
+actor: human:reviewer-reference
+reason: evidence-backed rationale
+created_at: 2026-09-09T00:00:00Z
+policy_version: review-policy-v1
+domain_assertion_refs: [assertion_...]
+evidence_refs: [artifact_...]
+conflict_refs: [conflict_...]
+source_schema_fingerprints: [source_...]
+subject_semantic_id: entity-family/customer
+applicability_fingerprint:
+  artifact_id: artifact_...
+  content_hash: sha256:...
+  schema_version: 1
+  model_version: canonical-model-v1
+  source_schema_fingerprints: [source_...]
+  policy_version: review-policy-v1
+  domain_assertion_refs: [assertion_...]
+  subject_semantic_id: entity-family/customer
+status: ACTIVE   # ACTIVE | SKIPPED | DEFERRED | REJECTED | INVALIDATED | SUPERSEDED
+supersedes: null
+invalidated_by: null
+```
+
+The decision must include the exact artifact ID, content hash, schema/model
+version, run/stage/attempt identity, relevant source/schema fingerprints,
+policy/domain scope and semantic subject ID. `ACCEPT`, `OVERRIDE`, `LABEL` and
+`LOCK` may satisfy a checkpoint only according to its policy; `REJECT`,
+`DEFER`, `REVIEW_REQUIRED` and `INVALIDATED` never satisfy an acceptance guard.
+Policy-recorded `SKIPPED` is a checkpoint outcome, not an unrecorded absence of
+review.
+
+Replay is valid only when the applicability fingerprint remains semantically
+compatible. A mapping, ER configuration, canonical hypothesis, grain, measure,
+compiled-plan or generated-SQL change invalidates dependent review. The old
+decision is retained and marked `INVALIDATED` or `SUPERSEDED`; it is never
+mutated into a new approval and never replayed because a display name or
+`review_type` happens to match. Incompatible replay leaves the guarded stage
+and run in `NEEDS_REVIEW`.
+
+All four runtime checkpoints use this same envelope and Review / Policy Service:
+evidence/mapping review, canonical identity/linkage review, analytical-plan
+review and materialization approval. Validation review may inspect a failed
+`ValidationReport`, but cannot turn validation failure into PASS or run
+`SUCCEEDED`; a correction requires invalidation, rerunning affected stages and
+a new validation result.
+
+---
+
+## 17. Critical review applied before approval
 
 ### Problem A — A single generic “score” field would hide meaning
 

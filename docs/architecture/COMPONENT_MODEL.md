@@ -14,7 +14,7 @@ The component model is a set of small project-owned services connected through p
 
 - Run Manager owns run creation, coarse run status, configuration pinning and resume requests.
 - Stage Orchestrator resolves the stage DAG, creates attempts, checkpoints cancellation and coordinates StageExecutor.
-- Review / Policy Service records human decisions and checks replay compatibility.
+- Review / Policy Service is the one reusable semantic authority for presenting and recording stage-scoped review requests, binding decisions to exact artifacts, checking replay compatibility, invalidating incompatible decisions and exposing unresolved checkpoint state. `REVIEW_EVIDENCE_DECISIONS`, `REVIEW_CANONICAL_IDENTITY`, `REVIEW_ANALYTICAL_PLAN` and `REVIEW_MATERIALIZATION_PLAN` are runtime checkpoints that delegate to this service; they are not four independent policy engines.
 - Source Registry manages source metadata, inclusion rules and read-only connection-profile references.
 - Source Snapshot Coordinator requests bounded snapshots and stages immutable source references.
 - Stage services own one semantic responsibility: discovery, profiling, dependency discovery, schema matching, quality analysis, optional semantic evidence, evidence fusion, canonical hypotheses, linkage-evidence-only entity resolution, canonical finalization, analytical planning, compilation, materialization and validation/reconciliation.
@@ -45,9 +45,10 @@ Adapters normalize dlt, DataProfiler, Desbordante, Valentine, Splink, optional s
 | Compiler | compiled execution plan | no execution |
 | Materializer | controlled target creation | writes only controlled target |
 | Validation | checks and reconciliation | reads artifacts; records result |
+| Review checkpoints | stage-scoped artifact approval guards | unresolved required review drives `NEEDS_REVIEW` |
 | Control Store | states, indexes, references | never raw large rows |
 | Artifact Store | large and immutable artifacts | atomic publication only |
 
 ## 3. Component interaction
 
-The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts. Canonical Finalization evaluates the conditional ER guard per entity family; it cannot publish a mapping when required linkage evidence is absent or unacceptable.
+The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts. Review checkpoints are explicit DAG boundaries: each is entered only after its subject artifact exists, and each calls the common Review / Policy Service. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`. Canonical Finalization evaluates the conditional ER guard per entity family; it cannot publish a mapping when required linkage evidence or its post-ER identity review is absent or unacceptable.

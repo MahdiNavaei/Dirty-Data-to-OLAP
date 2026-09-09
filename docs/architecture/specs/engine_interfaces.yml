@@ -89,7 +89,7 @@ interfaces:
     forbidden_behavior: [source writes, grain redefinition, measure redefinition]
   - interface_id: ControlStorePort
     purpose: Transactional control metadata and lifecycle repository.
-    input_contracts: [RunMetadata, StageAttempt, ArtifactMetadata, Decision, ValidationStatus]
+    input_contracts: [RunMetadata, StageAttempt, ArtifactMetadata, ReviewDecision, ReviewCheckpointStatus, ValidationStatus]
     output_contracts: [ControlMetadata, StateTransitionResult]
     side_effects: [write_control_metadata]
     idempotency: compare-and-record transitions
@@ -97,7 +97,7 @@ interfaces:
     capability_id: persistence.control_store
     failure_mode: explicit persistence failure
     adapter_component: persistence.control_store
-    forbidden_behavior: [raw large row storage, opaque third-party objects]
+    forbidden_behavior: [raw large row storage, opaque third-party objects, direct entrypoint mutation of review decisions]
   - interface_id: ArtifactStorePort
     purpose: Artifact-plane allocation, publication, verification and invalidation.
     input_contracts: [ArtifactEnvelope, ArtifactPayload]

@@ -48,7 +48,32 @@ Run status is coarse and separate from stage status. Stages own execution detail
 
 An artifact is consumable only when its lifecycle status is COMPLETE, its schema and metadata validate, its content hash exists and it has been atomically registered. A materialized DuckDB file is evidence of materialization, not by itself a validated product.
 
-## 6. Canonicalization boundary
+## 6. Stage-scoped review checkpoints
+
+Review / Policy is one reusable application service. It presents and records
+evidence-backed review requests, persists reviewer actions, binds each decision
+to the exact subject artifact/version/fingerprint, exposes unresolved state,
+retains history and performs compatibility-checked replay. Runtime checkpoints
+are distinct DAG boundaries that delegate to that service:
+
+1. `REVIEW_EVIDENCE_DECISIONS` follows `EVIDENCE_FUSION` and guards canonical
+   hypothesis generation.
+2. `REVIEW_CANONICAL_IDENTITY` follows canonical hypotheses and, for an
+   ER-required family, complete `ENTITY_RESOLUTION` output; it guards
+   `CANONICAL_FINALIZATION`.
+3. `REVIEW_ANALYTICAL_PLAN` follows `ANALYTICAL_PLANNING` and guards
+   `COMPILATION`.
+4. `REVIEW_MATERIALIZATION_PLAN` follows `COMPILATION` and guards
+   `MATERIALIZATION` when policy requires approval.
+
+An unresolved required checkpoint transitions the guarded stage and run to
+`NEEDS_REVIEW`; accepted compatible review permits a new/resumed downstream
+attempt. Rejected or deferred review cannot satisfy the guard. A policy may
+record `SKIPPED` only when the checkpoint specification permits it, without
+inventing numeric confidence thresholds. Entry points call the application
+service and never mutate decision records directly.
+
+## 7. Canonicalization boundary
 
 Canonicalization is explicitly two-phase:
 
@@ -57,9 +82,9 @@ Canonicalization is explicitly two-phase:
 3. Entity Resolution, when selected, produces linkage evidence (`EntityMatchEdge` and `EntityCluster`) only.
 4. Canonical Finalization assigns accepted canonical instances, `SourceRecordCanonicalMap`, survivorship decisions and conflict-bearing values.
 
-An EntityCluster never becomes a canonical ID automatically. When a selected entity family requires ER, finalization requires a complete acceptable linkage artifact and accepted/review-acceptable linkage decision for that family. When ER is not required, its absence or policy-recorded skip is legal. Source records remain traceable.
+An EntityCluster never becomes a canonical ID automatically. When a selected entity family requires ER, finalization requires a complete acceptable linkage artifact and a compatible post-ER `REVIEW_CANONICAL_IDENTITY` linkage decision for that family. When ER is not required, its absence or policy-recorded skip and a policy-permitted identity-review skip are legal. Source records remain traceable.
 
-## 7. Runtime topology
+## 8. Runtime topology
 
 V1 is local-first:
 
@@ -75,6 +100,6 @@ one checkout
 
 The contracts permit later replacement of SQLite with PostgreSQL, filesystem storage with object storage, the local executor with workers and DuckDB with another target. Those replacements are extension options, not V1 implementation claims.
 
-## 8. Non-functional architecture requirements
+## 9. Non-functional architecture requirements
 
 The architecture requires reproducibility, deterministic contract serialization where applicable, restartability, idempotency, explicit failure, read-only source interaction, bounded-memory processing, replaceable adapters, no global mutable state, no raw secrets in artifacts, project-local workspace, traceable provenance, correct cache invalidation, optional-engine isolation, testability and local-first operation. Numeric latency or availability targets are intentionally not invented.
