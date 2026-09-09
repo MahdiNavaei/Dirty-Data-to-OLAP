@@ -1,0 +1,41 @@
+schema_version: 1
+scope: reference_benchmark_only
+provenance: Specialist Step 02 domain definition
+record_level_labels: not_created
+entities:
+  - entity_id: ENT-CUSTOMER
+    canonical_name: Customer
+    definition: A synthetic buyer/person or organization represented across one or more source records.
+    source_records: CRM customers; ERP clients_legacy; old_customers.csv
+    identity_rule: Hidden generator customer ID defines same-real-world-entity membership; source identifiers and contact fields are evidence only.
+    physical_columns: UNRESOLVED — benchmark generator specification required
+  - entity_id: ENT-PRODUCT
+    canonical_name: Product
+    definition: A sellable product concept represented by the ERP product master and possible aliases.
+    source_records: ERP products; product_aliases.csv
+    identity_rule: Hidden generator product ID defines membership; alias text and descriptions do not independently prove identity.
+    physical_columns: UNRESOLVED — benchmark generator specification required
+  - entity_id: ENT-BRANCH
+    canonical_name: Branch
+    definition: A selling location to which an Order may be attributed.
+    source_records: ERP branches; branch_codes.parquet
+    identity_rule: Hidden generator branch ID defines membership; legacy codes are mapping evidence.
+    physical_columns: UNRESOLVED — benchmark generator specification required
+  - entity_id: ENT-ORDER
+    canonical_name: Order
+    definition: A commercial order-header event created in Sales.
+    source_records: Sales orders
+    identity_rule: One source order event has one canonical benchmark Order identity.
+    physical_columns: UNRESOLVED — benchmark generator specification required
+  - entity_id: ENT-ORDER-LINE
+    canonical_name: OrderLine
+    definition: A product-level line event within one Order.
+    source_records: Sales order_items
+    identity_rule: Conceptual identity is Order identity plus line sequence; physical sequence field is generator-defined.
+    physical_columns: UNRESOLVED — benchmark generator specification required
+  - entity_id: ENT-PAYMENT
+    canonical_name: Payment
+    definition: A payment event associated with one Order.
+    source_records: Sales payments
+    identity_rule: One source payment event has one canonical benchmark Payment identity; payment event key is generator-defined.
+    physical_columns: UNRESOLVED — benchmark generator specification required

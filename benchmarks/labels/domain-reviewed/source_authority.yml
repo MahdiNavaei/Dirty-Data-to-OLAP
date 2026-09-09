@@ -1,0 +1,53 @@
+schema_version: 1
+scope: reference_benchmark_only
+provenance: Specialist Step 02 domain definition
+global_source_authority: prohibited
+authority_expectations:
+  - authority_id: AUTH-CRM-CUSTOMER-PROFILE
+    source: CRM
+    scope: current customer display name, email and phone in the reference snapshot
+    authority: CRM when the attribute is present and valid
+    not_authoritative_for: orders, order_items, payments, ERP product/branch master, canonical identity
+    temporal_scope: benchmark snapshot; full history unresolved
+  - authority_id: AUTH-CRM-ADDRESS
+    source: CRM
+    scope: customer address representation
+    authority: CRM customer_addresses
+    not_authoritative_for: customer identity or address history
+    temporal_scope: benchmark snapshot
+  - authority_id: AUTH-CRM-CAMPAIGN
+    source: CRM
+    scope: campaign membership events
+    authority: CRM campaign_memberships
+    not_authoritative_for: order/payment/product/branch events
+    temporal_scope: event snapshot; code meanings unresolved
+  - authority_id: AUTH-SALES-ORDERS
+    source: Sales
+    scope: commercial order and order-line events
+    authority: Sales orders and order_items
+    not_authoritative_for: master customer/product/branch attributes
+    temporal_scope: event snapshot
+  - authority_id: AUTH-SALES-PAYMENTS
+    source: Sales
+    scope: payment events
+    authority: Sales payments
+    not_authoritative_for: revenue recognition, settlement or refund semantics
+    temporal_scope: event snapshot
+  - authority_id: AUTH-ERP-PRODUCT
+    source: ERP
+    scope: product master properties
+    authority: ERP products
+    not_authoritative_for: product alias truth without mapping evidence or order events
+    temporal_scope: benchmark snapshot; history unresolved
+  - authority_id: AUTH-ERP-BRANCH
+    source: ERP
+    scope: branch master properties
+    authority: ERP branches
+    not_authoritative_for: branch aliases without mapping evidence or order events
+    temporal_scope: benchmark snapshot; history unresolved
+  - authority_id: AUTH-LEGACY-MAPPING
+    source: Legacy files
+    scope: historical customer and product/branch alias representations
+    authority: scoped evidence only; no global survivor authority
+    not_authoritative_for: current customer contact, product master, branch master, orders or payments
+    temporal_scope: historical/auxiliary snapshot; validity windows unresolved

@@ -1,0 +1,81 @@
+schema_version: 1
+scope: reference_benchmark_only
+provenance: Specialist Step 02 domain definition
+rules:
+  - rule_id: BR-001
+    status: DEFINED
+    scope: Order.customer
+    statement: Every valid benchmark Order has exactly one Customer.
+    rationale: The reference relationship defines the commercial order owner.
+    exceptions: Corrupted null/orphan references remain failures.
+    verification_path: Relationship labels and order/customer reconciliation.
+  - rule_id: BR-002
+    status: DEFINED
+    scope: OrderLine.order
+    statement: Every valid OrderLine belongs to exactly one Order.
+    rationale: Header and line events have separate meanings and grains.
+    exceptions: Orphan lines remain traceable.
+    verification_path: Parent relationship labels and line-grain checks.
+  - rule_id: BR-003
+    status: DEFINED
+    scope: OrderLine.product
+    statement: Every valid OrderLine concerns exactly one Product.
+    rationale: Product aliases are mapping evidence, not products by themselves.
+    exceptions: Unknown product references remain unresolved or quarantined.
+    verification_path: Product relationship and alias evaluation.
+  - rule_id: BR-004
+    status: DEFINED
+    scope: Order.branch
+    statement: Every valid benchmark Order has one Branch attribution.
+    rationale: Branch attribution is a domain relationship, not a generic code join.
+    exceptions: Missing or aliased values require review/evidence.
+    verification_path: Branch relationship labels and reconciliation.
+  - rule_id: BR-005
+    status: DEFINED
+    scope: Payment.order
+    statement: A Payment belongs to one Order and an Order may have zero or more Payments.
+    rationale: The benchmark does not assume one payment per order.
+    exceptions: Orphans remain referential failures.
+    verification_path: Payment event linkage and accounting.
+  - rule_id: BR-006
+    status: DEFINED_WITH_UNRESOLVED_VALUE_DOMAIN
+    scope: OrderLine.quantity
+    statement: Quantity means ordered units and is additive at valid line-event grain.
+    rationale: It is a line-level count, not a rate or identifier.
+    exceptions: Negative/zero handling requires generator specification or review.
+    verification_path: Measure review and line-grain aggregate checks.
+  - rule_id: BR-007
+    status: DEFINED
+    scope: OrderLine.unit_price
+    statement: Unit price is a per-unit value and is not additive across arbitrary rows.
+    rationale: Summing prices has no defined business meaning.
+    exceptions: Currency/unit metadata is unresolved.
+    verification_path: Non-additivity test and measure review.
+  - rule_id: BR-008
+    status: DEFINED
+    scope: OrderLine.discount_rate
+    statement: Discount rate is a rate and is not additive.
+    rationale: Rates require an explicit denominator or weighted rule.
+    exceptions: Exact bounds and representation are generator-defined later.
+    verification_path: Non-additivity test and measure review.
+  - rule_id: BR-009
+    status: DEFINED_WITH_UNRESOLVED_CODES
+    scope: Source status/category fields
+    statement: Status/category domains are source-specific; same names do not imply same meaning.
+    rationale: The benchmark intentionally contains false-semantic traps.
+    exceptions: A versioned mapping may add known code meanings.
+    verification_path: Semantic mapping and ambiguity tests.
+  - rule_id: BR-010
+    status: DEFINED
+    scope: All source records
+    statement: Multi-source representations may map to one hidden entity without deleting source records.
+    rationale: Linkage and survivorship are distinct from source identity.
+    exceptions: None.
+    verification_path: Lineage and record-accounting checks.
+  - rule_id: BR-011
+    status: DEFINED
+    scope: Quality semantics
+    statement: Exact duplicates, key duplicates, multi-source representations, legitimate repeated events and erroneous repeated events are distinct classes.
+    rationale: Repeated lines/payments may be legitimate events.
+    exceptions: Erroneous-event labels require generator evidence.
+    verification_path: Quality fixtures and event-grain review.

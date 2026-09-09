@@ -1,0 +1,49 @@
+schema_version: 1
+scope: reference_benchmark_only
+provenance: Specialist Step 02 domain definition
+relationships:
+  - relationship_id: REL-ORDER-CUSTOMER
+    source_entity: Order
+    target_entity: Customer
+    business_meaning: A commercial Order is placed by its benchmark Customer.
+    direction: Order.customer -> Customer
+    cardinality: many_to_one
+    optional_in_valid_benchmark: false
+    approximate_inclusion_allowed_after_corruption: true
+    corruption_interpretation: Null, orphan or mismatched references are corrupted/incomplete snapshot evidence, not anonymous-order truth.
+  - relationship_id: REL-ORDERLINE-ORDER
+    source_entity: OrderLine
+    target_entity: Order
+    business_meaning: An OrderLine belongs to one Order header.
+    direction: OrderLine.order -> Order
+    cardinality: many_to_one
+    optional_in_valid_benchmark: false
+    approximate_inclusion_allowed_after_corruption: true
+    corruption_interpretation: An orphan line is a relationship-quality failure and remains traceable.
+  - relationship_id: REL-ORDERLINE-PRODUCT
+    source_entity: OrderLine
+    target_entity: Product
+    business_meaning: An OrderLine concerns one sellable Product.
+    direction: OrderLine.product -> Product
+    cardinality: many_to_one
+    optional_in_valid_benchmark: false
+    approximate_inclusion_allowed_after_corruption: true
+    corruption_interpretation: Alias/code mismatch is mapping evidence; an orphan does not create a new Product.
+  - relationship_id: REL-ORDER-BRANCH
+    source_entity: Order
+    target_entity: Branch
+    business_meaning: An Order is attributed to its selling Branch.
+    direction: Order.branch -> Branch
+    cardinality: many_to_one
+    optional_in_valid_benchmark: false
+    approximate_inclusion_allowed_after_corruption: true
+    corruption_interpretation: Null, orphan or ambiguous branch codes are corruption or unresolved mapping.
+  - relationship_id: REL-PAYMENT-ORDER
+    source_entity: Payment
+    target_entity: Order
+    business_meaning: A Payment is an event associated with one Order.
+    direction: Payment.order -> Order
+    cardinality: many_to_one
+    optional_in_valid_benchmark: false
+    approximate_inclusion_allowed_after_corruption: true
+    corruption_interpretation: An orphan payment is a referential/incomplete-snapshot issue; no settlement or refund meaning is inferred.

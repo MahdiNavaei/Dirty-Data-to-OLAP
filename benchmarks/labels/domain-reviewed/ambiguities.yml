@@ -1,0 +1,74 @@
+schema_version: 1
+scope: reference_benchmark_only
+provenance: Specialist Step 02 domain definition
+ambiguities:
+  - ambiguity_id: AMB-001
+    example: orders.status vs customers.status
+    status: DEFINED_TRAP
+    evidence_needed: source-specific status definitions and code mapping
+    downstream_risk: wrong lifecycle or customer segmentation
+  - ambiguity_id: AMB-002
+    example: customer_id vs client_no
+    status: DEFINED_TRAP
+    evidence_needed: key scope, overlap, linkage labels and domain assertion
+    downstream_risk: false joins or merges
+  - ambiguity_id: AMB-003
+    example: phone vs cell
+    status: DEFINED_TRAP
+    evidence_needed: attribute meaning, normalization and conflict review
+    downstream_risk: false customer merges
+  - ambiguity_id: AMB-004
+    example: product_code vs sku
+    status: DEFINED_TRAP
+    evidence_needed: product-master scope and alias mapping
+    downstream_risk: wrong product aggregates
+  - ambiguity_id: AMB-005
+    example: similar small integer code domains
+    status: DEFINED_TRAP
+    evidence_needed: table context and domain code lists
+    downstream_risk: false relationships
+  - ambiguity_id: AMB-006
+    example: customer duplicates across CRM, ERP and legacy files
+    status: DEFINED_TRAP
+    evidence_needed: hidden benchmark ID or runtime assertion plus linkage evidence
+    downstream_risk: false merge or false split
+  - ambiguity_id: AMB-007
+    example: same-name/different-meaning columns
+    status: DEFINED_TRAP
+    evidence_needed: semantic definition and process context
+    downstream_risk: wrong canonical attribute
+  - ambiguity_id: AMB-008
+    example: different-name/same-meaning columns
+    status: DEFINED_TRAP
+    evidence_needed: value/structure evidence plus domain review
+    downstream_risk: missed mapping
+  - ambiguity_id: AMB-009
+    example: nullable or stale customer contacts
+    status: DEFINED_TRAP
+    evidence_needed: scope, recency and attribute policy
+    downstream_risk: wrong survivor value
+  - ambiguity_id: AMB-010
+    example: product aliases
+    status: DEFINED_TRAP
+    evidence_needed: versioned alias mapping
+    downstream_risk: duplicate or misattributed products
+  - ambiguity_id: AMB-011
+    example: branch-code aliases
+    status: DEFINED_TRAP
+    evidence_needed: branch authority and alias evidence
+    downstream_risk: wrong branch aggregates
+  - ambiguity_id: AMB-012
+    example: order header vs order-line grain
+    status: DEFINED_TRAP
+    evidence_needed: parent/line semantics and line sequence
+    downstream_risk: double counting
+  - ambiguity_id: AMB-013
+    example: multiple payments per order
+    status: DEFINED
+    evidence_needed: payment event identifiers and labels
+    downstream_risk: forced deduplication
+  - ambiguity_id: AMB-014
+    example: amount/currency/unit semantics
+    status: UNRESOLVED
+    evidence_needed: unit/currency metadata and domain assertion
+    downstream_risk: invalid reconciliation
