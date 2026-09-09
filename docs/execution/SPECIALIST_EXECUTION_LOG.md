@@ -832,8 +832,8 @@ handoff_to:
 - role_id: `data_quality_engineer`
 - status: `PASS`
 - starting_head: `96833620b02684570116a7bf2d2c6a278cbcaae1`
-- content_commit_sha: `201c2f6`
-- metadata_commit_sha: recorded in the final handoff commit
+- content_commit_sha: `201c2f65d9830f4d06c9eccb761cb4975e81bad2`
+- metadata_commit_sha: `8f83d38882439b61a4917fd5496b3001e04eec00`
 - inputs_reviewed: current execution state, Step08 review and contracts,
   source/staging contracts, software architecture specifications, engineering
   ownership/test matrices, quality requirements, and Great Expectations source,
