@@ -24,7 +24,7 @@ entrypoints -> application/orchestration -> domain contracts and ports
 - **Persistence:** Control Store repositories and Artifact/Data Plane stores. Control holds metadata, indexes, state, decisions, and artifact references; large or immutable data stays in the Artifact/Data Plane.
 - **Runtime and entrypoints:** StageExecutor, capability registry, CLI/API, and composition root.
 
-The authoritative component list and dependency graph are in [components.yml](architecture/specs/components.yml) and [COMPONENT_MODEL.md](architecture/COMPONENT_MODEL.md).
+The authoritative component list and dependency graph are in [components.yml](/docs/architecture/specs/components.yml) and [COMPONENT_MODEL.md](/docs/architecture/COMPONENT_MODEL.md).
 
 ## Runtime stage DAG
 
@@ -64,19 +64,19 @@ New source, profiler, dependency, matching, semantic, entity-resolution, materia
 
 ## Authoritative artifacts
 
-- [Software architecture contract](architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md)
-- [Component model](architecture/COMPONENT_MODEL.md)
-- [Dependency rules](architecture/DEPENDENCY_RULES.md)
-- [Engine interfaces](architecture/ENGINE_INTERFACES.md)
-- [Run and stage lifecycle](architecture/RUN_AND_STAGE_LIFECYCLE.md)
-- [Artifact and cache lifecycle](architecture/ARTIFACT_AND_CACHE_LIFECYCLE.md)
-- [Persistence boundaries](architecture/PERSISTENCE_BOUNDARIES.md)
-- [Failure, retry, and idempotency](architecture/FAILURE_RETRY_IDEMPOTENCY.md)
-- [Runtime topology](architecture/RUNTIME_TOPOLOGY.md)
-- [Extension points](architecture/EXTENSION_POINTS.md)
-- [Machine-readable specifications](architecture/specs/components.yml)
-- [Architecture decisions](adr/ADR-0001_PROJECT_OWNED_CONTRACTS.md)
-- [Two-phase canonicalization ADR](adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md)
+- [Software architecture contract](/docs/architecture/SOFTWARE_ARCHITECTURE_CONTRACT.md)
+- [Component model](/docs/architecture/COMPONENT_MODEL.md)
+- [Dependency rules](/docs/architecture/DEPENDENCY_RULES.md)
+- [Engine interfaces](/docs/architecture/ENGINE_INTERFACES.md)
+- [Run and stage lifecycle](/docs/architecture/RUN_AND_STAGE_LIFECYCLE.md)
+- [Artifact and cache lifecycle](/docs/architecture/ARTIFACT_AND_CACHE_LIFECYCLE.md)
+- [Persistence boundaries](/docs/architecture/PERSISTENCE_BOUNDARIES.md)
+- [Failure, retry, and idempotency](/docs/architecture/FAILURE_RETRY_IDEMPOTENCY.md)
+- [Runtime topology](/docs/architecture/RUNTIME_TOPOLOGY.md)
+- [Extension points](/docs/architecture/EXTENSION_POINTS.md)
+- [Machine-readable specifications](/docs/architecture/specs/components.yml)
+- [Architecture decisions](/docs/adr/ADR-0001_PROJECT_OWNED_CONTRACTS.md)
+- [Two-phase canonicalization ADR](/docs/adr/ADR-0006_TWO_PHASE_CANONICALIZATION.md)
 
 ## Deferred implementation
 
