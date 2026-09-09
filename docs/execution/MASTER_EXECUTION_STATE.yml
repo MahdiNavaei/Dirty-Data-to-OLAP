@@ -23,7 +23,7 @@ specialist_execution:
   last_completed_step: 4
   last_completed_role: "solution_architect"
   last_completed_specialist: "Step 04 — Software / Solution Architect"
-  last_completed_content_commit: "fe921fdc62d3ea9fd2848f913985fe1a3b67a150"
+  last_completed_content_commit: "fe1bf4f276c70f68b057c0bce0660e346f6dbbea"
   next_step: "Step 05 — Technical Lead / Engineering Lead"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
@@ -48,7 +48,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "fe921fdc62d3ea9fd2848f913985fe1a3b67a150"
+  last_verified_commit: "fe1bf4f276c70f68b057c0bce0660e346f6dbbea"
   commit_recording_note: "This SHA identifies the final Step 04 content commit; the follow-up commit records execution-state metadata and validator completion."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
