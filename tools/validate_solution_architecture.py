@@ -726,7 +726,13 @@ def check_state() -> None:
     state = load_yaml(STATE)
     execution = state.get("specialist_execution", {})
     gates = state.get("gates", {})
-    if execution.get("current_step") == 5:
+    if execution.get("current_step") == 7:
+        require(execution.get("last_completed_step") == 6, "post-Step 06 state must record completed Step 06")
+        require(execution.get("last_completed_role") == "database_engineer", "post-Step 06 role must be database_engineer")
+        require(execution.get("current_role") == "senior_data_engineer", "post-Step 06 state must hand off to Step 07")
+        require("Senior Data Engineer" in str(execution.get("current_specialist")), "current specialist must be Step07")
+        require("Senior Data Engineer" in str(execution.get("next_step")), "next step must be Step07")
+    elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
         require(execution.get("current_role") == "technical_lead", "execution state must be at Step 05")
