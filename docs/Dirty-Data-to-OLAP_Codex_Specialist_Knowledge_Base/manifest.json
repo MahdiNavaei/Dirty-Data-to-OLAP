@@ -13,13 +13,13 @@
     },
     {
       "path": "02_GLOBAL_CODEX_EXECUTION_PROTOCOL.md",
-      "bytes": 3513,
-      "sha256": "fdfce22fc9a3b5de891ea066758147414a5ea655b734b19c33abc6fde074041c"
+      "bytes": 3973,
+      "sha256": "4be0a69de66a987b66d5d49f8bf79ee7461c2357a5c680164f32300b19669be7"
     },
     {
       "path": "03_SHARED_PROJECT_INVARIANTS.md",
-      "bytes": 2357,
-      "sha256": "c0c9d54f8b43c5bd4ad23188e7986eb19e56c0285a2c6fb3f26ca18d7c58ecc2"
+      "bytes": 2643,
+      "sha256": "123ecea8f9a85a046114e72daf4bc9336f98a2ef808251e2b04842fda7d3ae55"
     },
     {
       "path": "04_SPECIALIST_ACTIVATION_TEMPLATE.md",
@@ -43,8 +43,8 @@
     },
     {
       "path": "base_reports/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md",
-      "bytes": 14815,
-      "sha256": "da828677746c543bfc6c70a6243ee965911ade6d59a6fd35fdef057b939af372"
+      "bytes": 15237,
+      "sha256": "f6db9b6cb5b39fefa2459ec9651059423bc018e55c8715612026cc0fe7b5bf86"
     },
     {
       "path": "base_reports/03_SYSTEM_ARCHITECTURE.md",

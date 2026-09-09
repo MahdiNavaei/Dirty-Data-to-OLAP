@@ -8,6 +8,7 @@ priority: highest
 
 These invariants are cross-role release blockers unless deliberately changed by an ADR and updated base reports.
 
+0. **License-aware OSS reuse.** Direct reuse is permitted only when the upstream license allows the intended use and obligations are satisfied; otherwise implementation is independent. Research clones are disposable, live only under `research/oss/`, and are never runtime dependencies.
 1. **Tabular V1 only.** SQL databases, CSV, Excel and Parquet are the intended source family.
 2. **Evidence-first.** External tools emit evidence; project contracts define meaning.
 3. **Stable IDs and provenance.** Source/table/column/record/entity/candidate/run identifiers must survive handoffs.

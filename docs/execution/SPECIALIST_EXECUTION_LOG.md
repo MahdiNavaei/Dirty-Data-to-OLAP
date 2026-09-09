@@ -55,6 +55,26 @@ This log records the 41 specialist passes in the authoritative sequence. Bootstr
 - blocking_issues: `none known`
 - handoff_to: `Step 01 — Product Manager / Technical Product Owner`
 
+## Bootstrap policy reconciliation (post-push correction; not Specialist Step 01)
+
+- execution_step: `bootstrap_policy_correction`
+- role_id: `repository_bootstrap`
+- specialist_file: `none`
+- status: `IN_PROGRESS`
+- reason: `Independent repository review found contradictory OSS license and research-clone policy.`
+- authoritative_policy_corrected: `License-aware reuse; research clones only under research/oss; research clones never runtime dependencies.`
+- files_affected:
+  - `docs/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/base_reports/02_OPEN_SOURCE_REUSE_AND_CLONE_PLAN.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/02_GLOBAL_CODEX_EXECUTION_PROTOCOL.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/03_SHARED_PROJECT_INVARIANTS.md`
+  - `docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/manifest.json`
+  - `docs/execution/SPECIALIST_EXECUTION_LOG.md`
+  - `docs/execution/BOOTSTRAP_BASELINE.md`
+- validation: `pending final policy-reconciliation validation`
+- commit_sha_strategy: `Correction commit followed by a metadata commit recording the verified correction SHA without a self-referential SHA.`
+- handoff_to: `Step 01 — Product Manager / Technical Product Owner`
+
 ## Future specialist entries
 
 Each entry must record:

@@ -22,7 +22,7 @@ Dirty Data to OLAP/
 ├── tests/
 ├── docs/
 ├── benchmark/
-├── vendor-research/
+├── research/oss/
 │   ├── dlt/
 │   ├── DataProfiler/
 │   ├── desbordante-core/
@@ -32,7 +32,7 @@ Dirty Data to OLAP/
 └── pyproject.toml
 ```
 
-`vendor-research/` is for reading, testing and comparing upstream implementations. It is **not** imported directly by production code.
+`research/oss/` is for reading, testing and comparing upstream implementations. It is disposable reference material and is **not** imported directly by production code or required at runtime.
 
 Production integration should use normal package dependencies, a subprocess/sidecar where appropriate, or an adapter around an installed package.
 
@@ -51,33 +51,33 @@ The following commits are the exact upstream snapshots reviewed for the initial 
 | Splink | https://github.com/moj-analytical-services/splink | `master` | `ca89ee92d5472b5e5de71cff3001193e04faf0e7` | probabilistic entity resolution |
 | star-schema-generator | https://github.com/Ali-datasmith/star-schema-generator | `main` | `8bdc51846e669874400d2a532ca2849287fbac24` | reference only for output contracts/modeling patterns |
 
-Licenses are recorded for completeness but are **not a product constraint for this non-commercial portfolio project**, per project decision.
+Licenses are binding constraints on direct code reuse, including for this non-commercial portfolio project. Inspect the exact license and revision before reuse. Reuse useful upstream implementation only when the license permits the intended use and all attribution/redistribution obligations are satisfied. When direct reuse is not permitted or appropriate, study the upstream engineering deeply and implement the required behavior independently for Dirty Data to OLAP. Record the decision and provenance in the project reuse ledger.
 
 ---
 
 ## 4. Clone commands for reproducible research
 
 ```bash
-git clone https://github.com/dlt-hub/dlt vendor-research/dlt
-git -C vendor-research/dlt checkout a1c530114cc347496d1f00f38891475a047b6d05
+git clone https://github.com/dlt-hub/dlt research/oss/dlt
+git -C research/oss/dlt checkout a1c530114cc347496d1f00f38891475a047b6d05
 
-git clone https://github.com/capitalone/DataProfiler vendor-research/DataProfiler
-git -C vendor-research/DataProfiler checkout 4b5ab37bb28a2104d0898d21a8c9681b5c5deed1
+git clone https://github.com/capitalone/DataProfiler research/oss/DataProfiler
+git -C research/oss/DataProfiler checkout 4b5ab37bb28a2104d0898d21a8c9681b5c5deed1
 
-git clone https://github.com/Desbordante/desbordante-core vendor-research/desbordante-core
-git -C vendor-research/desbordante-core checkout b211961f3f272ed8815ef1ffbda90573b11e1116
+git clone https://github.com/Desbordante/desbordante-core research/oss/desbordante-core
+git -C research/oss/desbordante-core checkout b211961f3f272ed8815ef1ffbda90573b11e1116
 
-git clone https://github.com/delftdata/valentine vendor-research/valentine
-git -C vendor-research/valentine checkout 5d5163f04da304985bd51a476ccf7653de3979c3
+git clone https://github.com/delftdata/valentine research/oss/valentine
+git -C research/oss/valentine checkout 5d5163f04da304985bd51a476ccf7653de3979c3
 
-git clone https://github.com/moj-analytical-services/splink vendor-research/splink
-git -C vendor-research/splink checkout ca89ee92d5472b5e5de71cff3001193e04faf0e7
+git clone https://github.com/moj-analytical-services/splink research/oss/splink
+git -C research/oss/splink checkout ca89ee92d5472b5e5de71cff3001193e04faf0e7
 
-git clone https://github.com/Ali-datasmith/star-schema-generator vendor-research/star-schema-generator
-git -C vendor-research/star-schema-generator checkout 8bdc51846e669874400d2a532ca2849287fbac24
+git clone https://github.com/Ali-datasmith/star-schema-generator research/oss/star-schema-generator
+git -C research/oss/star-schema-generator checkout 8bdc51846e669874400d2a532ca2849287fbac24
 ```
 
-These clones are for source review and integration tests. The application itself should not depend on Git submodules unless there is a concrete need.
+These clones are for source review and integration tests. The application itself must not depend on the local research clones or Git submodules containing them.
 
 ---
 

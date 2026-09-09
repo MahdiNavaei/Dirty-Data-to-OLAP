@@ -31,6 +31,8 @@ Existing open-source engines are deliberate building blocks:
 
 Use them behind project adapters where they genuinely solve the problem. Do not copy their whole architecture or trust their output as project truth.
 
+License-aware reuse is mandatory: inspect the upstream implementation, exact revision and license before rebuilding mature functionality. Reuse code directly only when the license permits the intended use and obligations are satisfied; otherwise study the approach and implement independently. Research clones belong only under `research/oss/`, must never be required at runtime, and third-party native objects still cannot become internal project contracts.
+
 ## 3. Internal contracts are the integration boundary
 
 No cross-stage API should depend on a third-party native object. Convert external outputs into versioned internal contracts containing stable IDs, provenance, scope and evidence semantics.
