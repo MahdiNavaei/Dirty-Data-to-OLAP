@@ -67,6 +67,17 @@ class ObservationMode(str, Enum):
     BOUNDED = "bounded"
 
 
+class MaxRowsScope(str, Enum):
+    SOURCE_WIDE = "SOURCE_WIDE"
+    PER_TABLE = "PER_TABLE"
+
+
+class TableObservationStatus(str, Enum):
+    NOT_OBSERVED = "NOT_OBSERVED"
+    PARTIALLY_OBSERVED = "PARTIALLY_OBSERVED"
+    FULLY_OBSERVED = "FULLY_OBSERVED"
+
+
 class RecordLocatorKind(str, Enum):
     PRIMARY_KEY = "PRIMARY_KEY"
     SNAPSHOT_ORDINAL = "SNAPSHOT_ORDINAL"
@@ -91,6 +102,7 @@ class SourceFailureKind(str, Enum):
     PARSE_FAILED = "PARSE_FAILED"
     EXTRACTION_FAILED = "EXTRACTION_FAILED"
     STAGING_FAILED = "STAGING_FAILED"
+    SNAPSHOT_INVALID = "SNAPSHOT_INVALID"
     TIMEOUT = "TIMEOUT"
 
 
@@ -131,6 +143,7 @@ class SelectionScope(_SourceModel):
 class ExtractionPolicy(_SourceModel):
     chunk_size: int = Field(gt=0, le=1_000_000)
     max_rows: int | None = Field(default=None, gt=0, le=100_000_000)
+    max_rows_scope: MaxRowsScope = MaxRowsScope.SOURCE_WIDE
     null_markers: tuple[str, ...] = ()
     preserve_raw_values: bool = True
 
@@ -276,7 +289,14 @@ class ObservationScope(_SourceModel):
     mode: ObservationMode
     chunk_size: int = Field(gt=0)
     max_rows: int | None = Field(default=None, ge=1)
+    max_rows_scope: MaxRowsScope = MaxRowsScope.SOURCE_WIDE
     input_records_observed: int = Field(ge=0)
+
+
+class TableSnapshotObservation(_SourceModel):
+    table_id: str
+    rows_observed: int = Field(ge=0)
+    status: TableObservationStatus
 
 
 class SourceSnapshot(_SourceModel):
@@ -382,6 +402,7 @@ class SourceSnapshotResult(_SourceModel):
     record_references: tuple[SourceRecordReference, ...]
     accounting: RowAccounting
     metrics: ExtractionMetrics
+    table_observations: tuple[TableSnapshotObservation, ...] = ()
 
 
 class SourceFailure(_SourceModel):

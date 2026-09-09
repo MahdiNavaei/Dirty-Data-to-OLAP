@@ -9,6 +9,7 @@ from uuid import uuid4
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+import dirty_data_to_olap.adapters.sources.files as file_adapter_module
 
 from dirty_data_to_olap.adapters.sources.files import FileSourceAdapter
 from dirty_data_to_olap.adapters.sources.sql.dlt_sql import DltSqlSourceAdapter
@@ -27,6 +28,7 @@ from dirty_data_to_olap.domain.contracts.source import (
     ExtractionPolicy,
     file_content_fingerprint,
     RowCountSemantics,
+    TableObservationStatus,
 )
 
 
@@ -123,7 +125,7 @@ def test_sqlite_dlt_discovery_extraction_and_staging(step07_workspace: Path) -> 
     )
     assert result.accounting.input_records_observed == 11
     assert result.accounting.successfully_staged_records == 11
-    assert result.snapshot.consistency.value == "TRANSACTION_SCOPED"
+    assert result.snapshot.consistency.value == "BEST_EFFORT"
     assert len(result.batches) >= 5
     assert all(batch.publication_state is PublicationState.COMPLETE for batch in result.batches)
     assert all((ROOT / batch.artifact_location).is_file() for batch in result.batches)
@@ -161,6 +163,59 @@ def test_sqlite_dlt_discovery_extraction_and_staging(step07_workspace: Path) -> 
     serialized = json.dumps(manifest_json, ensure_ascii=False)
     print("INSPECT_SECRET_SCAN", "password" not in serialized.lower() and "token" not in serialized.lower())
     print("INSPECT_PARTIAL_FILES", [str(path) for path in run_root.rglob("*.partial")])
+
+
+def test_sql_max_rows_is_source_wide_and_unobserved_tables_are_explicit(step07_workspace: Path) -> None:
+    database_path = step07_workspace / "bounded.sqlite"
+    _make_sqlite(database_path)
+    registry = InMemorySourceRegistry()
+    record = registry.register(_sqlite_record(database_path))
+    adapter = DltSqlSourceAdapter(project_root=ROOT)
+    selection = _selection(chunk_size=2, max_rows=2)
+    catalog = SourceDiscoveryService(registry, {record.adapter_name: adapter}).discover(selection)
+    result = SourceSnapshotService(registry, {record.adapter_name: adapter}).extract(
+        catalog, selection, staging_root=step07_workspace / "workspace" / "runs" / "bounded" / "staging"
+    )
+    assert result.accounting.input_records_observed == 2
+    assert result.snapshot.observation_scope.max_rows_scope.value == "SOURCE_WIDE"
+    observations = {item.table_id: item for item in result.table_observations}
+    assert observations[catalog.tables[0].table_id].status is TableObservationStatus.PARTIALLY_OBSERVED
+    assert all(item.status is TableObservationStatus.NOT_OBSERVED for item in result.table_observations[1:])
+
+
+def test_file_snapshot_rejects_change_between_discovery_and_extraction(step07_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = step07_workspace / "changed-before.csv"
+    path.write_text("id\n1\n", encoding="utf-8")
+    registry = InMemorySourceRegistry()
+    record = registry.register(_file_record(path, SourceType.CSV))
+    adapter = FileSourceAdapter(SourceType.CSV, project_root=ROOT)
+    selection = _selection()
+    catalog = SourceDiscoveryService(registry, {record.adapter_name: adapter}).discover(selection)
+    monkeypatch.setattr(file_adapter_module, "file_content_fingerprint", lambda _: "sha256:changed")
+    with pytest.raises(SourceIngestionError) as raised:
+        SourceSnapshotService(registry, {record.adapter_name: adapter}).extract(
+            catalog, selection, staging_root=step07_workspace / "workspace" / "runs" / "before" / "staging"
+        )
+    assert raised.value.failure.kind is SourceFailureKind.SNAPSHOT_INVALID
+    assert not list((step07_workspace / "workspace" / "runs" / "before").rglob("*.parquet"))
+
+
+def test_file_snapshot_rejects_change_during_extraction(step07_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = step07_workspace / "changed-after.csv"
+    path.write_text("id\n1\n2\n", encoding="utf-8")
+    registry = InMemorySourceRegistry()
+    record = registry.register(_file_record(path, SourceType.CSV))
+    adapter = FileSourceAdapter(SourceType.CSV, project_root=ROOT)
+    selection = _selection()
+    catalog = SourceDiscoveryService(registry, {record.adapter_name: adapter}).discover(selection)
+    fingerprints = iter([catalog.source.source_fingerprint, "sha256:changed"])
+    monkeypatch.setattr(file_adapter_module, "file_content_fingerprint", lambda _: next(fingerprints))
+    with pytest.raises(SourceIngestionError) as raised:
+        SourceSnapshotService(registry, {record.adapter_name: adapter}).extract(
+            catalog, selection, staging_root=step07_workspace / "workspace" / "runs" / "after" / "staging"
+        )
+    assert raised.value.failure.kind is SourceFailureKind.SNAPSHOT_INVALID
+    assert not list((step07_workspace / "workspace" / "runs" / "after").rglob("*.parquet"))
 
 
 def _file_record(path: Path, source_type: SourceType, *, scope: SelectionScope | None = None) -> SourceRegistryRecord:

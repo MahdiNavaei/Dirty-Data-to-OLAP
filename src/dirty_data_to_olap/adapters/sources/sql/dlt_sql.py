@@ -30,6 +30,7 @@ from dirty_data_to_olap.domain.contracts.source import (
     ColumnDescriptor,
     DeclaredConstraint,
     ExtractionMetrics,
+    MaxRowsScope,
     ObservationMode,
     ObservationScope,
     RecordLocatorKind,
@@ -51,6 +52,8 @@ from dirty_data_to_olap.domain.contracts.source import (
     SourceType,
     StabilityScope,
     TableDescriptor,
+    TableObservationStatus,
+    TableSnapshotObservation,
     batch_id_for,
     column_id_for,
     record_ref_for_ordinal,
@@ -338,23 +341,28 @@ class DltSqlSourceAdapter(SourceAdapter):
             raise _failure(SourceFailureKind.INVALID_SELECTION, "extract_sql_source", "SQL connection profile is missing")
         engine = self._engine(profile)
         snapshot_id = snapshot_id_for(catalog.source_id, catalog.source.schema_fingerprint, catalog.source.selection_scope, selection.extraction, execution_context_id)
-        transaction_connection = None
-        transaction = None
-        consistency = SnapshotConsistency.TRANSACTION_SCOPED if profile.database_engine is DatabaseEngine.SQLITE else SnapshotConsistency.BEST_EFFORT
-        snapshot = SourceSnapshot(source_id=catalog.source_id, snapshot_id=snapshot_id, execution_context_id=execution_context_id, schema_fingerprint=catalog.source.schema_fingerprint, source_fingerprint=catalog.source.source_fingerprint, observed_at=utc_now(), selection_scope=catalog.source.selection_scope, observation_scope=ObservationScope(mode=ObservationMode.BOUNDED if selection.extraction.max_rows is not None else ObservationMode.FULL, chunk_size=selection.extraction.chunk_size, max_rows=selection.extraction.max_rows, input_records_observed=0), extraction_policy=selection.extraction, consistency=consistency, adapter_reference=catalog.source.adapter_reference)
+        # dlt receives the engine, not the specific connection used by a
+        # separate transaction.  The extraction is therefore best-effort.
+        consistency = SnapshotConsistency.BEST_EFFORT
+        snapshot = SourceSnapshot(source_id=catalog.source_id, snapshot_id=snapshot_id, execution_context_id=execution_context_id, schema_fingerprint=catalog.source.schema_fingerprint, source_fingerprint=catalog.source.source_fingerprint, observed_at=utc_now(), selection_scope=catalog.source.selection_scope, observation_scope=ObservationScope(mode=ObservationMode.BOUNDED if selection.extraction.max_rows is not None else ObservationMode.FULL, chunk_size=selection.extraction.chunk_size, max_rows=selection.extraction.max_rows, max_rows_scope=selection.extraction.max_rows_scope, input_records_observed=0), extraction_policy=selection.extraction, consistency=consistency, adapter_reference=catalog.source.adapter_reference)
         stager = SourceFaithfulParquetStager(self.project_root, adapter_reference=catalog.source.adapter_reference)
         batches = []
         references = []
+        table_observations = []
         observed = 0
         staged = 0
         try:
-            if profile.database_engine is DatabaseEngine.SQLITE:
-                transaction_connection = engine.connect()
-                transaction = transaction_connection.begin()
             names = [table.physical_name for table in catalog.tables]
             source = self._dlt_database(engine, names, catalog.source.selection_scope, selection.extraction.chunk_size)
             resource_by_name = {str(resource.name): resource for resource in source.resources.values()}
             for table in catalog.tables:
+                if (
+                    selection.extraction.max_rows is not None
+                    and selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE
+                    and observed >= selection.extraction.max_rows
+                ):
+                    table_observations.append(TableSnapshotObservation(table_id=table.table_id, rows_observed=0, status=TableObservationStatus.NOT_OBSERVED))
+                    continue
                 resource = resource_by_name.get(table.physical_name)
                 if resource is None:
                     raise _failure(SourceFailureKind.EXTRACTION_FAILED, "extract_sql_source", "dlt did not return a selected table")
@@ -362,6 +370,7 @@ class DltSqlSourceAdapter(SourceAdapter):
                 pending: list[Mapping[str, Any]] = []
                 batch_index = 0
                 table_ordinal = 0
+                table_exhausted = True
                 for native_batch in resource:
                     if isinstance(native_batch, dict):
                         rows = [native_batch]
@@ -370,7 +379,10 @@ class DltSqlSourceAdapter(SourceAdapter):
                     else:
                         rows = list(native_batch)
                     for native_row in rows:
-                        if selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
+                        at_source_limit = selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE and selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows
+                        at_table_limit = selection.extraction.max_rows_scope is MaxRowsScope.PER_TABLE and selection.extraction.max_rows is not None and table_ordinal >= selection.extraction.max_rows
+                        if at_source_limit or at_table_limit:
+                            table_exhausted = False
                             break
                         row = dict(native_row)
                         pending.append(row)
@@ -383,7 +395,8 @@ class DltSqlSourceAdapter(SourceAdapter):
                             staged += len(pending)
                             pending = []
                             batch_index += 1
-                    if selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
+                    if selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE and selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
+                        table_exhausted = False
                         break
                 if pending:
                     first = table_ordinal - len(pending)
@@ -392,19 +405,22 @@ class DltSqlSourceAdapter(SourceAdapter):
                     references.extend(self._references(catalog, snapshot_id, table, batch, pending, first, table_columns))
                     staged += len(pending)
                 if selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
-                    break
+                    if selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE:
+                        table_exhausted = False
+                table_status = TableObservationStatus.FULLY_OBSERVED if table_exhausted else (TableObservationStatus.PARTIALLY_OBSERVED if table_ordinal else TableObservationStatus.NOT_OBSERVED)
+                table_observations.append(TableSnapshotObservation(table_id=table.table_id, rows_observed=table_ordinal, status=table_status))
+                if selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE and selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
+                    continue
         except SourceIngestionError:
+            stager.discard_batches(batches)
             raise
         except Exception:
+            stager.discard_batches(batches)
             raise _failure(SourceFailureKind.EXTRACTION_FAILED, "extract_sql_source", "dlt SQL extraction failed") from None
         finally:
-            if transaction is not None:
-                transaction.rollback()
-            if transaction_connection is not None:
-                transaction_connection.close()
             engine.dispose()
         accounting = RowAccounting(input_records_observed=observed, successfully_staged_records=staged, explicitly_quarantined_records=0, unresolved_records=0, accounting_complete=True)
-        result = SourceSnapshotResult(snapshot=snapshot.model_copy(update={"observation_scope": snapshot.observation_scope.model_copy(update={"input_records_observed": observed})}), batches=tuple(batches), record_references=tuple(references), accounting=accounting, metrics=ExtractionMetrics(input_records_observed=observed, staged_records=staged, batch_count=len(batches), configured_chunk_size=selection.extraction.chunk_size, bytes_staged=sum((self.project_root / batch.artifact_location).stat().st_size for batch in batches)))
+        result = SourceSnapshotResult(snapshot=snapshot.model_copy(update={"observation_scope": snapshot.observation_scope.model_copy(update={"input_records_observed": observed})}), batches=tuple(batches), record_references=tuple(references), accounting=accounting, metrics=ExtractionMetrics(input_records_observed=observed, staged_records=staged, batch_count=len(batches), configured_chunk_size=selection.extraction.chunk_size, bytes_staged=sum((self.project_root / batch.artifact_location).stat().st_size for batch in batches)), table_observations=tuple(table_observations))
         stager.write_catalog(catalog, run_root=staging_root.parent)
         stager.write_manifest(result, run_root=staging_root.parent)
         return result

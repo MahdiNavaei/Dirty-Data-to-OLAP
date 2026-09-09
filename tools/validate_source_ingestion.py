@@ -42,8 +42,8 @@ def main() -> int:
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     specialist = state["specialist_execution"]
     gates = state["gates"]
-    if not ((specialist["current_step"] == 7 and specialist["last_completed_step"] == 6) or (specialist["current_step"] == 8 and specialist["last_completed_step"] == 7)):
-        fail(errors, "execution state is not a valid Step07 implementation or Step08 handoff state")
+    if not ((specialist["current_step"] == 7 and specialist["last_completed_step"] == 6) or (specialist["current_step"] == 8 and specialist["last_completed_step"] == 7) or (specialist["current_step"] == 9 and specialist["last_completed_step"] == 8)):
+        fail(errors, "execution state is not a valid Step07 implementation, Step08 handoff, or post-Step08 state")
     if gates.get("G3_SOURCE_SAFETY") != "PENDING":
         fail(errors, "formal G3 Source Safety must remain PENDING")
     if not (ROOT / "research" / "oss" / "dlt").exists():

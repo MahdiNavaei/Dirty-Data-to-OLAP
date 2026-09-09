@@ -20,6 +20,7 @@ from dirty_data_to_olap.domain.contracts.source import (
     ColumnDescriptor,
     DeclaredConstraint,
     ExtractionMetrics,
+    MaxRowsScope,
     ObservationMode,
     ObservationScope,
     RecordLocatorKind,
@@ -41,6 +42,8 @@ from dirty_data_to_olap.domain.contracts.source import (
     SourceType,
     StabilityScope,
     TableDescriptor,
+    TableObservationStatus,
+    TableSnapshotObservation,
     column_id_for,
     file_content_fingerprint,
     normalized_file_locator,
@@ -431,6 +434,7 @@ class FileSourceAdapter(SourceAdapter):
                 mode=ObservationMode.BOUNDED if selection.extraction.max_rows is not None else ObservationMode.FULL,
                 chunk_size=selection.extraction.chunk_size,
                 max_rows=selection.extraction.max_rows,
+                max_rows_scope=selection.extraction.max_rows_scope,
                 input_records_observed=0,
             ),
             extraction_policy=selection.extraction,
@@ -442,19 +446,30 @@ class FileSourceAdapter(SourceAdapter):
         rows_iter, schema = self._rows(path, table, columns, extraction_selection)
         batches = []
         references = []
+        table_observations = []
         observed = 0
         staged = 0
         pending: list[Mapping[str, Any]] = []
         pending_first = 0
         batch_index = 0
         try:
+            expected_fingerprint = catalog.source.source_fingerprint
+            if expected_fingerprint is None:
+                raise _failure(SourceFailureKind.SNAPSHOT_INVALID, "verify_file_before_extraction", "file snapshot has no discovery fingerprint")
+            before_fingerprint = file_content_fingerprint(path)
+            if before_fingerprint != expected_fingerprint:
+                raise _failure(SourceFailureKind.SNAPSHOT_INVALID, "verify_file_before_extraction", "file content changed after discovery")
+            table_rows_observed = 0
+            table_exhausted = True
             for ordinal, row in rows_iter:
                 if selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
+                    table_exhausted = False
                     break
                 if not pending:
                     pending_first = ordinal
                 pending.append(row)
                 observed += 1
+                table_rows_observed += 1
                 if len(pending) >= selection.extraction.chunk_size:
                     batch = stager.stage_rows(
                         source_id=catalog.source_id, snapshot_id=snapshot_id, table_id=table.table_id,
@@ -475,7 +490,18 @@ class FileSourceAdapter(SourceAdapter):
                 batches.append(batch)
                 references.extend(_record_references(source_id=catalog.source_id, snapshot_id=snapshot_id, table_id=table.table_id, batch_id=batch.batch_id, rows=pending, first_ordinal=pending_first, columns=columns))
                 staged += len(pending)
+            if table_exhausted:
+                table_status = TableObservationStatus.FULLY_OBSERVED
+            elif table_rows_observed:
+                table_status = TableObservationStatus.PARTIALLY_OBSERVED
+            else:
+                table_status = TableObservationStatus.NOT_OBSERVED
+            table_observations.append(TableSnapshotObservation(table_id=table.table_id, rows_observed=table_rows_observed, status=table_status))
+            after_fingerprint = file_content_fingerprint(path)
+            if after_fingerprint != before_fingerprint:
+                raise _failure(SourceFailureKind.SNAPSHOT_INVALID, "verify_file_after_extraction", "file content changed during extraction")
         except SourceIngestionError:
+            stager.discard_batches(batches)
             raise
         accounting = RowAccounting(
             input_records_observed=observed,
@@ -490,6 +516,7 @@ class FileSourceAdapter(SourceAdapter):
             record_references=tuple(references),
             accounting=accounting,
             metrics=ExtractionMetrics(input_records_observed=observed, staged_records=staged, batch_count=len(batches), configured_chunk_size=selection.extraction.chunk_size, bytes_staged=sum(Path(self.project_root / batch.artifact_location).stat().st_size for batch in batches)),
+            table_observations=tuple(table_observations),
         )
         stager.write_catalog(catalog, run_root=staging_root.parent)
         stager.write_manifest(result, run_root=staging_root.parent)

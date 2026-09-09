@@ -98,11 +98,24 @@ Environment: Python `3.10.11`, Pydantic `2.12.5`, pytest `8.4.2`, dlt
 git diff --check -> PASS
 ```
 
+## Post-Step08 upstream hardening note
+
+The original Step07 receipt recorded `TRANSACTION_SCOPED` based on the
+pre-review implementation. Step08 re-audited the connection path and found
+that dlt received the engine, not the separately opened transaction
+connection. The current code and regression test therefore report
+`BEST_EFFORT`; the historical claim above is retained as audit history.
+Step08 also added F0/F1/F2 file fingerprint checks, explicit
+`SNAPSHOT_INVALID` failures, failed-attempt cleanup, source-wide `max_rows`
+semantics and per-table `NOT_OBSERVED`/`PARTIALLY_OBSERVED`/
+`FULLY_OBSERVED` observations.
+
 ## Self-review and limitations
 
 The focused rerun was performed after changing the tested SQLite consistency
-claim from best-effort to transaction-scoped and after fixing fixture-handle
-cleanup. Full regression and all validators passed afterward. The source
+claim from transaction-scoped to best-effort, adding file stability checks and
+fixing fixture-handle cleanup. Full regression and all validators passed
+afterward. The source
 adapter contract, serialization, secret/path safety, read-only, malformed-row,
 atomicity, projection, chunking and restart negative tests remain active.
 

@@ -23,6 +23,22 @@
 
 ## Other libraries
 
+## Capital One DataProfiler
+
+- Repository: https://github.com/capitalone/DataProfiler
+- Reviewed revision: `4b5ab37bb28a2104d0898d21a8c9681b5c5deed1`.
+- License: Apache License 2.0, verified in `research/oss/DataProfiler/LICENSE`.
+- Installed/tested version: `DataProfiler==0.13.4` from the official package.
+- Source inspected: profile builder, profiler options, column compilers,
+  numerical/categorical/datetime/order profiles, JSON encoder/decoder and
+  related profiler tests at the reviewed revision.
+- Decision: use the official base package through `DataProfilerAdapter`; do not
+  install ML/report extras and do not copy source code.
+- Boundary: native profiler, pandas, NumPy and PyArrow objects remain inside
+  the concrete adapter. Project contracts own null semantics, sampling,
+  completeness, privacy-safe patterns and artifact persistence.
+- Research clone deletion: required after review and before final regression.
+
 | Library | Tested version | License | Decision |
 |---|---:|---|---|
 | SQLAlchemy | 2.0.46 | MIT | Runtime SQL engine boundary used only by dlt adapter |

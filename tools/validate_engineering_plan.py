@@ -262,13 +262,14 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
-            "post-gate current specialist is Step06, Step07, or the Step08 handoff",
+            "post-gate current specialist is Step06, Step07, Step08, or the Step09 handoff",
             (execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
             or (execution.get("current_step") == 7 and execution.get("current_role") == "senior_data_engineer")
-            or (execution.get("current_step") == 8 and execution.get("current_role") == "data_profiling_specialist"),
+            or (execution.get("current_step") == 8 and execution.get("current_role") == "data_profiling_specialist")
+            or (execution.get("current_step") == 9 and execution.get("current_role") == "data_quality_engineer"),
         )
 
     # 4-5: required artifacts parse and carry provenance.

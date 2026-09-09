@@ -138,3 +138,12 @@ class SourceFaithfulParquetStager:
     def write_manifest(self, result: Any, *, run_root: Path) -> None:
         _safe_json_write(run_root / "source_manifests" / "extraction.json", result.model_dump(mode="json"))
 
+    def discard_batches(self, batches: Sequence[BatchReference]) -> None:
+        """Remove only complete artifacts from a failed snapshot attempt."""
+        for batch in batches:
+            path = (self.project_root / batch.artifact_location).resolve()
+            try:
+                path.relative_to(self.project_root)
+            except ValueError:
+                continue
+            path.unlink(missing_ok=True)
