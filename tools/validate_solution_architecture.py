@@ -259,7 +259,7 @@ def check_interfaces(data: dict[str, Any], components: dict[str, dict[str, Any]]
     expected = {
         "SourceAdapter", "ProfilingAdapter", "QualityStagedReader", "DependencyDiscoveryAdapter",
         "SchemaMatchingAdapter", "EntityResolutionAdapter",
-        "OptionalSemanticEvidenceAdapter", "MaterializerPort", "ControlStorePort",
+        "OptionalSemanticEvidenceAdapter", "LearnedEvidenceAdapter", "MaterializerPort", "ControlStorePort",
         "ArtifactStorePort", "StageExecutorPort", "CapabilityRegistryPort",
     }
     required = {
@@ -779,6 +779,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "applied_ml_engineer", "post-Step 14 state must hand off to Step15")
         require("Applied ML" in str(execution.get("current_specialist")), "current specialist must be Step15")
         require("Applied ML" in str(execution.get("next_step")), "next step must be Step15")
+    elif execution.get("current_step") == 16:
+        require(execution.get("last_completed_step") == 15, "post-Step 15 state must record completed Step 15")
+        require(execution.get("last_completed_role") == "applied_ml_engineer", "post-Step 15 role must be applied_ml_engineer")
+        require(execution.get("current_role") == "llm_semantic_ai_engineer", "post-Step 15 state must hand off to Step16")
+        require("LLM" in str(execution.get("current_specialist")), "current specialist must be Step16")
+        require("LLM" in str(execution.get("next_step")), "next step must be Step16")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")

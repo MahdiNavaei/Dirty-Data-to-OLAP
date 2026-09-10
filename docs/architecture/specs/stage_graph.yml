@@ -83,11 +83,24 @@ stages:
     cacheable: true
     idempotency: pinned prompt/configuration/provider
     review_boundary: semantic hypothesis
+  - stage_id: LEARNED_EVIDENCE
+    required: false
+    conditional: true
+    capability_required_for_v1: false
+    dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING, DEPENDENCY_DISCOVERY]
+    optional_dependencies: [SCHEMA_MATCHING, QUALITY_ANALYSIS]
+    input_artifact_types: [RelationshipCandidate, InclusionDependencyEvidence, SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, ColumnProfile, QualityResult, explicit benchmark labels]
+    output_artifact_types: [MLFeatureVector, MLBaselineEvaluation, MLModelEvidence, LearnedRankingEvidence, MLFeatureContribution, MLRankStabilityObservation, ActiveLearningSuggestion, MLCalibrationExperiment]
+    failure_consequence: SKIPPED or explicit UNAVAILABLE/INSUFFICIENT_DATA/FAILED; deterministic baseline is retained
+    cacheable: true
+    idempotency: pinned feature schema/dataset/split/model configuration
+    review_boundary: candidate ranking evidence and label-query suggestions
+    skip_semantics: SKIPPED when no explicit benchmark labels or optional capability is configured; no acceptance decision is emitted
   - stage_id: EVIDENCE_FUSION
     required: true
     dependencies: [PROFILING, DEPENDENCY_DISCOVERY, QUALITY_ANALYSIS]
-    optional_dependencies: [SCHEMA_MATCHING, OPTIONAL_SEMANTIC_EVIDENCE]
-    input_artifact_types: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal]
+    optional_dependencies: [SCHEMA_MATCHING, OPTIONAL_SEMANTIC_EVIDENCE, LEARNED_EVIDENCE]
+    input_artifact_types: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal, LearnedRankingEvidence]
     output_artifact_types: [RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
     failure_consequence: FAILED; conflicts remain REVIEW_REQUIRED
     cacheable: true

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Any, Mapping
@@ -54,6 +55,23 @@ class EntityResolutionCapabilityStatus(str, Enum):
     NOT_REQUESTED = "NOT_REQUESTED"
 
 
+class ERPriorStrategy(str, Enum):
+    """How Splink's two-random-record prior is supplied."""
+
+    EXPLICIT_BENCHMARK_PRIOR = "EXPLICIT_BENCHMARK_PRIOR"
+    ESTIMATED_FROM_DETERMINISTIC_RULES = "ESTIMATED_FROM_DETERMINISTIC_RULES"
+
+
+class EntityMatchPredictionBand(str, Enum):
+    STRONG_LINK_EVIDENCE = "STRONG_LINK_EVIDENCE"
+    REVIEW_LINK_EVIDENCE = "REVIEW_LINK_EVIDENCE"
+    BELOW_EVIDENCE_THRESHOLD = "BELOW_EVIDENCE_THRESHOLD"
+
+
+class EntityMatchEdgeState(str, Enum):
+    CANDIDATE = "CANDIDATE"
+
+
 class EntityResolutionNormalizationRule(_SourceModel):
     rule_id: str = Field(min_length=1)
     version: str = Field(min_length=1)
@@ -82,20 +100,39 @@ class IdentityFieldSpecification(_SourceModel):
     semantic_role: str = Field(min_length=1)
     normalization_rule_id: str
     nullable: bool = True
+    is_anchor: bool = False
+    anchor_group: str | None = None
 
 
 class ERBlockingRule(_SourceModel):
     rule_id: str = Field(min_length=1)
     version: str = Field(min_length=1)
     field_ids: tuple[str, ...] = Field(min_length=1)
+    # Kept as a compatibility/readback field, but it is never executed as
+    # caller SQL.  The adapter generates the expression from field_ids.
     sql_expression: str = Field(min_length=1)
+    operator: str = "AND"
     purpose: str = "high_recall_bounded_candidate_generation"
     max_pairs: int = Field(default=100_000, ge=1)
 
     @model_validator(mode="after")
     def no_cartesian(self) -> "ERBlockingRule":
-        if "CARTESIAN" in self.sql_expression.upper() or self.sql_expression.strip() in {"1=1", "TRUE"}:
+        if self.operator != "AND":
+            raise ValueError("blocking rules support only structured AND equality terms")
+        expression = self.sql_expression.strip()
+        if "CARTESIAN" in expression.upper() or expression.upper() in {"1=1", "TRUE"}:
             raise ValueError("unbounded Cartesian blocking is forbidden")
+        if any(token in expression for token in (";", "--", "/*", "*/", " OR ", " or ", "SELECT", "select", "(" , ")")):
+            raise ValueError("blocking SQL is restricted to exact equality terms")
+        terms = re.split(r"\s+AND\s+", expression, flags=re.IGNORECASE)
+        fields_in_expression: set[str] = set()
+        for term in terms:
+            match = re.fullmatch(r"l\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*r\.([A-Za-z_][A-Za-z0-9_]*)", term.strip())
+            if match is None or match.group(1) != match.group(2) or match.group(1) not in self.field_ids:
+                raise ValueError("blocking SQL must be generated exact field equality")
+            fields_in_expression.add(match.group(1))
+        if fields_in_expression != set(self.field_ids):
+            raise ValueError("blocking SQL must cover exactly the declared field_ids")
         return self
 
 
@@ -118,6 +155,21 @@ class ERTrainingPolicy(_SourceModel):
     max_em_iterations: int = Field(default=20, ge=1, le=1_000)
     em_blocking_rule_ids: tuple[str, ...] = Field(min_length=1)
     require_provenance: bool = True
+    prior_strategy: ERPriorStrategy = ERPriorStrategy.EXPLICIT_BENCHMARK_PRIOR
+    prior_value: float | None = Field(default=0.01, gt=0, lt=1)
+    prior_estimation_method: str | None = None
+    prior_assumptions: tuple[str, ...] = ("synthetic_benchmark_only", "not_production_validated")
+    prior_provenance: str = "project_policy:explicit_benchmark_prior_v1"
+
+    @model_validator(mode="after")
+    def validate_prior(self) -> "ERTrainingPolicy":
+        if self.prior_strategy is ERPriorStrategy.EXPLICIT_BENCHMARK_PRIOR and self.prior_value is None:
+            raise ValueError("explicit Splink prior requires prior_value")
+        if self.prior_strategy is ERPriorStrategy.ESTIMATED_FROM_DETERMINISTIC_RULES and not self.prior_estimation_method:
+            raise ValueError("estimated Splink prior requires prior_estimation_method")
+        if not self.prior_provenance or not self.prior_assumptions:
+            raise ValueError("Splink prior requires assumptions and provenance")
+        return self
 
 
 class ERThresholdPolicy(_SourceModel):
@@ -142,13 +194,16 @@ class ERClusteringPolicy(_SourceModel):
     reject_placeholder_only_edges: bool = True
     reject_conflicting_anchor_edges: bool = True
     reject_unsafe_bridge_clusters: bool = True
+    cluster_probability_threshold: float | None = Field(default=None, gt=0, le=1)
+    include_review_edges: bool = False
 
 
 class ERExecutionBudget(_SourceModel):
     max_records: int = Field(default=100_000, ge=1)
     max_candidate_pairs: int = Field(default=500_000, ge=1)
     max_all_pairs_diagnostic: int = Field(default=1_000_000, ge=1)
-    max_runtime_seconds: int = Field(default=300, ge=1)
+    max_runtime_seconds: int = Field(default=300, ge=1, description="Observational/cooperative budget; it cannot interrupt an in-process Splink call")
+    runtime_budget_semantics: str = "OBSERVATIONAL_COOPERATIVE_NOT_HARD_TIMEOUT"
     max_cluster_size: int = Field(default=100, ge=2)
 
 
@@ -281,6 +336,18 @@ class EntityResolutionModelEvidence(_SourceModel):
     training_provenance: str
     match_weight_semantics: str = "log_bayes_factor"
     probability_semantics: str = "model_implied_pair_probability_under_linkage_assumptions_not_calibrated_business_confidence"
+    splink_version: str = "4.0.17"
+    backend: str = "duckdb"
+    model_config_hash: str = ""
+    input_spec_fingerprint: str = ""
+    prior_strategy: ERPriorStrategy = ERPriorStrategy.EXPLICIT_BENCHMARK_PRIOR
+    prior_value: float | None = Field(default=None, ge=0, le=1)
+    prior_estimation_method: str | None = None
+    prior_assumptions: tuple[str, ...] = ()
+    comparison_definitions: tuple[str, ...] = ()
+    term_frequency_comparison_ids: tuple[str, ...] = ()
+    training_completeness: str = "COMPLETE"
+    warnings_limitations: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def no_fake_training(self) -> "EntityResolutionModelEvidence":
@@ -299,7 +366,8 @@ class EntityMatchEdge(_SourceModel):
     right_snapshot_id: str
     match_weight: float
     match_probability: float = Field(ge=0, le=1)
-    decision: str
+    model_prediction_band: EntityMatchPredictionBand
+    state: EntityMatchEdgeState = EntityMatchEdgeState.CANDIDATE
     comparison_evidence_refs: tuple[str, ...] = ()
     blocking_rule_ids: tuple[str, ...] = Field(min_length=1)
     model_evidence_ref: str
@@ -310,7 +378,15 @@ class EntityMatchEdge(_SourceModel):
     def linkable_only(self) -> "EntityMatchEdge":
         if not self.left_record_ref or not self.right_record_ref or self.left_record_ref == self.right_record_ref:
             raise ValueError("match edges require two distinct record references")
+        if self.state is not EntityMatchEdgeState.CANDIDATE:
+            raise ValueError("entity-resolution edges are candidate evidence only")
         return self
+
+    @property
+    def decision(self) -> str:
+        """Compatibility view; callers must use model_prediction_band/state."""
+
+        return self.model_prediction_band.value
 
 
 class EntityCluster(_SourceModel):
@@ -435,7 +511,40 @@ class EntityResolutionResult(_SourceModel):
 
 
 def entity_resolution_config_hash(spec: EntityResolutionSpec) -> str:
-    return spec.fingerprint
+    """Return only material linkage-model configuration, never input identity."""
+
+    return stable_digest({
+        "schema": "entity-resolution-model-config-v2",
+        "mode": spec.mode.value,
+        "entity_family": spec.entity_family,
+        "identity_roles": [
+            {"semantic_role": item.semantic_role, "nullable": item.nullable, "is_anchor": item.is_anchor, "anchor_group": item.anchor_group}
+            for item in sorted(spec.identity_fields, key=lambda item: item.field_id)
+        ],
+        "normalization_rules": [item.model_dump(mode="json") for item in sorted(spec.normalization_rules, key=lambda item: item.rule_id)],
+        "blocking_rules": [
+            {"rule_id": item.rule_id, "version": item.version, "field_ids": sorted(item.field_ids), "operator": item.operator, "max_pairs": item.max_pairs}
+            for item in sorted(spec.blocking_rules, key=lambda item: item.rule_id)
+        ],
+        "comparisons": [item.model_dump(mode="json") for item in sorted(spec.comparisons, key=lambda item: item.comparison_id)],
+        "training_policy": spec.training_policy.model_dump(mode="json"),
+        "threshold_policy": spec.threshold_policy.model_dump(mode="json"),
+        "clustering_policy": spec.clustering_policy.model_dump(mode="json"),
+        "engine_backend_policy": "splink==4.0.17|duckdb_backend",
+    })
+
+
+def entity_resolution_input_fingerprint(spec: EntityResolutionSpec) -> str:
+    """Bind the selected source/snapshot/table/input specification."""
+
+    return stable_digest({
+        "spec_id": spec.spec_id,
+        "entity_family": spec.entity_family,
+        "source_ids": spec.source_ids,
+        "snapshot_ids": spec.snapshot_ids,
+        "table_ids_by_source": spec.table_ids_by_source,
+        "identity_bindings": [item.model_dump(mode="json") for item in spec.identity_fields],
+    })
 
 
 def entity_edge_id(left_record_ref: str, right_record_ref: str, model_id: str) -> str:

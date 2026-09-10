@@ -1,10 +1,56 @@
 {
-  "fixture_id": "step14-entity-resolution-cases-v1",
-  "purpose": "bounded candidate and false-merge evaluation labels; labels are not production truth",
+  "fixture_id": "step14-entity-resolution-cases-v2",
+  "purpose": "bounded candidate, cluster and false-merge evaluation over aggregate-safe synthetic identity tokens; labels are not production truth",
+  "records": [
+    {"record_ref": "crm-r1", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_a", "email_token": "e_a", "phone_token": "p_a"}},
+    {"record_ref": "erp-r1", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_a_variant", "email_token": "e_a", "phone_token": "p_a"}},
+    {"record_ref": "crm-r2", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_b", "email_token": "e_b", "phone_token": "p_b"}},
+    {"record_ref": "erp-r2", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_b", "email_token": "e_b", "phone_token": "p_missing"}},
+    {"record_ref": "crm-r3", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_c", "email_token": "e_c", "phone_token": "p_c"}},
+    {"record_ref": "erp-r3", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_c_variant", "email_token": "e_missing", "phone_token": "p_c"}},
+    {"record_ref": "crm-r4", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_common", "email_token": "e_d1", "phone_token": "p_d1"}},
+    {"record_ref": "erp-r4", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_common", "email_token": "e_d2", "phone_token": "p_d2"}},
+    {"record_ref": "crm-r5", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_placeholder_a", "email_token": "e_missing", "phone_token": "p_placeholder"}},
+    {"record_ref": "erp-r5", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_placeholder_b", "email_token": "e_missing", "phone_token": "p_placeholder"}},
+    {"record_ref": "crm-r6", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_household_a", "email_token": "e_missing", "phone_token": "p_household"}},
+    {"record_ref": "erp-r6", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_household_b", "email_token": "e_missing", "phone_token": "p_household"}},
+    {"record_ref": "crm-r7", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_missing", "email_token": "e_missing", "phone_token": "p_missing"}},
+    {"record_ref": "erp-r7", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_missing_variant", "email_token": "e_missing", "phone_token": "p_missing"}},
+    {"record_ref": "crm-r8", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "unicode_fa_a", "email_token": "e_fa", "phone_token": "p_fa"}},
+    {"record_ref": "erp-r8", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "unicode_fa_a_variant", "email_token": "e_fa", "phone_token": "p_fa"}},
+    {"record_ref": "crm-r9", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_same_source", "email_token": "e_same", "phone_token": "p_same"}},
+    {"record_ref": "crm-r10", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_same_source_variant", "email_token": "e_same", "phone_token": "p_same"}},
+    {"record_ref": "crm-r11", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_bridge_a", "email_token": "e_bridge_a", "phone_token": "p_bridge"}},
+    {"record_ref": "erp-r11", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_bridge_b", "email_token": "e_bridge_b", "phone_token": "p_bridge"}},
+    {"record_ref": "crm-r12", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_bridge_c", "email_token": "e_bridge_c", "phone_token": "p_bridge"}},
+    {"record_ref": "crm-r13", "source_id": "crm", "entity_family": "person", "fields": {"name_token": "n_cluster", "email_token": "e_cluster", "phone_token": "p_cluster"}},
+    {"record_ref": "erp-r13", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_cluster_variant", "email_token": "e_cluster", "phone_token": "p_cluster"}},
+    {"record_ref": "erp-r14", "source_id": "erp", "entity_family": "person", "fields": {"name_token": "n_cluster_variant_2", "email_token": "e_cluster", "phone_token": "p_cluster"}}
+  ],
+  "ground_truth_entities": [
+    {"entity_id": "truth_a", "record_refs": ["crm-r1", "erp-r1"]},
+    {"entity_id": "truth_b", "record_refs": ["crm-r2", "erp-r2"]},
+    {"entity_id": "truth_c", "record_refs": ["crm-r3", "erp-r3"]},
+    {"entity_id": "truth_d", "record_refs": ["crm-r7", "erp-r7"]},
+    {"entity_id": "truth_e", "record_refs": ["crm-r8", "erp-r8"]},
+    {"entity_id": "truth_f", "record_refs": ["crm-r9", "crm-r10"]},
+    {"entity_id": "truth_g", "record_refs": ["crm-r11", "erp-r11", "crm-r12"]},
+    {"entity_id": "truth_h", "record_refs": ["crm-r13", "erp-r13", "erp-r14"]}
+  ],
+  "positive_pairs": [
+    ["crm-r1", "erp-r1"], ["crm-r2", "erp-r2"], ["crm-r3", "erp-r3"],
+    ["crm-r7", "erp-r7"], ["crm-r8", "erp-r8"], ["crm-r9", "crm-r10"],
+    ["crm-r11", "erp-r11"], ["crm-r11", "crm-r12"], ["erp-r11", "crm-r12"],
+    ["crm-r13", "erp-r13"], ["crm-r13", "erp-r14"], ["erp-r13", "erp-r14"]
+  ],
+  "negative_pairs": [
+    ["crm-r4", "erp-r4"], ["crm-r5", "erp-r5"], ["crm-r6", "erp-r6"],
+    ["crm-r11", "crm-r13"], ["erp-r11", "erp-r14"]
+  ],
+  "review_pairs": [["crm-r11", "erp-r11"], ["erp-r13", "erp-r14"]],
   "cases": [
     {"case_id": "exact_duplicate", "kind": "positive", "record_refs": ["crm-r1", "erp-r1"]},
-    {"case_id": "cross_source_spelling", "kind": "positive", "record_refs": ["crm-r1", "erp-r1"]},
-    {"case_id": "email_case", "kind": "positive", "record_refs": ["crm-r2", "erp-r2"]},
+    {"case_id": "cross_source_spelling", "kind": "positive", "record_refs": ["crm-r2", "erp-r2"]},
     {"case_id": "phone_explicit_country_policy", "kind": "positive", "record_refs": ["crm-r3", "erp-r3"]},
     {"case_id": "common_name_nonmatch", "kind": "negative", "record_refs": ["crm-r4", "erp-r4"]},
     {"case_id": "placeholder_phone", "kind": "negative", "record_refs": ["crm-r5", "erp-r5"]},
@@ -16,7 +62,8 @@
     {"case_id": "clear_three_record_cluster", "kind": "positive", "record_refs": ["crm-r13", "erp-r13", "erp-r14"]}
   ],
   "limitations": [
-    "fixture labels are benchmark labels, not canonical identity truth",
-    "record references are synthetic and contain no raw identity values"
+    "fixture labels are synthetic benchmark labels, not canonical identity truth",
+    "identity fields are aggregate-safe synthetic tokens rather than raw values",
+    "cluster review and source-specific policy still require human acceptance"
   ]
 }

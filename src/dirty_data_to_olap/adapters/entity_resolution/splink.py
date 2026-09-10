@@ -37,6 +37,9 @@ from dirty_data_to_olap.domain.contracts.entity_resolution import (
     EntityResolutionRunMetrics,
     EntityResolutionSpec,
     EntityResolutionStatus,
+    EntityMatchPredictionBand,
+    entity_resolution_config_hash,
+    entity_resolution_input_fingerprint,
     entity_edge_id,
 )
 from dirty_data_to_olap.domain.contracts.source import AdapterReference, SourceCatalog, SourceSnapshotResult
@@ -86,7 +89,7 @@ class SplinkEntityResolutionAdapter:
             if frame.empty:
                 raise ValueError("no staged records contain the selected identity fields")
             candidate_pairs_by_rule = self._candidate_counts(frame, spec)
-            candidate_pairs = sum(candidate_pairs_by_rule.values())
+            candidate_pairs = len(self._candidate_pair_keys(frame, spec))
             if candidate_pairs > spec.execution_budget.max_candidate_pairs:
                 raise _ERBudget("max_candidate_pairs")
             edges, model, clusters, diagnostics, predicted = self._execute_splink(frame, spec, private_root, started)
@@ -176,7 +179,10 @@ class SplinkEntityResolutionAdapter:
             else:
                 comparisons.append(cl.ExactMatch(column))
         blocking_sql = [self._safe_blocking_sql(rule, field_map) for rule in spec.blocking_rules]
-        settings = SettingsCreator(link_type={EntityResolutionMode.LINK_ONLY: "link_only", EntityResolutionMode.DEDUPE_ONLY: "dedupe_only", EntityResolutionMode.LINK_AND_DEDUPE: "link_and_dedupe"}[spec.mode], comparisons=comparisons, blocking_rules_to_generate_predictions=blocking_sql, probability_two_random_records_match=0.01, max_iterations=spec.training_policy.max_em_iterations, retain_matching_columns=True, retain_intermediate_calculation_columns=True)
+        prior = spec.training_policy.prior_value
+        if prior is None:
+            raise _ERTraining("Splink prior is not available from the declared training policy")
+        settings = SettingsCreator(link_type={EntityResolutionMode.LINK_ONLY: "link_only", EntityResolutionMode.DEDUPE_ONLY: "dedupe_only", EntityResolutionMode.LINK_AND_DEDUPE: "link_and_dedupe"}[spec.mode], comparisons=comparisons, blocking_rules_to_generate_predictions=blocking_sql, probability_two_random_records_match=prior, max_iterations=spec.training_policy.max_em_iterations, retain_matching_columns=True, retain_intermediate_calculation_columns=True)
         linker = Linker(frame.drop(columns=["_record_ref", "_source_id", "_snapshot_id"]), settings, DuckDBAPI(connection=str(db_path)), input_table_aliases="entity_records", set_up_basic_logging=False)
         try:
             linker.training.estimate_u_using_random_sampling(max_pairs=spec.training_policy.max_u_pairs, seed=spec.training_policy.random_seed)
@@ -189,12 +195,37 @@ class SplinkEntityResolutionAdapter:
             raise _ERTraining(f"Splink u/m training failed: {error.__class__.__name__}") from None
         predictions = linker.inference.predict()
         predicted_frame = predictions.as_pandas_dataframe()
-        clusters_frame = linker.clustering.cluster_pairwise_predictions_at_threshold(predictions, spec.threshold_policy.review_probability_threshold).as_pandas_dataframe()
-        model_id = "er-model-" + hashlib.sha256(f"{spec.spec_id}:{spec.fingerprint}:{self.runtime_dependency}".encode()).hexdigest()[:24]
-        model = EntityResolutionModelEvidence(model_id=model_id, training_policy_id=spec.training_policy.policy_id, u_training_method="splink.estimate_u_using_random_sampling", m_training_method="splink.estimate_parameters_using_expectation_maximisation", random_seed=spec.training_policy.random_seed, training_blocking_rule_ids=spec.training_policy.em_blocking_rule_ids, trained=True, training_provenance=f"splink:{self.runtime_dependency};spec:{spec.spec_id};config:{spec.fingerprint}")
+        clustering_threshold = spec.clustering_policy.cluster_probability_threshold or spec.threshold_policy.match_probability_threshold
+        if spec.clustering_policy.include_review_edges:
+            clustering_threshold = min(clustering_threshold, spec.threshold_policy.review_probability_threshold)
+        clusters_frame = linker.clustering.cluster_pairwise_predictions_at_threshold(predictions, clustering_threshold).as_pandas_dataframe()
+        model_config_hash = entity_resolution_config_hash(spec)
+        input_fingerprint = entity_resolution_input_fingerprint(spec)
+        model_id = "er-model-" + hashlib.sha256(f"{model_config_hash}:{self.runtime_dependency}".encode()).hexdigest()[:24]
+        model = EntityResolutionModelEvidence(
+            model_id=model_id,
+            training_policy_id=spec.training_policy.policy_id,
+            u_training_method="splink.estimate_u_using_random_sampling",
+            m_training_method="splink.estimate_parameters_using_expectation_maximisation",
+            random_seed=spec.training_policy.random_seed,
+            training_blocking_rule_ids=spec.training_policy.em_blocking_rule_ids,
+            trained=True,
+            training_provenance=f"splink:{self.runtime_dependency};input:{input_fingerprint};model_config:{model_config_hash}",
+            splink_version=self.runtime_dependency.split("==", 1)[-1],
+            backend="duckdb",
+            model_config_hash=model_config_hash,
+            input_spec_fingerprint=input_fingerprint,
+            prior_strategy=spec.training_policy.prior_strategy,
+            prior_value=spec.training_policy.prior_value,
+            prior_estimation_method=spec.training_policy.prior_estimation_method,
+            prior_assumptions=spec.training_policy.prior_assumptions,
+            comparison_definitions=tuple(f"{item.comparison_id}:{item.method}" for item in spec.comparisons),
+            term_frequency_comparison_ids=tuple(item.comparison_id for item in spec.comparisons if item.term_frequency_adjustment),
+            training_completeness="COMPLETE",
+            warnings_limitations=("explicit prior is benchmark-policy evidence and is not production-validated", "runtime budget is observational/cooperative and cannot interrupt an in-process call"),
+        )
         record_map = {row["unique_id"]: row for row in frame.to_dict(orient="records")}
         edges: list[EntityMatchEdge] = []
-        graph: dict[str, set[str]] = defaultdict(set)
         for row in predicted_frame.to_dict(orient="records"):
             left_id, right_id = row.get("unique_id_l"), row.get("unique_id_r")
             if not left_id or not right_id or left_id not in record_map or right_id not in record_map:
@@ -203,46 +234,51 @@ class SplinkEntityResolutionAdapter:
             evidence = self._independent_evidence(left, right, spec)
             probability = float(row.get("match_probability", 0.0) or 0.0)
             weight = float(row.get("match_weight", 0.0) or 0.0)
-            decision = "MATCH" if probability >= spec.threshold_policy.match_probability_threshold else "REVIEW" if probability >= spec.threshold_policy.review_probability_threshold else "NON_MATCH"
+            band = EntityMatchPredictionBand.STRONG_LINK_EVIDENCE if probability >= spec.threshold_policy.match_probability_threshold else EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE if probability >= spec.threshold_policy.review_probability_threshold else EntityMatchPredictionBand.BELOW_EVIDENCE_THRESHOLD
             risk: list[str] = []
-            if spec.threshold_policy.require_independent_evidence and decision == "MATCH" and len(evidence) < 2:
-                decision = "REVIEW"; risk.append("insufficient_independent_evidence")
+            if spec.threshold_policy.require_independent_evidence and band is EntityMatchPredictionBand.STRONG_LINK_EVIDENCE and len(evidence) < 2:
+                band = EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE; risk.append("insufficient_independent_evidence")
             if not evidence:
                 risk.append("no_non_placeholder_agreement")
-            edge = EntityMatchEdge(edge_id=entity_edge_id(left["_record_ref"], right["_record_ref"], model_id), left_record_ref=left["_record_ref"], right_record_ref=right["_record_ref"], left_source_id=left["_source_id"], right_source_id=right["_source_id"], left_snapshot_id=left["_snapshot_id"], right_snapshot_id=right["_snapshot_id"], match_weight=weight, match_probability=probability, decision=decision, comparison_evidence_refs=tuple(evidence), blocking_rule_ids=tuple(rule.rule_id for rule in spec.blocking_rules), model_evidence_ref=model.model_id, independent_evidence_refs=tuple(evidence), risk_flags=tuple(risk))
+            edge = EntityMatchEdge(edge_id=entity_edge_id(left["_record_ref"], right["_record_ref"], model_id), left_record_ref=left["_record_ref"], right_record_ref=right["_record_ref"], left_source_id=left["_source_id"], right_source_id=right["_source_id"], left_snapshot_id=left["_snapshot_id"], right_snapshot_id=right["_snapshot_id"], match_weight=weight, match_probability=probability, model_prediction_band=band, comparison_evidence_refs=tuple(evidence), blocking_rule_ids=tuple(rule.rule_id for rule in spec.blocking_rules), model_evidence_ref=model.model_id, independent_evidence_refs=tuple(evidence), risk_flags=tuple(risk))
             edges.append(edge)
-            if decision in {"MATCH", "REVIEW"}:
-                graph[left_id].add(right_id); graph[right_id].add(left_id)
-        clusters, diagnostics = self._clusters(clusters_frame, graph, record_map, edges, spec, model_id)
+        clusters, diagnostics = self._clusters(clusters_frame, record_map, edges, spec, model_id, model_config_hash)
         return edges, model, clusters, diagnostics, len(predicted_frame)
 
-    def _clusters(self, clusters_frame, graph, record_map, edges, spec, model_id):
-        components: list[set[str]] = []
-        seen: set[str] = set()
-        for root in sorted(graph):
-            if root in seen: continue
-            todo = [root]; component = set()
-            while todo:
-                current = todo.pop()
-                if current in seen: continue
-                seen.add(current); component.add(current); todo.extend(graph[current] - seen)
-            components.append(component)
+    def _clusters(self, clusters_frame, record_map, edges, spec, model_id, model_config_hash):
+        memberships: dict[Any, set[str]] = defaultdict(set)
+        for row in clusters_frame.to_dict(orient="records"):
+            native_id = row.get("unique_id")
+            cluster_key = row.get("cluster_id")
+            if native_id in record_map and cluster_key is not None:
+                memberships[cluster_key].add(native_id)
         edge_by_pair = {frozenset((f"{item.left_source_id}::{item.left_record_ref}", f"{item.right_source_id}::{item.right_record_ref}")): item for item in edges}
         clusters: list[EntityCluster] = []; diagnostics: list[EntityClusterDiagnostic] = []
-        for index, component in enumerate(sorted(components, key=lambda item: (len(item), sorted(item)))):
+        for component in sorted((value for value in memberships.values() if len(value) > 1), key=lambda item: (len(item), sorted(item))):
             refs = tuple(sorted(record_map[item]["_record_ref"] for item in component))
-            cluster_id = "entity_cluster_" + hashlib.sha256("|".join(refs).encode()).hexdigest()[:24]
-            internal = sum(1 for left in component for right in component if left < right and frozenset((left, right)) in edge_by_pair)
-            unsafe_bridge = len(component) >= 3 and internal < len(component) * (len(component) - 1) // 2
+            cluster_id = "entity_cluster_" + hashlib.sha256(json.dumps({"entity_family": spec.entity_family, "record_refs": refs, "clustering_policy": spec.clustering_policy.model_dump(mode="json"), "model_config_hash": model_config_hash, "model_id": model_id}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
             internal_edges = [edge_by_pair[pair] for pair in edge_by_pair if all(endpoint in component for endpoint in pair)]
+            internal = len(internal_edges)
+            unsafe_bridge = len(component) >= 3 and internal < len(component) * (len(component) - 1) // 2
             evidence_count = sum(len(edge.independent_evidence_refs) for edge in internal_edges)
             placeholder_only = bool(internal_edges) and all(not edge.independent_evidence_refs for edge in internal_edges)
-            conflicting_anchors = False
+            conflicting_anchors = self._has_conflicting_anchors(component, record_map, spec)
             flags = tuple(flag for flag, active in (("unsafe_bridge", unsafe_bridge), ("placeholder_only", placeholder_only), ("conflicting_anchors", conflicting_anchors)) if active)
             diagnostic_id = "entity_diag_" + hashlib.sha256(cluster_id.encode()).hexdigest()[:24]
-            diagnostics.append(EntityClusterDiagnostic(diagnostic_id=diagnostic_id, cluster_id=cluster_id, connected_component_size=len(component), independent_evidence_count=evidence_count, placeholder_only=placeholder_only, conflicting_anchors=conflicting_anchors, unsafe_bridge=unsafe_bridge, largest_cluster_guard=len(component) > spec.clustering_policy.max_cluster_size, detail="candidate cluster diagnostic; placeholder/null, bridge and size guards are evidence flags only; no canonical entity asserted"))
-            clusters.append(EntityCluster(cluster_id=cluster_id, record_refs=refs, edge_refs=tuple(edge.edge_id for edge in edges if edge.left_record_ref in refs and edge.right_record_ref in refs), decision="REVIEW_CLUSTER" if unsafe_bridge or len(component) > spec.clustering_policy.max_cluster_size else "CANDIDATE_CLUSTER", diagnostic_refs=(diagnostic_id,), risk_flags=flags))
+            largest_guard = len(component) > min(spec.clustering_policy.max_cluster_size, spec.execution_budget.max_cluster_size)
+            diagnostics.append(EntityClusterDiagnostic(diagnostic_id=diagnostic_id, cluster_id=cluster_id, connected_component_size=len(component), independent_evidence_count=evidence_count, placeholder_only=placeholder_only, conflicting_anchors=conflicting_anchors, unsafe_bridge=unsafe_bridge, largest_cluster_guard=largest_guard, detail="normalized official Splink cluster membership; project guardrails are evidence diagnostics and never canonical identity"))
+            rejected = (placeholder_only and spec.clustering_policy.reject_placeholder_only_edges) or (conflicting_anchors and spec.clustering_policy.reject_conflicting_anchor_edges) or (unsafe_bridge and spec.clustering_policy.reject_unsafe_bridge_clusters) or largest_guard
+            clusters.append(EntityCluster(cluster_id=cluster_id, record_refs=refs, edge_refs=tuple(edge.edge_id for edge in internal_edges), decision="REVIEW_CLUSTER" if rejected else "CANDIDATE_CLUSTER", diagnostic_refs=(diagnostic_id,), risk_flags=flags))
         return clusters, diagnostics
+
+    @staticmethod
+    def _has_conflicting_anchors(component, record_map, spec):
+        anchors = [field for field in spec.identity_fields if field.is_anchor]
+        for field in anchors:
+            values = {record_map[item].get(SplinkEntityResolutionAdapter._field_column(field.field_id)) for item in component}
+            if len({value for value in values if value is not None}) > 1:
+                return True
+        return False
 
     @staticmethod
     def _candidate_counts(frame, spec):
@@ -262,6 +298,20 @@ class SplinkEntityResolutionAdapter:
         return output
 
     @staticmethod
+    def _candidate_pair_keys(frame, spec):
+        pairs: set[frozenset[str]] = set()
+        for rule in spec.blocking_rules:
+            columns = [SplinkEntityResolutionAdapter._field_column(field_id) for field_id in rule.field_ids]
+            values = frame[columns].where(frame[columns].notna(), None).to_dict(orient="records")
+            for left_index in range(len(values)):
+                for right_index in range(left_index + 1, len(values)):
+                    if spec.mode is EntityResolutionMode.LINK_ONLY and frame.iloc[left_index]["source_dataset"] == frame.iloc[right_index]["source_dataset"]:
+                        continue
+                    if all(values[left_index].get(column) is not None and values[left_index].get(column) == values[right_index].get(column) for column in columns):
+                        pairs.add(frozenset((frame.iloc[left_index]["unique_id"], frame.iloc[right_index]["unique_id"])))
+        return pairs
+
+    @staticmethod
     def _independent_evidence(left, right, spec):
         refs = []
         for field in spec.identity_fields:
@@ -272,11 +322,9 @@ class SplinkEntityResolutionAdapter:
 
     @staticmethod
     def _safe_blocking_sql(rule, field_map):
-        expression = rule.sql_expression
-        for field_id, field in field_map.items():
-            expression = re.sub(rf"\b{re.escape(field.physical_name)}\b", SplinkEntityResolutionAdapter._field_column(field_id), expression)
-            expression = re.sub(rf"\b{re.escape(field_id)}\b", SplinkEntityResolutionAdapter._field_column(field_id), expression)
-        return expression
+        if set(rule.field_ids) - set(field_map):
+            raise ValueError("blocking rule references an undeclared field")
+        return " AND ".join(f"l.{SplinkEntityResolutionAdapter._field_column(field_id)} = r.{SplinkEntityResolutionAdapter._field_column(field_id)}" for field_id in rule.field_ids)
 
     @staticmethod
     def _field_column(field_id):

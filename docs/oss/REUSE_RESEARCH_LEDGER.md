@@ -23,6 +23,25 @@
 
 ## Other libraries
 
+## scikit-learn (Step15)
+
+- Repository: https://github.com/scikit-learn/scikit-learn
+- Reviewed revision: 1.7.2 source checkout; installed/tested version:
+  scikit-learn==1.7.2.
+- License: BSD-3-Clause, verified from the official package metadata and
+  repository license.
+- Source/tests inspected: LogisticRegression, GroupKFold/split behavior and
+  calibration documentation/tests.
+- Decision: use the official package only behind the project-owned
+  SklearnRelationshipRanker adapter. No scikit-learn source was copied and
+  native estimators do not cross the adapter boundary.
+- Boundary: Step15 persists only canonical JSON coefficients, intercept,
+  feature order, version and dataset/split fingerprints. The score is
+  uncalibrated ranking evidence, never acceptance truth.
+- Obligations: retain BSD-3-Clause attribution for any distributed runtime.
+- Research clone deletion: exact review clone removed before final regression;
+  no research/oss/scikit-learn remains.
+
 ## Valentine (Step13)
 
 - Repository: https://github.com/delftdata/valentine

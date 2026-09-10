@@ -43,6 +43,7 @@ components:
   - {component_id: application.evidence_fusion, primary_specialist: "Step17 Evidence Fusion Engineer", implementation_step: 17, test_strategy: "evidence, conflict and decision evaluation"}
   - {component_id: application.canonical_hypotheses, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "canonical contract and lineage tests"}
   - {component_id: application.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "ER adapter and false-merge evaluation"}
+  - {component_id: application.learned_evidence, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "grouped ranking, leakage negatives, JSON artifact and unavailable-path tests"}
   - {component_id: application.canonical_finalization, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "identity, survivorship and accounting tests"}
   - {component_id: application.analytical_planner, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "grain, measure and model contract tests"}
   - {component_id: application.compiler, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "compiled-plan and SQL contract tests"}
@@ -55,6 +56,7 @@ components:
   - {component_id: adapters.dependencies, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, implementation_status: IMPLEMENTED, test_strategy: "Desbordante adapter contract tests"}
   - {component_id: adapters.matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, implementation_status: IMPLEMENTED, test_strategy: "Valentine adapter contract tests"}
   - {component_id: adapters.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, implementation_status: IMPLEMENTED, test_strategy: "Splink normalized-output contract tests"}
+  - {component_id: adapters.ml, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "real sklearn adapter, contribution reconstruction and JSON persistence tests"}
   - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "provider provenance and unavailable-path tests"}
   - {component_id: adapters.materialization, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "DuckDB/materializer compatibility tests"}
   - {component_id: persistence.control_store, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, comprehensive_platform_owner: "Step23 Data Platform Engineer", test_strategy: "schema, migration and lifecycle tests"}
@@ -72,6 +74,7 @@ interfaces:
   - {interface_id: DependencyDiscoveryAdapter, owner_component: adapters.dependencies, implementation_step: 12, test_strategy: "adapter contract tests"}
   - {interface_id: SchemaMatchingAdapter, owner_component: adapters.matching, implementation_step: 13, test_strategy: "adapter contract tests"}
   - {interface_id: EntityResolutionAdapter, owner_component: adapters.entity_resolution, implementation_step: 14, test_strategy: "normalized output and provenance tests"}
+  - {interface_id: LearnedEvidenceAdapter, owner_component: adapters.ml, implementation_step: 15, test_strategy: "ranking evidence, leakage controls and unavailable path"}
   - {interface_id: OptionalSemanticEvidenceAdapter, owner_component: adapters.semantic, implementation_step: 16, test_strategy: "optional and failure-path tests"}
   - {interface_id: MaterializerPort, owner_component: adapters.materialization, implementation_step: 20, test_strategy: "controlled target contract tests"}
   - {interface_id: ControlStorePort, owner_component: persistence.control_store, implementation_step: 6, test_strategy: "persistence contract tests"}
@@ -91,6 +94,7 @@ stages:
   - {stage_id: REVIEW_EVIDENCE_DECISIONS, owner_component: application.review_policy, implementation_step: 27, test_strategy: "review guard and invalidation"}
   - {stage_id: CANONICAL_HYPOTHESES, owner_component: application.canonical_hypotheses, implementation_step: 19, test_strategy: "canonical contract"}
   - {stage_id: ENTITY_RESOLUTION, owner_component: application.entity_resolution, implementation_step: 14, test_strategy: "false-merge evaluation"}
+  - {stage_id: LEARNED_EVIDENCE, owner_component: application.learned_evidence, implementation_step: 15, test_strategy: "grouped ranking and candidate-only evidence"}
   - {stage_id: REVIEW_CANONICAL_IDENTITY, owner_component: application.review_policy, implementation_step: 27, test_strategy: "identity review guard"}
   - {stage_id: CANONICAL_FINALIZATION, owner_component: application.canonical_finalization, implementation_step: 19, test_strategy: "mapping and survivorship"}
   - {stage_id: ANALYTICAL_PLANNING, owner_component: application.analytical_planner, implementation_step: 20, test_strategy: "grain and measures"}

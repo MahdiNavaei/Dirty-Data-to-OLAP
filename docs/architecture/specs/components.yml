@@ -238,7 +238,7 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [combine evidence, preserve conflicts, emit decisions and hypotheses]
-    input_contracts: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal, LLMEvidence]
+    input_contracts: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal, LLMEvidence, LearnedRankingEvidence]
     output_contracts: [RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
     depends_on: [application.profiling, application.dependency_discovery, application.quality, domain.contracts]
     conditional_dependencies:
@@ -288,6 +288,24 @@ components:
     capability_required_for_v1: false
     runtime_stage_conditional: true
     failure_behavior: affected family FAILED or NEEDS_REVIEW; no source deletion
+  - component_id: application.learned_evidence
+    name: Optional Applied ML Learned Evidence Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [build leakage-safe aggregate features, evaluate deterministic baselines, train optional transparent rankers, emit candidate ranking evidence and review suggestions]
+    input_contracts: [RelationshipCandidate, InclusionDependencyEvidence, SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, ColumnProfile, QualityResult, explicit benchmark labels]
+    output_contracts: [MLFeatureVector, MLBaselineEvaluation, MLModelEvidence, LearnedRankingEvidence, MLFeatureContribution, MLRankStabilityObservation, ActiveLearningSuggestion, MLCalibrationExperiment]
+    depends_on: [application.dependency_discovery, application.schema_matching, application.profiling, application.quality, domain.contracts]
+    ports_used: [LearnedEvidenceAdapter, ArtifactStorePort]
+    implementation_owner: Step15 Applied ML Engineer
+    implementation_step: 15
+    implementation_status: IMPLEMENTED
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: true
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
+    failure_behavior: retain deterministic baseline; explicit UNAVAILABLE, INSUFFICIENT_DATA or FAILED; never emits acceptance
   - component_id: application.canonical_finalization
     name: Canonical Finalization Service
     layer: application
@@ -499,6 +517,24 @@ components:
     capability_required_for_v1: false
     runtime_stage_conditional: true
     failure_behavior: affected family failure
+  - component_id: adapters.ml
+    name: Applied ML Adapter Family
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [normalize optional sklearn model output, persist transparent JSON coefficients, expose capability and unavailable paths]
+    input_contracts: [MLFeatureSchema, MLDatasetRow, MLSplitManifest, MLDatasetManifest]
+    output_contracts: [MLModelEvidence, LearnedRankingEvidence, MLFeatureContribution]
+    depends_on: [domain.contracts]
+    extension_port: LearnedEvidenceAdapter
+    implementation_owner: Step15 Applied ML Engineer
+    implementation_step: 15
+    implementation_status: IMPLEMENTED
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
+    side_effect_class: artifact_write
+    persistence_access: ArtifactStorePort
+    optional: true
+    failure_behavior: unavailable or failed capability is explicit; no silent fallback beyond deterministic baseline
   - component_id: adapters.semantic
     name: Semantic Evidence Adapter Family
     layer: adapters

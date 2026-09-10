@@ -36,6 +36,7 @@ stage_test_requirements:
   - {stage_id: REVIEW_EVIDENCE_DECISIONS, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
   - {stage_id: CANONICAL_HYPOTHESES, required_categories: [contract, data, evaluation], owner: "Step19"}
   - {stage_id: ENTITY_RESOLUTION, required_categories: [adapter_contract, evaluation, data], owner: "Step14"}
+  - {stage_id: LEARNED_EVIDENCE, required_categories: [unit, contract, integration, evaluation, security], owner: "Step15"}
   - {stage_id: REVIEW_CANONICAL_IDENTITY, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
   - {stage_id: CANONICAL_FINALIZATION, required_categories: [contract, data, integration], owner: "Step19"}
   - {stage_id: ANALYTICAL_PLANNING, required_categories: [contract, data, evaluation], owner: "Step20"}
@@ -52,6 +53,7 @@ interface_test_requirements:
   - {interface_id: DependencyDiscoveryAdapter, categories: [contract, adapter_contract, integration, evaluation, security]}
   - {interface_id: SchemaMatchingAdapter, categories: [adapter_contract, evaluation]}
   - {interface_id: EntityResolutionAdapter, categories: [adapter_contract, integration, evaluation, security, failure_recovery]}
+  - {interface_id: LearnedEvidenceAdapter, categories: [contract, adapter_contract, integration, evaluation, security]}
   - {interface_id: OptionalSemanticEvidenceAdapter, categories: [adapter_contract, failure_recovery]}
   - {interface_id: MaterializerPort, categories: [adapter_contract, integration]}
   - {interface_id: ControlStorePort, categories: [contract, failure_recovery]}

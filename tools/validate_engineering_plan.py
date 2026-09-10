@@ -262,10 +262,10 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
-            "post-gate current specialist is Step06 through Step14 when G3 passes",
+            "post-gate current specialist is Step06 through Step16 when G3 passes",
             (execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
             or (execution.get("current_step") == 7 and execution.get("current_role") == "senior_data_engineer")
             or (execution.get("current_step") == 8 and execution.get("current_role") == "data_profiling_specialist")
@@ -275,7 +275,8 @@ def main() -> int:
             or (execution.get("current_step") == 12 and execution.get("current_role") == "dependency_discovery_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 13 and execution.get("current_role") == "schema_matching_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 14 and execution.get("current_role") == "entity_resolution_engineer" and execution.get("last_completed_step") == 13 and gates.get("G3_SOURCE_SAFETY") == "PASS")
-            or (execution.get("current_step") == 15 and execution.get("current_role") == "applied_ml_engineer" and execution.get("last_completed_step") == 14 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
+            or (execution.get("current_step") == 15 and execution.get("current_role") == "applied_ml_engineer" and execution.get("last_completed_step") == 14 and gates.get("G3_SOURCE_SAFETY") == "PASS")
+            or (execution.get("current_step") == 16 and execution.get("current_role") == "llm_semantic_ai_engineer" and execution.get("last_completed_step") == 15 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
         )
 
     # 4-5: required artifacts parse and carry provenance.
@@ -307,9 +308,9 @@ def main() -> int:
     owned_components = {item.get("component_id") for item in ownership.get("components", [])}
     owned_interfaces = {item.get("interface_id") for item in ownership.get("interfaces", [])}
     owned_stages = {item.get("stage_id") for item in ownership.get("stages", [])}
-    check("ownership covers exactly all 38 components", len(component_ids) == 38 and owned_components == component_ids)
-    check("ownership covers exactly all 12 interfaces", len(interface_ids) == 12 and owned_interfaces == interface_ids)
-    check("ownership covers exactly all 19 stages", len(stage_ids) == 19 and owned_stages == stage_ids)
+    check("ownership covers exactly all 40 components", len(component_ids) == 40 and owned_components == component_ids)
+    check("ownership covers exactly all 13 interfaces", len(interface_ids) == 13 and owned_interfaces == interface_ids)
+    check("ownership covers exactly all 20 stages", len(stage_ids) == 20 and owned_stages == stage_ids)
     check("every component has owner and test strategy", all(item.get("primary_specialist") and item.get("test_strategy") for item in ownership.get("components", [])))
     check("every interface has owner and test strategy", all(item.get("owner_component") and item.get("test_strategy") for item in ownership.get("interfaces", [])))
     check("every stage has owner, step and test strategy", all(item.get("owner_component") and item.get("implementation_step") and item.get("test_strategy") for item in ownership.get("stages", [])))

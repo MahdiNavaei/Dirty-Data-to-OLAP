@@ -100,6 +100,19 @@ interfaces:
     failure_mode: optional SKIPPED; required BLOCKED
     adapter_component: adapters.semantic
     forbidden_behavior: [sole authority, native provider object, silent fallback]
+  - interface_id: LearnedEvidenceAdapter
+    purpose: Optional leakage-safe relationship-candidate ranking over normalized aggregate evidence.
+    input_contracts: [MLFeatureSchema, MLDatasetRow, MLSplitManifest, MLDatasetManifest]
+    output_contracts: [MLModelEvidence, LearnedRankingEvidence, MLFeatureContribution, MLRankStabilityObservation, ActiveLearningSuggestion, MLCalibrationExperiment]
+    side_effects: [write_json_model_artifact, write_artifacts]
+    idempotency: pinned feature schema, dataset fingerprint, split fingerprint, estimator configuration and seed
+    optional: true
+    capability_required_for_v1: false
+    runtime_stage_conditional: true
+    capability_id: learned_evidence.optional
+    failure_mode: explicit UNAVAILABLE, INSUFFICIENT_DATA or FAILED; deterministic baseline remains available
+    adapter_component: adapters.ml
+    forbidden_behavior: [raw staged values in model features or artifacts, identifier features, label leakage, pickle/joblib persistence, acceptance or canonical truth output, silent probability claim]
   - interface_id: MaterializerPort
     purpose: Execute an approved compiled plan into a controlled target.
     input_contracts: [CompiledPlan, ApprovedPlanReference]
