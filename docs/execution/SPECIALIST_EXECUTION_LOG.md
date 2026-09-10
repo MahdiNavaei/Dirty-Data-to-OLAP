@@ -961,10 +961,11 @@ handoff_to:
 - role_id: `entity_resolution_engineer`
 - status: `PASS` for bounded local probabilistic linkage evidence; formal G4 remains pending
 - starting_head: `4fc5f45d092d9ff1a60e3c50d586bc192869e253`
+- content_commit_sha: `90bed1cb9f8f7317110556c356bc4020fb68841a`
 - implementation: project-owned ER contracts and exact privacy authorization; staged-only Splink 4.0.17 adapter; conservative normalization; explicit LINK_ONLY/DEDUPE_ONLY/LINK_AND_DEDUPE modes; bounded blocking and pair budgets; u random sampling and EM m-training; model-weight/probability separation; candidate edges/clusters and false-merge diagnostics; atomic aggregate-only artifact publication; Step13 row/type-accounting hardening
 - oss_research: official Splink research commit `ca89ee92d5472b5e5de71cff3001193e04faf0e7` inspected; stable official tag/runtime `v4.0.17`, MIT, Python `>=3.10,<4`; research clone and runtime scratch are removed before final handoff
 - evaluation: benchmark fixture covers duplicate, cross-source spelling, email case, explicit phone policy, common-name hard negative, placeholder, household, missing fields, Persian Unicode, same-source duplicate, transitive bridge and three-record cluster; labels remain synthetic and separate from production evidence
-- tests_run: real official Splink adapter integration, ER contract/privacy tests, Step13 contract regression, full regression and all required validators are recorded after final cleanup
+- tests_run: real official Splink adapter integration `1 passed`; focused official Valentine integration `6 passed, 9 warnings`; full regression with both optional runtimes `121 passed, 50 warnings`; clean-runtime full regression `114 passed, 2 skipped, 41 warnings`; ER validator `19`; schema validator `31`; engineering post-gate `73` with `23/23` negatives; solution architecture, privacy, source, profiling, dependency, database-security and data validators PASS; compileall and diff check PASS
 - intermediate_milestone: `G4A_INDEPENDENT_EVIDENCE_PRODUCERS=PASS`; no Step13 score fusion; no canonical identity or accepted merge produced
 - limitations: model-implied probability is not calibrated business confidence; no canonical finalization, human identity acceptance, production-scale, deployment or release claim; Step15 not started
 - handoff_to: `Step15 - Applied ML Engineer`
