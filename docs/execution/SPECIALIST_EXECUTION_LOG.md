@@ -1003,7 +1003,7 @@ handoff_to:
 - status: `PASS` for the bounded project-owned evidence-fusion and review-ready decision scope
 - starting_head: `1d3a49a59cfd43cc9a1921a8df68144f682c9e5d`
 - content_commit_sha: `9f70d67250bb0f7a813caf2647355d48f9a5b4a3`
-- metadata_commit_sha: `1f3a90c`
+- metadata_commit_sha: `1f3a90cb41e709d7459c2c3f6714a4a6f5be5783`
 - inputs_reviewed: current Git/state, Step17 and Step18 playbooks, governance, product/domain/data, architecture and engineering specifications, and actual Step08-Step16 contracts/implementations/tests
 - upstream_hardening: exact Step16 generation reference; character/token budget separation; honest reference denominator; transport-only containment metric; available-but-invalid capability status; project-owned semantic scratch; full baseline SHA; Step15 benchmark-label runtime/training reconciliation
 - implementation: project-owned fusion contracts/service; typed producer status; declared constraints; domain assertions; directional relationship and symmetric mapping subjects; evidence bundles/lineage/correlation groups; source-aware normalization; missing/scope/reliability semantics; first-class conflicts; review-only decisions; atomic byte-hashed result artifact; bounded benchmark and validator

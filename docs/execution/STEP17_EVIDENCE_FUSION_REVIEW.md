@@ -6,7 +6,7 @@ Starting HEAD: `1d3a49a59cfd43cc9a1921a8df68144f682c9e5d`.
 
 Content commits: `4223437d0c46c18cf72e7a9aecb827df5603e693` (`feat: implement provenance-aware evidence fusion`) and `9f70d67250bb0f7a813caf2647355d48f9a5b4a3` (`fix: close evidence fusion handoff validation`).
 
-Metadata commit: `1f3a90c` (`docs: record evidence fusion handoff`).
+Metadata commit: `1f3a90cb41e709d7459c2c3f6714a4a6f5be5783` (`docs: record evidence fusion handoff`).
 
 ## Scope and upstream hardening
 
