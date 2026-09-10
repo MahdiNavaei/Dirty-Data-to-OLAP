@@ -2,5 +2,6 @@
 
 from .dependency_discovery import DependencyDiscoveryService
 from .entity_resolution import EntityResolutionService
+from .evidence_fusion import EvidenceFusionService
 
-__all__ = ["DependencyDiscoveryService", "EntityResolutionService"]
+__all__ = ["DependencyDiscoveryService", "EntityResolutionService", "EvidenceFusionService"]

@@ -1,0 +1,23 @@
+policy_id: mapping-fusion-v1
+version: "1.0"
+status: UNCALIBRATED
+automation_enabled: false
+auto_accept_enabled: false
+auto_reject_enabled: false
+requires_g5_for_automation: true
+score_semantics: UNCALIBRATED_DECISION_SCORE
+normalization:
+  matcher_rank: ordinal_presence_v1
+  bounded_01: identity_v1
+  semantic: qualitative_only_v1
+weights:
+  matcher_rank: 1.0
+  type_compatibility: 0.75
+  dependency: 0.5
+critical_evidence:
+  required_producers: [PROFILING, QUALITY, DEPENDENCY]
+  cross_source_mapping_requires_schema_matching: true
+conflicts:
+  - SEMANTIC_STRUCTURAL_CONFLICT
+  - TYPE_SEMANTIC_CONFLICT
+  - MULTIPLE_TARGET_AMBIGUITY

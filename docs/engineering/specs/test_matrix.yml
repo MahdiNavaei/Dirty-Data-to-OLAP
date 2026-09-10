@@ -32,7 +32,7 @@ stage_test_requirements:
   - {stage_id: SCHEMA_MATCHING, required_categories: [unit, contract, adapter_contract, integration, evaluation, security], owner: "Step13"}
   - {stage_id: QUALITY_ANALYSIS, required_categories: [unit, contract, evaluation], owner: "Step09"}
   - {stage_id: OPTIONAL_SEMANTIC_EVIDENCE, required_categories: [contract, security, failure_recovery], owner: "Step16"}
-  - {stage_id: EVIDENCE_FUSION, required_categories: [unit, contract, evaluation], owner: "Step17"}
+  - {stage_id: EVIDENCE_FUSION, required_categories: [unit, contract, integration, evaluation, security], owner: "Step17"}
   - {stage_id: REVIEW_EVIDENCE_DECISIONS, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
   - {stage_id: CANONICAL_HYPOTHESES, required_categories: [contract, data, evaluation], owner: "Step19"}
   - {stage_id: ENTITY_RESOLUTION, required_categories: [adapter_contract, evaluation, data], owner: "Step14"}

@@ -40,7 +40,7 @@ components:
   - {component_id: application.privacy_policy, primary_specialist: "Step10 Data Security / Privacy Engineer", implementation_step: 10, implementation_status: IMPLEMENTED, test_strategy: "privacy contract, canary, exposure and retention tests"}
   - {component_id: application.database_security, primary_specialist: "Step11 Database Security Specialist", implementation_step: 11, implementation_status: IMPLEMENTED, test_strategy: "provider policy, SQLite attack and secret-canary tests"}
   - {component_id: application.semantic_evidence, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, implementation_status: IMPLEMENTED, test_strategy: "bounded optional-provider contract"}
-  - {component_id: application.evidence_fusion, primary_specialist: "Step17 Evidence Fusion Engineer", implementation_step: 17, test_strategy: "evidence, conflict and decision evaluation"}
+  - {component_id: application.evidence_fusion, primary_specialist: "Step17 Evidence Fusion Engineer", implementation_step: 17, implementation_status: IMPLEMENTED, test_strategy: "evidence, conflict and decision evaluation"}
   - {component_id: application.canonical_hypotheses, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "canonical contract and lineage tests"}
   - {component_id: application.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "ER adapter and false-merge evaluation"}
   - {component_id: application.learned_evidence, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "grouped ranking, leakage negatives, JSON artifact and unavailable-path tests"}

@@ -28,7 +28,7 @@ def check(name: str, condition: bool) -> None:
 def main() -> int:
     fixture = json.loads((ROOT / "benchmarks/semantic_ai/step16_semantic_safety_fixture.json").read_text(encoding="utf-8"))
     check("exactly 11 aggregate-safe benchmark cases", len(fixture["cases"]) == 11 and fixture["scope"].endswith("without_ground_truth_answers"))
-    check("Step17 fusion implementation absent", not (ROOT / "src/dirty_data_to_olap/application/evidence_fusion.py").exists())
+    check("Step17 fusion implementation is present", (ROOT / "src/dirty_data_to_olap/application/evidence_fusion.py").exists())
 
     case = fixture["cases"][0]
     request = SemanticEvidenceRequest(request_id="validator", task=SemanticTask(case["task"]), subject_refs=tuple(case["request"]["subject_refs"]), evidence_refs=tuple(case["request"]["evidence_refs"]), budget=SemanticBudget(max_hypotheses=1))
@@ -78,7 +78,7 @@ def main() -> int:
     plan_text = (ROOT / "docs/engineering/specs/implementation_plan.yml").read_text(encoding="utf-8")
     check("G4 evidence summary exists", (ROOT / "docs/execution/gates/G4_BOUNDED_INTELLIGENCE.md").exists())
     check("run manager remains planned", "component_id: application.run_manager" in components_text and "implementation_status: PLANNED" in components_text.split("component_id: application.run_manager", 1)[1].split("component_id:", 1)[0])
-    handoff_consistent = (("current_handoff: \"Step16 LLM / Semantic AI Engineer\"" in plan_text and "current_step: 16" in state_text) or ("current_handoff: \"Step17 Evidence Fusion Engineer\"" in plan_text and "current_step: 17" in state_text))
+    handoff_consistent = (("current_handoff: \"Step16 LLM / Semantic AI Engineer\"" in plan_text and "current_step: 16" in state_text) or ("current_handoff: \"Step17 Evidence Fusion Engineer\"" in plan_text and "current_step: 17" in state_text) or ("current_handoff: \"Step18 ML Evaluation Engineer\"" in plan_text and "current_step: 18" in state_text))
     check("Step16 architecture and handoff metadata are consistent", "component_id: application.semantic_evidence" in components_text and handoff_consistent)
     check("Step16 execution log exists", "Step16" in (ROOT / "docs/execution/SPECIALIST_EXECUTION_LOG.md").read_text(encoding="utf-8"))
     print("PASS: semantic AI behavioral validator")
@@ -165,7 +165,7 @@ def _artifact_and_evaluation() -> bool:
         def capability(self):
             return SemanticProviderReference(api_version="0.1", endpoint=self.policy.endpoint, model=self.policy.model, model_digest="845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e")
         def generate(self, request, manifest, authorization, bundle, *, timeout_seconds=None):
-            return LLMEvidence(evidence_id="validator-evidence", request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=(), provider=self.capability(), prompt=bundle.reference, context_manifest=manifest, authorization=authorization, response_hash="response")
+            return LLMEvidence(evidence_id="validator-evidence", request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=(), provider=self.capability(), prompt=bundle.reference, context_manifest=manifest, authorization=authorization, generation=SemanticGenerationReference(temperature=0, seed=20260910, num_predict=512, timeout_seconds=20, retry_count=0, stream=False, think=False, structured_schema_id="SemanticProviderOutput", structured_schema_hash="schema", config_fingerprint="generation"), response_hash="response")
     with tempfile.TemporaryDirectory(dir=ROOT / "workspace" / "test-temp") as directory:
         project = Path(directory)
         request = SemanticEvidenceRequest(request_id="validator-artifact", task=SemanticTask.AMBIGUITY_EXPLANATION, subject_refs=("column:t.c",), evidence_refs=("e1",))

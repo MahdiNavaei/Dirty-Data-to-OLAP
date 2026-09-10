@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from dirty_data_to_olap.domain.contracts.semantic_ai import SemanticEvidenceRequest, SemanticPromptReference
+from dirty_data_to_olap.domain.contracts.semantic_ai import SemanticEvidenceRequest, SemanticPromptReference, SemanticProviderOutput
 
 ROOT = Path(__file__).resolve().parents[4] / "prompts" / "semantic-ai" / "v1"
 
@@ -16,6 +17,12 @@ class PromptBundle:
     system_text: str
     task_text: str
     reference: SemanticPromptReference
+
+
+def structured_schema_identity() -> tuple[str, str]:
+    schema = SemanticProviderOutput.model_json_schema()
+    payload = json.dumps(schema, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "SemanticProviderOutput", hashlib.sha256(payload).hexdigest()
 
 
 def _hash(path: Path) -> str:

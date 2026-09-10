@@ -1,5 +1,6 @@
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -112,7 +113,7 @@ def test_output_safety_applies_to_rationale_and_limitations():
         SemanticProviderOutput(hypotheses=(), limitations=("auto-approved",))
 
 
-def test_artifact_hash_covers_final_nonrecursive_envelope_and_evaluation(tmp_path):
+def test_artifact_hash_covers_final_nonrecursive_envelope_and_evaluation():
     class FakeAdapter:
         policy = SemanticProviderPolicy(model="qwen2.5:7b")
 
@@ -121,14 +122,20 @@ def test_artifact_hash_covers_final_nonrecursive_envelope_and_evaluation(tmp_pat
 
         def generate(self, request, manifest, authorization, bundle, *, timeout_seconds=None):
             hypothesis = SemanticHypothesis(hypothesis_id="provider-id", kind=SemanticHypothesisKind.AMBIGUOUS, statement="candidate remains ambiguous", evidence_refs=manifest.allowed_provider_evidence_refs, rationale="aggregate context is insufficient")
-            return LLMEvidence(evidence_id="e", request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=(hypothesis,), provider=self.capability(), prompt=bundle.reference, context_manifest=manifest, authorization=authorization, response_hash="response", limitations=("candidate-only",))
+            return LLMEvidence(evidence_id="e", request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=(hypothesis,), provider=self.capability(), prompt=bundle.reference, context_manifest=manifest, authorization=authorization, generation=SemanticGenerationReference(temperature=0, seed=20260910, num_predict=512, timeout_seconds=20, retry_count=0, stream=False, think=False, structured_schema_id="SemanticProviderOutput", structured_schema_hash="schema", config_fingerprint="generation"), response_hash="response", limitations=("candidate-only",))
 
-    root = tmp_path / "project"
-    service = SemanticEvidenceService(adapter=FakeAdapter(), privacy_policy=PrivacyPolicyService(project_root=root), artifact_root=root / "runs" / "artifact-test")
-    result = service.analyze(_request(request_id="artifact-test"), context_items=(SemanticContextItem(item_ref="profile-1", item_kind="profile", safe_fields={"distinct_ratio": 0.8}),))
-    target = root / result.artifact.location
-    assert result.artifact is not None and target.read_bytes()
-    assert hashlib.sha256(target.read_bytes()).hexdigest() == result.artifact.content_hash
-    evaluation = service.evaluate_safety((result,), evaluation_id="artifact-test-eval")
-    assert isinstance(evaluation, SemanticSafetyEvaluation)
-    assert (root / "runs" / "artifact-test" / "semantic_evidence" / "evaluations" / "artifact-test-eval.json").exists()
+    root = Path("workspace/test-temp/semantic-ai/artifact-test").resolve()
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True)
+    try:
+        service = SemanticEvidenceService(adapter=FakeAdapter(), privacy_policy=PrivacyPolicyService(project_root=Path.cwd()), artifact_root=root)
+        result = service.analyze(_request(request_id="artifact-test"), context_items=(SemanticContextItem(item_ref="profile-1", item_kind="profile", safe_fields={"distinct_ratio": 0.8}),))
+        target = Path.cwd() / result.artifact.location
+        assert result.artifact is not None and target.read_bytes()
+        assert hashlib.sha256(target.read_bytes()).hexdigest() == result.artifact.content_hash
+        evaluation = service.evaluate_safety((result,), evaluation_id="artifact-test-eval")
+        assert isinstance(evaluation, SemanticSafetyEvaluation)
+        assert (root / "semantic_evidence" / "evaluations" / "artifact-test-eval.json").exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)

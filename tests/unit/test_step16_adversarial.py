@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import shutil
 from pathlib import Path
 
 import pytest
@@ -98,11 +99,19 @@ def test_provider_timeout_is_contained(monkeypatch):
     assert error.value.kind is SemanticFailureKind.PROVIDER_TIMEOUT and error.value.request_made
 
 
-def test_unavailable_provider_does_not_change_deterministic_failure_state(tmp_path):
+def test_unavailable_provider_does_not_change_deterministic_failure_state():
     request = SemanticEvidenceRequest(request_id="unavailable-adversarial", task=SemanticTask.AMBIGUITY_EXPLANATION, subject_refs=("column:t.c",), budget=SemanticBudget(max_output_chars=1000))
-    service = SemanticEvidenceService(adapter=OllamaSemanticEvidenceAdapter(SemanticProviderPolicy(model="missing-adversarial-model", endpoint="http://127.0.0.1:11434")), privacy_policy=PrivacyPolicyService(project_root=tmp_path), artifact_root=tmp_path / "runs")
-    result = service.analyze(request, context_items=())
-    assert result.evidence is None and result.failure is not None and result.state in {SemanticSupportState.UNAVAILABLE, SemanticSupportState.FAILED}
+    root = Path("workspace/test-temp/semantic-ai/unavailable-adversarial").resolve()
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True)
+    try:
+        service = SemanticEvidenceService(adapter=OllamaSemanticEvidenceAdapter(SemanticProviderPolicy(model="missing-adversarial-model", endpoint="http://127.0.0.1:11434")), privacy_policy=PrivacyPolicyService(project_root=Path.cwd()), artifact_root=root)
+        result = service.analyze(request, context_items=())
+        assert result.evidence is None and result.failure is not None and result.state in {SemanticSupportState.UNAVAILABLE, SemanticSupportState.FAILED}
+        assert result.capability.status is SemanticCapabilityStatus.UNAVAILABLE
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_prompt_injection_remains_untrusted_data():

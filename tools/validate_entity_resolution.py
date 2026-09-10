@@ -40,7 +40,7 @@ def main() -> int:
         "false merge guards": all(token in contracts + adapter for token in ("placeholder_only", "unsafe_bridge", "largest_cluster_guard", "independent_evidence")),
         "no canonical map output": "SourceRecordCanonicalMap" not in adapter and "canonical_entity_id" not in adapter,
         "benchmark fixture": (ROOT / "benchmarks/entity_resolution/step14_labeled_fixture.json").is_file(),
-        "later specialist handoff": ((execution.get("last_completed_step"), execution.get("current_step"), execution.get("current_role")) in {(14, 15, "applied_ml_engineer"), (15, 16, "llm_semantic_ai_engineer"), (16, 17, "evidence_fusion_engineer")}) and execution.get("blocked") is not True,
+        "later specialist handoff": ((execution.get("last_completed_step"), execution.get("current_step"), execution.get("current_role")) in {(14, 15, "applied_ml_engineer"), (15, 16, "llm_semantic_ai_engineer"), (16, 17, "evidence_fusion_engineer"), (17, 18, "ml_evaluation_engineer")}) and execution.get("blocked") is not True,
         "G4 remains pending or evidenced pass": state.get("gates", {}).get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"},
         "G4A is intermediate": state.get("intermediate_milestones", {}).get("G4A_INDEPENDENT_EVIDENCE_PRODUCERS") == "PASS" and "G4A_INDEPENDENT_EVIDENCE_PRODUCERS" not in state.get("gates", {}),
     }

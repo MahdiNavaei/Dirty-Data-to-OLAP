@@ -36,6 +36,8 @@ class SemanticSupportState(str, Enum):
 class SemanticCapabilityStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
     UNAVAILABLE = "UNAVAILABLE"
+    AVAILABLE_BUT_INVALID = "AVAILABLE_BUT_INVALID"
+    NOT_CHECKED = "NOT_CHECKED"
 
 
 class SemanticFailureKind(str, Enum):
@@ -143,6 +145,12 @@ class SemanticProviderPolicy(_SourceModel):
     num_predict: int = Field(default=512, ge=32, le=2048)
     local_only: bool = True
 
+    @model_validator(mode="after")
+    def deterministic_temperature(self) -> "SemanticProviderPolicy":
+        if self.temperature != 0:
+            raise ValueError("the Step16 local semantic policy requires temperature=0")
+        return self
+
 
 class SemanticProviderReference(_SourceModel):
     provider: str = "ollama"
@@ -156,6 +164,21 @@ class SemanticProviderReference(_SourceModel):
     capabilities: tuple[str, ...] = ()
     local_loopback_verified: bool = True
     locality_evidence: str = "loopback_plus_exact_installed_model_digest"
+
+
+class SemanticGenerationReference(_SourceModel):
+    """Exact generation settings used for one provider request."""
+
+    temperature: float = Field(ge=0, le=2)
+    seed: int
+    num_predict: int = Field(ge=1)
+    timeout_seconds: float = Field(gt=0)
+    retry_count: int = Field(ge=0)
+    stream: bool
+    think: bool
+    structured_schema_id: str = Field(min_length=1)
+    structured_schema_hash: str = Field(min_length=1)
+    config_fingerprint: str = Field(min_length=1)
 
 
 class SemanticPromptReference(_SourceModel):
@@ -248,6 +271,7 @@ class LLMEvidence(_SourceModel):
     prompt: SemanticPromptReference
     context_manifest: SemanticContextManifest
     authorization: SemanticAuthorization
+    generation: SemanticGenerationReference
     response_hash: str
     state: SemanticSupportState = SemanticSupportState.CANDIDATE_ONLY
     limitations: tuple[str, ...] = ()
@@ -289,6 +313,8 @@ class SemanticSafetyEvaluation(_SourceModel):
     privacy_canary_count: int = Field(ge=0)
     prompt_injection_escape_count: int = Field(ge=0)
     provider_failure_containment_count: int = Field(ge=0)
+    semantic_failure_count: int = Field(default=0, ge=0)
+    reference_checked_count: int = Field(default=0, ge=0)
     repeatability: SemanticRepeatabilityObservation | None = None
 
 

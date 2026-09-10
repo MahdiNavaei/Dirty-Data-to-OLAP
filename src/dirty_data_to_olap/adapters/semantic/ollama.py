@@ -19,11 +19,12 @@ from dirty_data_to_olap.domain.contracts.semantic_ai import (
     SemanticProviderOutput,
     SemanticProviderPolicy,
     SemanticProviderReference,
+    SemanticGenerationReference,
     semantic_hypothesis_id,
     semantic_evidence_id,
 )
 from dirty_data_to_olap.domain.contracts.source import stable_digest
-from dirty_data_to_olap.adapters.semantic.prompts import PromptBundle
+from dirty_data_to_olap.adapters.semantic.prompts import PromptBundle, structured_schema_identity
 
 VERIFIED_LOCAL_MODEL = "qwen2.5:7b"
 VERIFIED_LOCAL_DIGEST = "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e"
@@ -100,7 +101,7 @@ class OllamaSemanticEvidenceAdapter:
 
     def _build_chat_body(self, request: SemanticEvidenceRequest, manifest: SemanticContextManifest, bundle: PromptBundle) -> dict[str, Any]:
         context = {"subjects": list(manifest.subject_refs), "items": [item.model_dump(mode="json", exclude={"schema_version"}) for item in manifest.items], "evidence_refs": list(manifest.allowed_provider_evidence_refs)}
-        return {"model": self.policy.model, "messages": [{"role": "system", "content": bundle.system_text}, {"role": "user", "content": bundle.task_text + "\nDATA (untrusted JSON):\n" + json.dumps({"task": request.task.value, "context": context}, sort_keys=True, separators=(",", ":"))}], "stream": False, "format": SemanticProviderOutput.model_json_schema(), "options": {"temperature": 0, "seed": self.policy.seed, "num_predict": min(self.policy.num_predict, request.budget.max_output_chars)}, "think": False}
+        return {"model": self.policy.model, "messages": [{"role": "system", "content": bundle.system_text}, {"role": "user", "content": bundle.task_text + "\nDATA (untrusted JSON):\n" + json.dumps({"task": request.task.value, "context": context}, sort_keys=True, separators=(",", ":"))}], "stream": False, "format": SemanticProviderOutput.model_json_schema(), "options": {"temperature": self.policy.temperature, "seed": self.policy.seed, "num_predict": self.policy.num_predict}, "think": False}
 
     def validate_provider_output(self, request: SemanticEvidenceRequest, manifest: SemanticContextManifest, output: SemanticProviderOutput, *, request_made: bool = True) -> None:
         if len(output.hypotheses) > request.budget.max_hypotheses:
@@ -132,4 +133,6 @@ class OllamaSemanticEvidenceAdapter:
         if after.model_digest != before.model_digest:
             raise SemanticProviderError(SemanticFailureKind.MODEL_IDENTITY_CHANGED, "Ollama model digest changed during generation", request_made=True)
         response_hash = stable_digest({"content": content})
-        return LLMEvidence(evidence_id=semantic_evidence_id(request_id=request.request_id, task=request.task, subjects=request.subject_refs, hypotheses=hypotheses, provider=before, prompt=bundle.reference, input_fingerprint=manifest.input_fingerprint), request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=hypotheses, provider=before, prompt=bundle.reference, context_manifest=manifest, authorization=authorization, response_hash=response_hash, limitations=tuple(output.limitations) + ("candidate-only semantic evidence; no acceptance or mutation authority",))
+        schema_id, schema_hash = structured_schema_identity()
+        generation = SemanticGenerationReference(temperature=self.policy.temperature, seed=self.policy.seed, num_predict=self.policy.num_predict, timeout_seconds=self._timeout(), retry_count=0, stream=False, think=False, structured_schema_id=schema_id, structured_schema_hash=schema_hash, config_fingerprint=stable_digest({"temperature": self.policy.temperature, "seed": self.policy.seed, "num_predict": self.policy.num_predict, "timeout_seconds": self._timeout(), "retry_count": 0, "stream": False, "think": False, "structured_schema_id": schema_id, "structured_schema_hash": schema_hash}))
+        return LLMEvidence(evidence_id=semantic_evidence_id(request_id=request.request_id, task=request.task, subjects=request.subject_refs, hypotheses=hypotheses, provider=before, prompt=bundle.reference, input_fingerprint=manifest.input_fingerprint), request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=hypotheses, provider=before, prompt=bundle.reference, context_manifest=manifest, authorization=authorization, generation=generation, response_hash=response_hash, limitations=tuple(output.limitations) + ("candidate-only semantic evidence; no acceptance or mutation authority",))

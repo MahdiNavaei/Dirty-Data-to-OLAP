@@ -1,0 +1,31 @@
+{
+  "fixture_id": "step17-evidence-fusion-cases-v1",
+  "scope": "contract-and-conflict-controls-without-runtime-truth-labels",
+  "cases": [
+    {"case_id":"A","kind":"relationship","description":"clean structural MANY_TO_ONE candidate"},
+    {"case_id":"B","kind":"relationship","description":"declared FK with observed orphan contradiction"},
+    {"case_id":"C","kind":"relationship","description":"semantic-high and structure-weak"},
+    {"case_id":"D","kind":"mapping","description":"type mismatch with semantic support"},
+    {"case_id":"E","kind":"relationship","description":"perfect low-cardinality inclusion trap"},
+    {"case_id":"F","kind":"relationship","description":"sample positive versus full contrary evidence"},
+    {"case_id":"G","kind":"relationship","description":"two plausible targets"},
+    {"case_id":"H","kind":"relationship","description":"optional LLM unavailable"},
+    {"case_id":"I","kind":"relationship","description":"optional learned evidence unavailable"},
+    {"case_id":"J","kind":"relationship","description":"learned ranking disagreement"},
+    {"case_id":"K","kind":"relationship","description":"incomplete required dependency result"},
+    {"case_id":"L","kind":"relationship","description":"wrong snapshot evidence"},
+    {"case_id":"M","kind":"relationship","description":"duplicate evidence ID collision"},
+    {"case_id":"N","kind":"relationship","description":"explicit domain assertion support"},
+    {"case_id":"O","kind":"relationship","description":"domain assertion versus structural conflict"}
+  ],
+  "mapping_cases": [
+    {"case_id":"M1","description":"renamed true-like candidate"},
+    {"case_id":"M2","description":"same-name different-meaning"},
+    {"case_id":"M3","description":"matcher disagreement"},
+    {"case_id":"M4","description":"multilingual candidate"},
+    {"case_id":"M5","description":"type conflict"},
+    {"case_id":"M6","description":"multiple possible targets"},
+    {"case_id":"M7","description":"domain assertion present or absent"},
+    {"case_id":"M8","description":"LLM ambiguity"}
+  ]
+}
