@@ -4,6 +4,8 @@
 
 `PASS` for review-only inference validity. G5 is `REVIEW_ONLY_VALIDATED`; automation remains unauthorized. Step19 was not started.
 
+The substantive Step18 content is bound to commit `cd2ab6be6b665b972c00135325f3e4954c381a51`.
+
 ## Scope and evidence
 
 The pass began from branch `main`, HEAD `bd1efcebab1966d052d0ddd84ebbd9b7294ee815`, with the preserved untracked `tests/quality_unit_artifacts/` directory untouched. Step17 relationship and mapping policies were frozen before TEST evaluation. Runtime fixtures and truth artifacts are separate and independently hashed.

@@ -797,6 +797,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "ml_evaluation_engineer", "post-Step 17 state must hand off to Step18")
         require("ML Evaluation" in str(execution.get("current_specialist")), "current specialist must be Step18")
         require("ML Evaluation" in str(execution.get("next_step")), "next step must be Step18")
+    elif execution.get("current_step") == 19:
+        require(execution.get("last_completed_step") == 18, "post-Step 18 state must record completed Step 18")
+        require(execution.get("last_completed_role") == "ml_evaluation_engineer", "post-Step 18 role must be ml_evaluation_engineer")
+        require(execution.get("current_role") == "canonical_model_engineer", "post-Step 18 state must hand off to Step19")
+        require("Canonical Data Model" in str(execution.get("current_specialist")), "current specialist must be Step19")
+        require("Canonical Data Model" in str(execution.get("next_step")), "next step must be Step19")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -819,7 +825,7 @@ def check_state() -> None:
         "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE",
         "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE",
     ]
-    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[2:]), "G3-G15 must remain pending except evidenced G3/G4 decisions")
+    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[3:]), "G3-G15 must remain pending except evidenced G3/G4/G5 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 

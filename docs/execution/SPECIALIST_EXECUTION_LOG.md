@@ -1036,3 +1036,20 @@ handoff_to:
 - state: G4/G4A remain PASS; G5-G15 remain PENDING; all decisions remain REVIEW_REQUIRED or INCOMPLETE_REQUIRED_EVIDENCE; no calibration, canonical identity, ReviewDecision or repair execution
 - known_runtime_note: successful integration/full exits still emit the existing dlt/SQLite cursor cleanup traceback
 - handoff: `Step18 - ML Evaluation Engineer`; do not begin Step18 in this execution
+
+## Specialist Step18 - ML Evaluation Engineer
+
+- execution_step: `18`
+- role_id: `ml_evaluation_engineer`
+- status: `PASS` for review-only inference validity; G5=`REVIEW_ONLY_VALIDATED`
+- starting_head: `bd1efcebab1966d052d0ddd84ebbd9b7294ee815`
+- content_commit_sha: `cd2ab6be6b665b972c00135325f3e4954c381a51`
+- implementation: offline evaluation sidecar with separate runtime/truth fixtures; frozen Step17 policy/protocol manifest; group-held-out splits; relationship candidate-generation/fusion/ranking metrics; schema matching; aggregate-safe ER pairwise/cluster metrics; applied-ML grouped evaluation and label-shuffle control; optional semantic status; threshold frontier; calibration status; bootstrap uncertainty; slice/error/hard-negative artifacts; artifact-hash validator
+- upstream_hardening: source/snapshot/table/column-bound RepairProposal forwarding; explicit QualityRuleEvaluation/QualityDimensionSummary coverage semantics; no-issue is not NOT_OBSERVED; normalized-signal compatibility view
+- real_provider: Desbordante Docker `COMPLETE`; Valentine 1.0.0 `COMPLETE`; Splink 4.0.17 `COMPLETE`; each persisted a normalized hashed receipt
+- results: relationship fusion precision `0.500`, recall `1.000`, F1 `0.667`; candidate recall `0.667` with missing candidate exposed; schema precision `0.333`, recall `1.000`, F1 `0.500`; ER pairwise precision/recall/F1 `1.000/1.000/1.000`, false merges `0`; applied ML `EXECUTED_EXPERIMENTAL`
+- controls: threshold study CALIBRATION-only and unselected; calibration `INSUFFICIENT_CALIBRATION_DATA`; automation `NOT_AUTHORIZED`; semantic AI optional and not executed; test untouched by tuning; runtime DAG has no evaluation import
+- verification: focused fusion/evaluation unit `23 passed`; ML validator `23` checks PASS; real Valentine `6 passed`; real Splink `1 passed`; real Desbordante dependency integration `1 passed`; compileall PASS; final full regression and all repository validators required before push
+- limitations: synthetic/aggregate-safe benchmark; uncalibrated scores; no production, temporal, causal, human-acceptance, canonicalization, repair, deployment or release claim
+- handoff_to: `Step19 - Canonical Data Model Engineer`
+- next_state: `last_completed_step=18`, `current_step=19`, `current_role=canonical_model_engineer`, `G5=REVIEW_ONLY_VALIDATED`, `G6-G15=PENDING`, `blocked=false`; Step19 implementation not started

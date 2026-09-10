@@ -120,7 +120,7 @@ def main() -> int:
     from dirty_data_to_olap.application.evidence_fusion import _producer_state
     checks.append(("NOT_CONFIGURED remains distinct from unavailable", _producer_state(type("NotConfigured", (), {"status": "NOT_CONFIGURED"})()) is ProducerResultState.NOT_CONFIGURED and _producer_state(type("Unavailable", (), {"status": "UNAVAILABLE"})()) is ProducerResultState.UNAVAILABLE))
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
-    checks.append(("G4 remains PASS and G5 remains PENDING", state["gates"]["G4_BOUNDED_INTELLIGENCE"] == "PASS" and state["gates"]["G5_INFERENCE_VALIDITY"] == "PENDING"))
+    checks.append(("G4 remains PASS and G5 is pending or review-only validated", state["gates"]["G4_BOUNDED_INTELLIGENCE"] == "PASS" and state["gates"]["G5_INFERENCE_VALIDITY"] in {"PENDING", "REVIEW_ONLY_VALIDATED"}))
     checks.append(("Step18 implementation is absent", not (ROOT / "src/dirty_data_to_olap/application/ml_evaluation.py").exists()))
     runtime = json.loads((ROOT / "benchmarks/evidence_fusion/runtime_input.json").read_text(encoding="utf-8"))
     controls = json.loads((ROOT / "benchmarks/evidence_fusion/expected_control.json").read_text(encoding="utf-8"))

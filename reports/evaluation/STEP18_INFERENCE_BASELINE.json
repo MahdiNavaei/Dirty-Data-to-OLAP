@@ -1,5 +1,6 @@
 {
   "report_id": "step18-inference-baseline-v1",
+  "git_content_commit": "cd2ab6be6b665b972c00135325f3e4954c381a51",
   "dataset_id": "step18-inference-quality-v1",
   "protocol_version": "step18-protocol-v1",
   "gate_recommendation": "REVIEW_ONLY_VALIDATED",
