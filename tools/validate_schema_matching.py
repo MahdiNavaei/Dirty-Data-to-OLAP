@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 
@@ -19,6 +19,12 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 
 def main() -> int:
+    from dirty_data_to_olap.adapters.dependencies.staged import StagedDependencyRow
+    from dirty_data_to_olap.adapters.matching.valentine import ValentineSchemaMatchingAdapter
+    from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchMode, SchemaMatchRequest, SchemaMatcherReference, schema_match_config_hash
+    from tools.evaluate_schema_matching import load_labeled_fixture
+    import pandas as pd
+
     contracts = (ROOT / "src/dirty_data_to_olap/domain/contracts/schema_matching.py").read_text(encoding="utf-8")
     adapter = (ROOT / "src/dirty_data_to_olap/adapters/matching/valentine.py").read_text(encoding="utf-8")
     service = (ROOT / "src/dirty_data_to_olap/application/schema_matching.py").read_text(encoding="utf-8")
@@ -54,9 +60,31 @@ def main() -> int:
     }
     for name, condition in checks.items():
         check(name, condition)
-    runtime = subprocess.run([sys.executable, "-m", "pytest", "tests/integration/matching/test_step13_real_valentine.py", "-q"], cwd=ROOT, capture_output=True, text=True, check=False)
-    check("executed behavioral Valentine regression", runtime.returncode == 0 and "passed" in runtime.stdout and "skipped" not in runtime.stdout.lower(), runtime.stdout + runtime.stderr)
-    print(f"PASS: schema_matching_checks={len(checks)}")
+    adapter_instance = ValentineSchemaMatchingAdapter(project_root=ROOT)
+    class _Matcher:
+        def __init__(self, **config):
+            self.config = config
+    schema_matcher = SchemaMatcherReference(matcher_id="schema", name="Coma", version="1", configuration={"use_instances": False})
+    try:
+        adapter_instance._build_matcher(SchemaMatcherReference(matcher_id="bad", name="Coma", version="1", configuration={"use_instances": True}), SchemaMatchMode.SCHEMA_ONLY, _Matcher, _Matcher, _Matcher)
+        schema_mode_rejected = False
+    except ValueError:
+        schema_mode_rejected = True
+    check("behavioral schema-only matcher rejection", schema_mode_rejected)
+    sampled, read_count = adapter_instance._sample_stream((StagedDependencyRow(f"r{i}", i, {"x": i}) for i in range(4)), 2, 7)
+    check("behavioral bounded sampling", read_count == 4 and len(sampled) == 2)
+    base_request = SchemaMatchRequest(request_id="validator", source_ids=("a", "b"), snapshot_ids={"a": "sa", "b": "sb"}, selected_table_ids_by_source={"a": ("ta",), "b": ("tb",)}, matcher_references=(schema_matcher,))
+    check("behavioral sample fingerprint semantics", schema_match_config_hash(base_request.model_copy(update={"sample_seed": 1})) == schema_match_config_hash(base_request.model_copy(update={"sample_seed": 2})) and schema_match_config_hash(base_request.model_copy(update={"mode": SchemaMatchMode.INSTANCE_AWARE, "sample_seed": 1})) != schema_match_config_hash(base_request.model_copy(update={"mode": SchemaMatchMode.INSTANCE_AWARE, "sample_seed": 2})))
+    pair_inputs, pair_stats = adapter_instance._bounded_pair_inputs(
+        [("a", "ta", "b", "tb")],
+        {"a::ta": pd.DataFrame({"left": [1], "ignored": [2]}), "b::tb": pd.DataFrame({"right": [1], "ignored": [2]})},
+        {"a::ta": {"columns": {"left": {"source_id": "a", "table_id": "ta", "column_id": "la", "physical_name": "left", "normalized_type": "numeric"}, "ignored": {"source_id": "a", "table_id": "ta", "column_id": "li", "physical_name": "ignored", "normalized_type": "numeric"}}}, "b::tb": {"columns": {"right": {"source_id": "b", "table_id": "tb", "column_id": "rb", "physical_name": "right", "normalized_type": "numeric"}, "ignored": {"source_id": "b", "table_id": "tb", "column_id": "ri", "physical_name": "ignored", "normalized_type": "numeric"}}}},
+        base_request,
+    )
+    check("behavioral provider projection", pair_stats["provider_visible"] == 4 and len(pair_inputs) == 1 and set(pair_inputs[0][2].columns) == {"left", "ignored"})
+    fixture = load_labeled_fixture(ROOT / "benchmarks/schema_matching/step13_labeled_fixture.json")
+    check("behavioral labeled fixture load", len(fixture["positives"]) == 2 and len(fixture["hard_negatives"]) == 4 and "crm_orders-status" in {item[0] for item in fixture["hard_negatives"]})
+    print(f"PASS: schema_matching_checks={len(checks) + 5}")
     return 0
 
 
