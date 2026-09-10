@@ -251,6 +251,8 @@ def main() -> int:
 
     execution = state.get("specialist_execution", {}) if isinstance(state, dict) else {}
     gates = state.get("gates", {}) if isinstance(state, dict) else {}
+    if not args.pre_gate and execution.get("current_step", 0) >= 6:
+        mode = "post"
     check("bootstrap is PASS", state.get("bootstrap", {}).get("status") == "PASS")
     check("all prior repairs are PASS", all(item.get("status") == "PASS" for item in state.get("post_bootstrap_repairs", [])))
     check("G0 and G1 are PASS", gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS")
