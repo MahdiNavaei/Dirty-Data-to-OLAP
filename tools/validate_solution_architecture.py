@@ -756,6 +756,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "database_security_specialist", "post-Step 10 state must hand off to Step11")
         require("Database Security" in str(execution.get("current_specialist")), "current specialist must be Step11")
         require("Database Security" in str(execution.get("next_step")), "next step must be Step11")
+    elif execution.get("current_step") == 12:
+        require(execution.get("last_completed_step") == 11, "post-Step 11 state must record completed Step 11")
+        require(execution.get("last_completed_role") == "database_security_specialist", "post-Step 11 role must be database_security_specialist")
+        require(execution.get("current_role") == "dependency_discovery_engineer", "post-Step 11 state must hand off to Step12")
+        require("Dependency Discovery" in str(execution.get("current_specialist")), "current specialist must be Step12")
+        require("Dependency Discovery" in str(execution.get("next_step")), "next step must be Step12")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -778,7 +784,7 @@ def check_state() -> None:
         "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE",
         "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE",
     ]
-    require(all(gates.get(key) == "PENDING" for key in later_gate_keys), "G3-G15 must remain PENDING")
+    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[1:]), "G3-G15 must remain pending except an evidenced G3 decision")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 

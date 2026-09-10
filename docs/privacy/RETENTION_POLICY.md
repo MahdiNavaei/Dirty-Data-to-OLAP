@@ -9,3 +9,8 @@ The Step10 cleanup helper can delete only an explicitly selected path beneath
 the privacy-owned ephemeral root and rejects path escape or root deletion. It
 cannot delete source artifacts, operational data or a broad workspace. Full
 artifact lifecycle/storage ownership remains with later platform work.
+# Step11 cleanup hardening
+
+Cleanup requires a project-authorized privacy-owned directory beneath the
+configured root and rejects source, staging, code and external paths. The
+privacy service cannot delete source artifacts.

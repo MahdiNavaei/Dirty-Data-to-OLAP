@@ -11,3 +11,8 @@ The Step10 canary test scans sensitive values in staging, profile/quality-like
 payloads, sanitized logs, debug and external payload decisions. A clean scan
 means no value was observed outside the allowed restricted-staging exception;
 it is not a claim of complete repository-wide DLP.
+# Step11 logging hardening
+
+Recursive sanitization redacts arbitrary unknown strings by default. Debug
+bundles use the same default sanitizer and Unicode/Persian canaries are part of
+the security regression suite. A trusted safe-metadata path must be explicit.

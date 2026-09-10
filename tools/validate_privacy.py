@@ -30,7 +30,7 @@ def main() -> int:
     checks.append(("privacy defaults are conservative", config["unknown_state"] == "UNKNOWN" and config["external_allow_raw_sensitive"] is False and config["external_allow_unknown"] is False and config["raw_staging_sensitivity"] == "RESTRICTED"))
     try:
         from dirty_data_to_olap.application.privacy_policy import PrivacyOperationError, PrivacyPolicyService
-        from dirty_data_to_olap.domain.contracts.privacy import ClassificationState, ExposureContext, ExposureRequest, MaskingPolicy, PseudonymizationPolicy
+        from dirty_data_to_olap.domain.contracts.privacy import AggregateSafeMetric, ClassificationState, ExposureContext, ExposureRequest, MaskingPolicy, PseudonymizationPolicy
 
         service = PrivacyPolicyService()
         unknown = service.classify_field("unmatched-value")
@@ -45,13 +45,19 @@ def main() -> int:
         checks.append(("debug excludes raw staging", _raises(lambda: service.build_debug_bundle(artifact=service.classify_artifact("batch", "raw_staging"), metadata={}), PrivacyOperationError)))
         nested = service.sanitize_log_value({"nested": [{"token": "secret"}]})
         checks.append(("nested log sanitizer redacts secrets", "secret" not in json.dumps(nested)))
+        checks.append(("unknown scan values are violations outside staging", not service.scan_values("validator", ("ordinary unicode: تهران",), allow_raw_staging=False).clean))
+        checks.append(("arbitrary unknown log strings are redacted", service.sanitize_log_value("ordinary unicode: تهران") == "<REDACTED_UNKNOWN>"))
+        metric = AggregateSafeMetric(metric_id="row_count", aggregate_kind="count", value=3, derivation_scope="table", privacy_classification="aggregate", provenance="validator")
+        checks.append(("raw numeric identifiers cannot be aggregate payloads", not service.prepare_external_payload({"customer_id": 123456}, aggregate_only=True).allowed and service.prepare_external_payload({"row_count": metric}, aggregate_only=True).allowed))
+        classified = service.classify_field_result("validator@example.test", column_id="email")
+        checks.append(("classification evidence references resolve", all(ref in {item.evidence_id for item in classified.evidence} for ref in classified.classifications[0].evidence_refs)))
     except Exception as error:
         checks.append((f"privacy service imports and executes ({error.__class__.__name__})", False))
     state = yaml.safe_load((ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     execution = state.get("specialist_execution", {})
-    checks.append(("formal G3 remains pending", state.get("gates", {}).get("G3_SOURCE_SAFETY") == "PENDING"))
-    checks.append(("handoff points to Step11", execution.get("current_step") == 11 and execution.get("current_role") == "database_security_specialist"))
-    checks.append(("Step11 implementation is not present", not (SRC / "dirty_data_to_olap" / "application" / "database_security.py").exists()))
+    checks.append(("formal G3 is pending, blocked, or evidenced PASS", state.get("gates", {}).get("G3_SOURCE_SAFETY") in {"PENDING", "BLOCKED", "PASS"}))
+    checks.append(("execution remains at Step11 or the explicit Step12 handoff", (execution.get("current_step") == 11 and execution.get("current_role") == "database_security_specialist") or (execution.get("current_step") == 12 and execution.get("last_completed_step") == 11 and execution.get("current_role") == "dependency_discovery_engineer")))
+    checks.append(("Step11 database security implementation is present", (SRC / "dirty_data_to_olap" / "application" / "database_security.py").exists()))
     privacy_component = yaml.safe_load((ROOT / "docs" / "architecture" / "specs" / "components.yml").read_text(encoding="utf-8"))
     component = next((item for item in privacy_component["components"] if item.get("component_id") == "application.privacy_policy"), {})
     checks.append(("privacy component is explicitly implemented", component.get("implementation_step") == 10 and component.get("implementation_status") == "IMPLEMENTED"))

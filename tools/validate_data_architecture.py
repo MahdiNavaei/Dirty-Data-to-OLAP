@@ -507,12 +507,11 @@ def main() -> int:
         errors.append("G1 is not PASS")
     if state["gates"]["G2_ARCHITECTURE_READY"] not in {"PENDING", "PASS"}:
         errors.append("G2 is not PENDING or PASS")
-    if any(
-        value != "PENDING"
-        for key, value in state["gates"].items()
-        if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY"}
+    if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"} or any(
+        value != "PENDING" for key, value in state["gates"].items()
+        if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY", "G3_SOURCE_SAFETY"}
     ):
-        errors.append("G3-G15 are not all PENDING")
+        errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:
         errors.append("blocked is not false")
 

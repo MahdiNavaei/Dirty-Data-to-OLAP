@@ -1,0 +1,6 @@
+-- Documentation template only. Replace placeholders through an approved DBA process.
+-- CREATE ROLE <source_readonly_role> LOGIN;
+-- GRANT CONNECT ON DATABASE <source_database> TO <source_readonly_role>;
+-- GRANT USAGE ON SCHEMA <source_schema> TO <source_readonly_role>;
+-- GRANT SELECT ON ALL TABLES IN SCHEMA <source_schema> TO <source_readonly_role>;
+-- Do not grant SUPERUSER, CREATEDB, CREATEROLE, REPLICATION, BYPASSRLS, DML, DDL or EXECUTE.

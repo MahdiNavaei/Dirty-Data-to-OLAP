@@ -63,3 +63,13 @@ required but unverified; Oracle is deferred. Cross-engine identifier tests are
 policy tests, not live compatibility evidence. Comprehensive least privilege,
 provider compatibility, source extraction, pooling runtime and G3 remain
 later work.
+
+## Step11 security composition
+
+Before discovery or extraction, the source adapter obtains a passing
+`DatabaseSecurityAssessment`. Source credentials are purpose-scoped as
+`SOURCE_READ_ONLY`; target, administration and test credentials are distinct.
+SQLite adds URI read-only mode, query-only, an authorizer and SQLAlchemy/dlt
+connect initialization. Non-SQLite providers fail closed without effective
+privilege verification. The security assessment contains references and
+fingerprints only, never a DSN or secret.

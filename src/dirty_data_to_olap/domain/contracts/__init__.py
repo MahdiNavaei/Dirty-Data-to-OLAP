@@ -122,6 +122,22 @@ from .quality import (
     RuleApplicability,
     quality_profile_fingerprint,
 )
+from .database_security import (
+    CredentialPurpose,
+    DatabasePrincipalReference,
+    SourcePrivilegeRequirement,
+    PrivilegeFinding,
+    DatabaseSecurityPolicy,
+    DatabaseSecurityAssessment,
+    DatabaseSecurityAssurance,
+    SecurityAssuranceStatus,
+    ReadOnlyEnforcementMethod,
+    QueryClass,
+    QueryGuardDecision,
+    DatabaseSecurityFailure,
+    DatabaseSecurityAuditEvent,
+    DriverSecurityPolicy,
+)
 
 __all__ = [
     "BoundedSampleObservation",

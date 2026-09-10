@@ -8,11 +8,14 @@ resource, SQLAlchemy engine/table, cursor or row object escapes this module.
 from __future__ import annotations
 
 import sqlite3
+import gc
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping, Sequence, Protocol
+from typing import Any, Iterator, Mapping, Sequence, Protocol
 
-from dirty_data_to_olap.adapters.sources.sql.sqlite import SQLiteReadOnlySource
+from dirty_data_to_olap.adapters.sources.sql.sqlite import SQLiteReadOnlySource, configure_sqlite_connection
+from dirty_data_to_olap.application.database_security import DatabaseSecurityOperationError, DatabaseSecurityService
+from dirty_data_to_olap.domain.contracts.database_security import CredentialPurpose, PrivilegeFinding, ReadOnlyEnforcementMethod
 from dirty_data_to_olap.adapters.sources.staging import SourceFaithfulParquetStager
 from dirty_data_to_olap.application.source_adapter import SourceAdapter
 from dirty_data_to_olap.domain.contracts.database import (
@@ -67,18 +70,27 @@ from dirty_data_to_olap.domain.contracts.source import (
 
 
 class RuntimeCredentialResolver(Protocol):
-    def resolve(self, profile: Any) -> "RuntimeSqlCredentials":
+    def resolve(self, profile: Any, *, required_purpose: CredentialPurpose, source_id: str) -> "RuntimeSqlCredentials":
         ...
 
 
 @dataclass(frozen=True, repr=False)
 class RuntimeSqlCredentials:
-    """Runtime-only credentials.  The URL is never placed in project models."""
+    """Runtime-only credentials.  The URL is never placed in project models or logs."""
 
     connection_url: str
+    credential_reference: str = "runtime-only"
+    credential_purpose: CredentialPurpose = CredentialPurpose.SOURCE_READ_ONLY
+    credential_version: str = "1"
+    source_id: str | None = None
+    provider_security_verified: bool = False
+    privilege_findings: tuple[PrivilegeFinding, ...] = ()
 
     def __repr__(self) -> str:
         return "RuntimeSqlCredentials(connection_url=<redacted>)"
+
+    def __str__(self) -> str:
+        return "RuntimeSqlCredentials(<redacted>)"
 
 
 def source_type_for_engine(engine: DatabaseEngine) -> SourceType:
@@ -135,6 +147,7 @@ class DltSqlSourceAdapter(SourceAdapter):
     ) -> None:
         self.project_root = project_root.resolve()
         self.credential_resolver = credential_resolver
+        self.security = DatabaseSecurityService()
 
     def _profile(self, record: SourceRegistryRecord) -> Any:
         if record.connection_profile is None:
@@ -254,7 +267,7 @@ class DltSqlSourceAdapter(SourceAdapter):
         profile = self._profile(record)
         return "src_" + stable_digest({"source_type": record.source_type.value, "profile_id": profile.profile_id})[:32]
 
-    def _engine(self, profile: Any) -> Any:
+    def _engine(self, profile: Any, *, source_id: str | None = None) -> Any:
         try:
             from sqlalchemy import create_engine
             from sqlalchemy.pool import NullPool, StaticPool
@@ -266,13 +279,19 @@ class DltSqlSourceAdapter(SourceAdapter):
 
                 def creator() -> sqlite3.Connection:
                     connection = sqlite3.connect(uri, uri=True, timeout=5.0)
-                    connection.execute("PRAGMA query_only = ON")
+                    configure_sqlite_connection(connection, profile_id=profile.profile_id)
                     return connection
 
-                return create_engine("sqlite+pysqlite://", creator=creator, poolclass=StaticPool)
+                engine = create_engine("sqlite+pysqlite://", creator=creator, poolclass=StaticPool)
+                from sqlalchemy import event
+                event.listen(engine, "connect", lambda dbapi_connection, _record: configure_sqlite_connection(dbapi_connection, profile_id=profile.profile_id), insert=True)
+                return engine
             if self.credential_resolver is None:
                 raise ValueError("non-SQLite extraction requires an injected runtime credential resolver")
-            runtime_credentials = self.credential_resolver.resolve(profile)
+            scoped_source_id = source_id or ("profile_" + stable_digest(profile.profile_id)[:24])
+            runtime_credentials = self.credential_resolver.resolve(profile, required_purpose=CredentialPurpose.SOURCE_READ_ONLY, source_id=scoped_source_id)
+            if runtime_credentials.credential_purpose is not CredentialPurpose.SOURCE_READ_ONLY or runtime_credentials.source_id not in {None, scoped_source_id} or not runtime_credentials.provider_security_verified:
+                raise ValueError("runtime source credential has no valid read-only security assurance")
             return create_engine(runtime_credentials.connection_url, poolclass=NullPool)
         except SourceIngestionError:
             raise
@@ -290,17 +309,23 @@ class DltSqlSourceAdapter(SourceAdapter):
                 resolve_foreign_keys=True,
                 chunk_size=chunk_size,
                 backend="sqlalchemy",
+                table_adapter_callback=None,
+                query_adapter_callback=None,
+                engine_adapter_callback=None,
             )
-        except Exception:
-            raise _failure(SourceFailureKind.ACCESS_FAILED, "initialize_dlt_sql_source", "dlt SQL source initialization failed") from None
+        except Exception as error:
+            raise _failure(SourceFailureKind.ACCESS_FAILED, "initialize_dlt_sql_source", f"dlt SQL source initialization failed ({error.__class__.__name__})") from None
 
     def discover_source(self, selection: SourceSelection, registry_record: SourceRegistryRecord) -> SourceCatalog:
+        self._validate_adapter_config(registry_record)
         profile = self._profile(registry_record)
         reference = _adapter_ref(registry_record, selection)
         if profile.database_engine is DatabaseEngine.SQLITE:
+            self._require_security(registry_record, selection, reference)
             metadata = self._sqlite_metadata(profile)
             return self._build_catalog_from_metadata(registry_record, selection, metadata, adapter_reference=reference)
-        engine = self._engine(profile)
+        self._require_security(registry_record, selection, reference)
+        engine = self._engine(profile, source_id=registry_record.source_id or self._source_id(registry_record))
         try:
             scope = _scope(registry_record, selection)
             source = self._dlt_database(engine, scope.included_objects, scope, selection.extraction.chunk_size)
@@ -326,6 +351,17 @@ class DltSqlSourceAdapter(SourceAdapter):
         except Exception:
             raise _failure(SourceFailureKind.ACCESS_FAILED, "discover_sql_source", "SQL source discovery failed") from None
         finally:
+            # dlt may retain lazy table-row generators after a source-wide
+            # bound stops iteration. Drop them before disposing the DBAPI
+            # connection so their cursor cleanup sees a live connection.
+            resource_iterator = None
+            resource = None
+            resource_by_name = {}
+            source = None
+            gc.collect()
+            # dlt can retain a lazy generator after a bounded stop. Do not
+            # close checked-out DBAPI connections underneath that generator;
+            # its own cursor finalizer must run first.
             engine.dispose()
 
     def create_bounded_snapshot(
@@ -339,7 +375,8 @@ class DltSqlSourceAdapter(SourceAdapter):
         profile = catalog.source.connection_profile
         if profile is None:
             raise _failure(SourceFailureKind.INVALID_SELECTION, "extract_sql_source", "SQL connection profile is missing")
-        engine = self._engine(profile)
+        self._require_security_from_catalog(catalog, selection)
+        engine = self._engine(profile, source_id=catalog.source_id)
         snapshot_id = snapshot_id_for(catalog.source_id, catalog.source.schema_fingerprint, catalog.source.selection_scope, selection.extraction, execution_context_id)
         # dlt receives the engine, not the specific connection used by a
         # separate transaction.  The extraction is therefore best-effort.
@@ -371,7 +408,8 @@ class DltSqlSourceAdapter(SourceAdapter):
                 batch_index = 0
                 table_ordinal = 0
                 table_exhausted = True
-                for native_batch in resource:
+                resource_iterator = iter(resource)
+                for native_batch in resource_iterator:
                     if isinstance(native_batch, dict):
                         rows = [native_batch]
                     elif isinstance(native_batch, list):
@@ -398,6 +436,9 @@ class DltSqlSourceAdapter(SourceAdapter):
                     if selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE and selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
                         table_exhausted = False
                         break
+                close_iterator = getattr(resource_iterator, "close", None)
+                if callable(close_iterator):
+                    close_iterator()
                 if pending:
                     first = table_ordinal - len(pending)
                     batch = stager.stage_rows(source_id=catalog.source_id, snapshot_id=snapshot_id, table_id=table.table_id, batch_index=batch_index, first_ordinal=first, rows=pending, schema_fingerprint=catalog.source.schema_fingerprint, staging_root=staging_root)
@@ -424,6 +465,51 @@ class DltSqlSourceAdapter(SourceAdapter):
         stager.write_catalog(catalog, run_root=staging_root.parent)
         stager.write_manifest(result, run_root=staging_root.parent)
         return result
+
+    def _require_security(self, record: SourceRegistryRecord, selection: SourceSelection, reference: AdapterReference) -> None:
+        profile = self._profile(record)
+        source_id = record.source_id or self._source_id(record)
+        credential_reference = profile.credential_reference or f"profile:{profile.profile_id}"
+        credentials = None
+        if profile.database_engine is not DatabaseEngine.SQLITE:
+            if self.credential_resolver is None:
+                raise _failure(SourceFailureKind.ACCESS_FAILED, "database_security_assurance", "source database security assurance is unavailable")
+            try:
+                credentials = self.credential_resolver.resolve(profile, required_purpose=CredentialPurpose.SOURCE_READ_ONLY, source_id=source_id)
+            except Exception:
+                raise _failure(SourceFailureKind.ACCESS_FAILED, "database_security_assurance", "source database security assurance is unavailable") from None
+            credential_reference = credentials.credential_reference
+            purpose = credentials.credential_purpose
+            version = credentials.credential_version
+            verified = credentials.provider_security_verified
+            findings = credentials.privilege_findings
+            methods = (ReadOnlyEnforcementMethod.PROVIDER_ROLE,) if verified else ()
+            driver = "sqlalchemy"
+        else:
+            purpose = CredentialPurpose.SOURCE_READ_ONLY
+            version = "sqlite-reference-1"
+            verified = True
+            findings = ()
+            methods = (ReadOnlyEnforcementMethod.SQLITE_URI_MODE_RO, ReadOnlyEnforcementMethod.SQLITE_QUERY_ONLY, ReadOnlyEnforcementMethod.SQLITE_AUTHORIZE_DENY, ReadOnlyEnforcementMethod.SQLALCHEMY_CONNECT_HOOK)
+            driver = "sqlite3/sqlalchemy"
+        try:
+            assessment = self.security.assess_source(source_id=source_id, profile_id=profile.profile_id, engine=profile.database_engine, credential_reference=credential_reference, credential_purpose=purpose, credential_version=version, selection_fingerprint=reference.config_fingerprint, driver_reference=driver, provider_verified=verified, privilege_findings=findings, enforcement_methods=methods)
+            self.security.require_pass(assessment)
+        except DatabaseSecurityOperationError:
+            raise _failure(SourceFailureKind.ACCESS_FAILED, "database_security_assurance", "source database security assurance did not pass") from None
+
+    @staticmethod
+    def _validate_adapter_config(record: SourceRegistryRecord) -> None:
+        allowed = {"schema", "include_views", "reflection_level", "resolve_foreign_keys"}
+        unsafe = [key for key in record.adapter_config if key not in allowed or any(token in key.lower() for token in ("callback", "sql", "engine", "credential", "dsn"))]
+        if unsafe:
+            raise _failure(SourceFailureKind.INVALID_SELECTION, "validate_sql_adapter_config", "SQL adapter configuration contains an unsupported or unsafe option")
+
+    def _require_security_from_catalog(self, catalog: SourceCatalog, selection: SourceSelection) -> None:
+        profile = catalog.source.connection_profile
+        if profile is None:
+            raise _failure(SourceFailureKind.INVALID_SELECTION, "database_security_assurance", "source database security profile is missing")
+        self._require_security(SourceRegistryRecord(registry_id="catalog-security", source_id=catalog.source_id, display_name=catalog.source.display_name, source_type=catalog.source.source_type, connection_profile=profile, scope=catalog.source.selection_scope, adapter_name=self.name, adapter_version=self.version), selection, catalog.source.adapter_reference)
 
     def _references(self, catalog: SourceCatalog, snapshot_id: str, table: TableDescriptor, batch: Any, rows: Sequence[Mapping[str, Any]], first_ordinal: int, columns: Sequence[ColumnDescriptor]) -> tuple[SourceRecordReference, ...]:
         key_columns = tuple(column.physical_name for column in sorted((item for item in columns if item.primary_key_position is not None), key=lambda item: item.primary_key_position or 0))

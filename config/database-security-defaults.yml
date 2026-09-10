@@ -1,0 +1,28 @@
+policy_id: database-security-v1
+version: "1.0"
+source_purpose: SOURCE_READ_ONLY
+read_only: true
+require_assurance_before_dlt: true
+unknown_privileges_block: true
+sqlite_authorizer_required: true
+sqlite_query_only_required: true
+sqlite_uri_mode_ro_required: true
+oracle_status: DEFERRED
+allowed_callbacks: []
+requirements:
+  - engine: postgresql
+    required: [CONNECT, USAGE, SELECT]
+    allowed_optional: [VIEW_DEFINITION]
+    forbidden: [SUPERUSER, CREATEDB, CREATEROLE, REPLICATION, BYPASSRLS, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, EXECUTE, TRUNCATE, TEMP]
+  - engine: mysql
+    required: [SELECT]
+    allowed_optional: [SHOW VIEW, METADATA]
+    forbidden: [INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, EXECUTE, FILE, PROCESS, SUPER, GRANT OPTION, CREATE USER, TRIGGER, EVENT, RELOAD]
+  - engine: mariadb
+    required: [SELECT]
+    allowed_optional: [SHOW VIEW, METADATA]
+    forbidden: [INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, EXECUTE, FILE, PROCESS, SUPER, GRANT OPTION, CREATE USER, TRIGGER, EVENT, RELOAD]
+  - engine: sqlserver
+    required: [CONNECT, SELECT]
+    allowed_optional: [VIEW DEFINITION]
+    forbidden: [CONTROL, ALTER, INSERT, UPDATE, DELETE, EXECUTE, TAKE OWNERSHIP, IMPERSONATE, db_owner, sysadmin]

@@ -34,6 +34,8 @@ from dirty_data_to_olap.domain.contracts.database import (
     quote_identifier,
     quote_qualified_identifier,
 )
+from dirty_data_to_olap.application.database_security import classify_query
+from dirty_data_to_olap.domain.contracts.database_security import QueryClass
 
 
 def normalize_sqlite_failure(
@@ -187,6 +189,7 @@ class SQLiteReadOnlySession:
     def _configure(self) -> None:
         try:
             self._connection.isolation_level = None
+            _install_sqlite_authorizer(self._connection)
             self._connection.execute("PRAGMA query_only = ON")
             self._connection.execute(f"PRAGMA busy_timeout = {int(self._timeout_policy.busy_timeout_seconds * 1000)}")
             row = self._connection.execute("PRAGMA query_only").fetchone()
@@ -202,6 +205,18 @@ class SQLiteReadOnlySession:
     def _run(self, sql: str, parameters: Sequence[Any] = (), *, operation: str) -> list[sqlite3.Row]:
         if self._closed:
             raise RuntimeError("database session is closed")
+        decision = classify_query(sql)
+        if not decision.allowed:
+            failure = DatabaseFailure(
+                database_engine=DatabaseEngine.SQLITE,
+                kind=DatabaseFailureKind.READ_ONLY_VIOLATION if decision.query_class in {QueryClass.WRITE_DML, QueryClass.DDL, QueryClass.FILESYSTEM_EXPORT, QueryClass.PROCEDURE_EXECUTION, QueryClass.MULTI_STATEMENT} else DatabaseFailureKind.QUERY_FAILED,
+                operation=operation,
+                detail="query guard blocked a non-read source operation",
+                retryable=False,
+                cause_category="query_guard",
+                context_id=self._profile_id,
+            )
+            raise DatabaseAccessError(failure)
         self._deadline = time.monotonic() + self._timeout_policy.statement_timeout_seconds
         self._connection.set_progress_handler(self._progress, 1_000)
         try:
@@ -403,3 +418,48 @@ def _normalize_sqlite_type(declared_type: str) -> str:
     if any(token in upper for token in ("REAL", "FLOA", "DOUB")):
         return "real"
     return "numeric"
+
+
+def _install_sqlite_authorizer(connection: sqlite3.Connection) -> None:
+    """Install a deny-by-default SQLite authorizer for every adapter connection."""
+    deny_names = {
+        "SQLITE_CREATE_INDEX", "SQLITE_CREATE_TABLE", "SQLITE_CREATE_TEMP_INDEX",
+        "SQLITE_CREATE_TEMP_TABLE", "SQLITE_CREATE_TEMP_TRIGGER", "SQLITE_CREATE_TEMP_VIEW",
+        "SQLITE_CREATE_TRIGGER", "SQLITE_CREATE_VTABLE", "SQLITE_CREATE_VIEW", "SQLITE_DELETE", "SQLITE_DROP_INDEX",
+        "SQLITE_DROP_TABLE", "SQLITE_DROP_TEMP_INDEX", "SQLITE_DROP_TEMP_TABLE",
+        "SQLITE_DROP_TEMP_TRIGGER", "SQLITE_DROP_TEMP_VIEW", "SQLITE_DROP_TRIGGER", "SQLITE_DROP_VTABLE",
+        "SQLITE_DROP_VIEW", "SQLITE_INSERT", "SQLITE_UPDATE", "SQLITE_ALTER_TABLE",
+        "SQLITE_ATTACH", "SQLITE_DETACH", "SQLITE_REINDEX", "SQLITE_ANALYZE",
+    }
+    deny_codes = {getattr(sqlite3, name) for name in deny_names if hasattr(sqlite3, name)}
+    pragma_code = getattr(sqlite3, "SQLITE_PRAGMA", -1)
+    function_code = getattr(sqlite3, "SQLITE_FUNCTION", -1)
+    safe_pragmas = {
+        "query_only", "busy_timeout", "foreign_keys", "table_info", "foreign_key_list",
+        "index_list", "index_info", "index_xinfo", "table_xinfo", "database_list",
+        "read_uncommitted",
+    }
+
+    def authorize(action: int, arg1: str | None, arg2: str | None, _db: str | None, _trigger: str | None) -> int:
+        if action in deny_codes:
+            return sqlite3.SQLITE_DENY
+        if action == pragma_code:
+            return sqlite3.SQLITE_OK if str(arg1 or "").lower() in safe_pragmas else sqlite3.SQLITE_DENY
+        if action == function_code and str(arg2 or arg1 or "").lower() in {"load_extension", "fts3_tokenizer"}:
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    connection.set_authorizer(authorize)
+
+
+def configure_sqlite_connection(connection: sqlite3.Connection, *, profile_id: str) -> None:
+    """Configure a SQLAlchemy/dlt creator connection with the same controls."""
+    try:
+        connection.isolation_level = None
+        _install_sqlite_authorizer(connection)
+        connection.execute("PRAGMA query_only = ON")
+        if int(connection.execute("PRAGMA query_only").fetchone()[0]) != 1:
+            raise sqlite3.OperationalError("query_only verification failed")
+    except sqlite3.Error as exception:
+        failure = normalize_sqlite_failure(exception, operation="configure_sqlalchemy_sqlite_connection", context_id=profile_id)
+        raise DatabaseAccessError(failure) from None

@@ -16,3 +16,8 @@ patterns produce potential sensitivity. Artifact sensitivity is conservative.
 
 This pass does not implement encryption, authentication, authorization,
 database grants, KMS, or an ArtifactStore. Those controls remain later work.
+# Step11 hardening note
+
+Unknown scan values fail closed outside restricted source-faithful staging;
+numeric identifiers are not aggregate-safe without the explicit metric
+contract; and runtime behavior is loaded from the versioned privacy config.

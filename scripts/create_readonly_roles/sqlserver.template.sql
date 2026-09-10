@@ -1,0 +1,5 @@
+-- Documentation template only; never run without provider review.
+-- GRANT CONNECT TO <source_readonly_principal>;
+-- GRANT SELECT ON SCHEMA::<source_schema> TO <source_readonly_principal>;
+-- VIEW DEFINITION is optional and must be justified.
+-- Do not add db_owner, sysadmin, CONTROL, ALTER, DML or EXECUTE.

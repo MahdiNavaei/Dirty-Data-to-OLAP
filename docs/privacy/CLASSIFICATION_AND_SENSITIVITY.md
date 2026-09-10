@@ -20,3 +20,8 @@ Evidence is a safe reference containing category/policy reasoning, subject
 reference and detector version. It never contains the inspected raw value.
 `RESTRICTED` is used for source-faithful raw staging; profiles, quality results
 and record references are conservatively sensitive or linkable metadata.
+# Step11 classification evidence
+
+Classification returns both decisions and the evidence objects referenced by
+those decisions. Step08 `ValuePatternSummary` supports profile-derived email
+and phone classification without rereading raw staged values.

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .source import _SourceModel as _PrivacyModel
 
@@ -108,6 +108,21 @@ class PrivacyClassification(_PrivacyModel):
     retention_class: str = "restricted_ephemeral"
 
 
+class PrivacyClassificationResult(_PrivacyModel):
+    """Classification graph with resolvable evidence, not only evidence IDs."""
+
+    classifications: tuple[PrivacyClassification, ...] = ()
+    evidence: tuple[PrivacyEvidence, ...] = ()
+    failures: tuple["PrivacyFailure", ...] = ()
+
+    @model_validator(mode="after")
+    def validate_evidence_graph(self) -> "PrivacyClassificationResult":
+        evidence_ids = {item.evidence_id for item in self.evidence}
+        if any(ref not in evidence_ids for item in self.classifications for ref in item.evidence_refs):
+            raise ValueError("privacy classification evidence references must resolve")
+        return self
+
+
 class PrivacyPolicy(_PrivacyModel):
     policy_id: str = Field(min_length=1)
     version: str = Field(min_length=1)
@@ -191,6 +206,24 @@ class ExternalProcessingDecision(_PrivacyModel):
     policy_id: str
 
 
+class AggregateSafeMetric(_PrivacyModel):
+    """Explicit aggregate representation permitted at the external boundary."""
+
+    metric_id: str = Field(min_length=1)
+    aggregate_kind: str = Field(min_length=1)
+    value: int | float
+    derivation_scope: str = Field(min_length=1)
+    contains_raw_identifier: Literal[False] = False
+    privacy_classification: str = Field(min_length=1)
+    provenance: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_identifier_metrics(self) -> "AggregateSafeMetric":
+        if any(token in self.metric_id.lower() for token in ("customer_id", "account_id", "phone", "email", "identifier")):
+            raise ValueError("aggregate metric ID must not identify a raw field")
+        return self
+
+
 class PrivacyFailureKind(str, Enum):
     CLASSIFICATION_UNAVAILABLE = "CLASSIFICATION_UNAVAILABLE"
     EXPOSURE_BLOCKED = "EXPOSURE_BLOCKED"
@@ -227,3 +260,6 @@ class PrivacyManifest(_PrivacyModel):
     artifacts: tuple[ArtifactSensitivity, ...] = ()
     created_at: datetime
     raw_staging_exception: str = "source-faithful restricted staging only"
+
+
+PrivacyClassificationResult.model_rebuild()

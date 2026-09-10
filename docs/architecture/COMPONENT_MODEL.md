@@ -77,3 +77,8 @@ request, sanitizes nested diagnostic structures and owns cleanup only beneath
 its privacy-owned ephemeral root. Quality, future entity resolution and future
 semantic/LLM work consume the boundary; no later component may bypass it for
 raw sensitive or unknown exposure.
+# Step11 source security component
+
+`application.database_security` owns purpose isolation, assurance and query
+policy. `adapters.database_security` applies the SQLite and SQLAlchemy/dlt
+connection controls before source discovery and extraction.

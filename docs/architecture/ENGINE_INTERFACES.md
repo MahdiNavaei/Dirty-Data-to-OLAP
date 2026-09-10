@@ -169,3 +169,9 @@ is a transport contract.
 - Optionality: required for heavy stages.
 - Failure: preserves item/stage/run failure semantics and cancellation evidence.
 - Forbidden: queue/distributed implementation is not required in V1.
+# Step11 source security boundary
+
+Database security is a cross-cutting enforcement boundary around `SourceAdapter`.
+It emits project-owned assurance, guard decision and safe audit contracts.
+No runtime credential, SQLAlchemy object, dlt object or caller SQL crosses the
+contract boundary.

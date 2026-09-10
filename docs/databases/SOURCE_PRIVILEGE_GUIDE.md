@@ -21,3 +21,10 @@ explicitly requires and isolates that capability.
 Step06 enforces the local SQLite reference with URI read-only mode and
 `PRAGMA query_only = ON`. Step11 will prove least privilege and broader source
 security for provider integrations; this document does not claim G3 PASS.
+
+## Step11 security status
+
+Use `docs/security/LEAST_PRIVILEGE_ROLES.md` for provider-specific policy.
+Unknown or inherited administrative grants block registration. Source
+credentials are `SOURCE_READ_ONLY` only; target-write and administration
+credentials are never reused.

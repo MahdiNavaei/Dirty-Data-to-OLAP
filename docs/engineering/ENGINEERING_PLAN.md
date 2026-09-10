@@ -20,3 +20,9 @@ The implementation starts at Specialist Step 06. Its substantive first slice is 
 Each specialist owns a bounded contract, implementation slice, test evidence and handoff. A gate is a release decision over evidence, not a claim that a later specialist's work already exists. The machine-readable plan, ownership map, test matrix, enforcement rules, integration matrix and gate map under `docs/engineering/specs/` are normative companions to this document.
 
 No dependency installation, CI workflow, OSS clone, benchmark generator or production source was added in Step 05.
+
+Step11 security implementation adds a bounded source-security composition:
+purpose-scoped runtime credentials, provider assurance, SQLite/SQLAlchemy/dlt
+read-only enforcement, query guardrails, safe audit events and fail-closed
+privacy composition. SQLite is executed evidence; non-SQL providers remain
+policy/verifier-only until a real provider is exercised.

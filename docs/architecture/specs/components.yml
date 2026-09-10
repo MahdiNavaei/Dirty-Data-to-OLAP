@@ -199,6 +199,22 @@ components:
     persistence_access: none; callers own artifact persistence through ArtifactStorePort
     optional: false
     failure_behavior: unknown and sensitive exposure is blocked or masked; key/path failures fail closed
+  - component_id: application.database_security
+    name: Source Database Security Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [credential-purpose isolation, source security assurance, privilege policy, query classification, safe database audit events]
+    input_contracts: [ConnectionProfileReference, DatabaseSecurityPolicy, CredentialPurpose]
+    output_contracts: [DatabaseSecurityAssessment, DatabaseSecurityAssurance, QueryGuardDecision, DatabaseSecurityAuditEvent, DatabaseSecurityFailure]
+    depends_on: [domain.contracts]
+    ports_used: []
+    implementation_owner: Step11 Database Security Specialist
+    implementation_step: 11
+    implementation_status: IMPLEMENTED
+    side_effect_class: policy_and_security_evidence
+    persistence_access: none; only safe references and fingerprints may be persisted
+    optional: false
+    failure_behavior: unverified provider, wrong credential purpose, unsafe privilege and unknown query fail closed
   - component_id: application.semantic_evidence
     name: Optional Semantic Evidence Service
     layer: application
@@ -377,6 +393,22 @@ components:
     persistence_access: ArtifactStorePort
     optional: false
     failure_behavior: explicit access/extraction failure
+  - component_id: adapters.database_security
+    name: Database Security Enforcement Adapter
+    layer: adapters
+    ownership: adapter implementation
+    responsibilities: [apply SQLite and SQLAlchemy connection controls, verify required initialization, prevent unsafe source operations]
+    input_contracts: [DatabaseSecurityAssurance, ConnectionProfileReference]
+    output_contracts: [DatabaseSecurityFailure, DatabaseSecurityAuditEvent]
+    depends_on: [application.database_security, domain.contracts]
+    ports_used: []
+    implementation_owner: Step11 Database Security Specialist
+    implementation_step: 11
+    implementation_status: IMPLEMENTED
+    side_effect_class: read_only_source_control
+    persistence_access: none
+    optional: false
+    failure_behavior: hook or authorizer setup failure blocks the source before dlt
   - component_id: adapters.profiling
     name: Profiling Adapter Family
     layer: adapters

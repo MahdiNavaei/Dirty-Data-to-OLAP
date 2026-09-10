@@ -1,0 +1,4 @@
+-- Documentation template only; never run without provider review.
+-- GRANT SELECT ON <source_database>.* TO <source_readonly_user>;
+-- SHOW VIEW and metadata access are optional and must be justified.
+-- Do not grant FILE, PROCESS, SUPER, GRANT OPTION, CREATE USER or write privileges.

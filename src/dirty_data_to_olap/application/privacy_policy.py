@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 
 from dirty_data_to_olap.domain.contracts.privacy import (
     ArtifactSensitivity,
+    AggregateSafeMetric,
     ClassificationState,
     ExternalProcessingDecision,
     ExposureContext,
@@ -19,6 +20,7 @@ from dirty_data_to_olap.domain.contracts.privacy import (
     MaskingPolicy,
     PrivacyAction,
     PrivacyClassification,
+    PrivacyClassificationResult,
     PrivacyDecision,
     PrivacyEvidence,
     PrivacyEvidenceType,
@@ -33,6 +35,7 @@ from dirty_data_to_olap.domain.contracts.privacy import (
     SensitiveDataCategory,
     SensitivityLevel,
 )
+from dirty_data_to_olap.domain.contracts.profiling import PatternType, ProfileResult
 
 
 class PrivacyOperationError(ValueError):
@@ -44,21 +47,51 @@ class PrivacyOperationError(ValueError):
 class PrivacyPolicyService:
     """A deterministic cross-cutting guard; it is not an authorization system."""
 
-    def __init__(self, policy: PrivacyPolicy | None = None) -> None:
-        self.policy = policy or PrivacyPolicy(policy_id="privacy-v1", version="1.0")
+    def __init__(self, policy: PrivacyPolicy | None = None, *, config_path: Path | None = None, project_root: Path | None = None) -> None:
+        self.policy = policy or self.load_policy(config_path)
+        self.project_root = project_root.resolve() if project_root else None
+
+    @staticmethod
+    def load_policy(config_path: Path | None = None) -> PrivacyPolicy:
+        path = config_path or Path(__file__).resolve().parents[3] / "config" / "privacy-defaults.yml"
+        try:
+            import yaml
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            if not isinstance(raw, Mapping):
+                raise ValueError("privacy policy must be a mapping")
+            if raw.get("external_allow_raw_sensitive") or raw.get("external_allow_unknown") or raw.get("logs_allow_raw"):
+                raise ValueError("unsafe privacy exposure defaults are rejected")
+            allowed = {field for field in PrivacyPolicy.model_fields}
+            return PrivacyPolicy.model_validate({key: value for key, value in raw.items() if key in allowed})
+        except Exception as error:
+            raise PrivacyOperationError(PrivacyFailure(failure_id="privacy-policy-config", kind=PrivacyFailureKind.CLASSIFICATION_UNAVAILABLE, detail=f"privacy policy could not be loaded: {error.__class__.__name__}")) from None
 
     def classify_field(self, value: Any, *, source_id: str | None = None, table_id: str | None = None, column_id: str | None = None, rules: Sequence[PrivacyRule] = ()) -> PrivacyClassification:
+        return self.classify_field_result(value, source_id=source_id, table_id=table_id, column_id=column_id, rules=rules).classifications[0]
+
+    def classify_field_result(self, value: Any, *, source_id: str | None = None, table_id: str | None = None, column_id: str | None = None, rules: Sequence[PrivacyRule] = ()) -> PrivacyClassificationResult:
         subject = ":".join(item for item in (source_id, table_id, column_id) if item) or "unbound-field"
         applicable = tuple(rules) + self.policy.rules
         explicit = next((rule for rule in applicable if self._rule_matches(rule, source_id, table_id, column_id)), None)
         if explicit is not None:
             evidence = PrivacyEvidence(evidence_id=f"privacy-evidence-{explicit.rule_id}", evidence_type=PrivacyEvidenceType.EXPLICIT_PRIVACY_RULE, subject_ref=subject, detail=explicit.reason, provenance=self.policy.policy_id)
-            return self._classification(subject, source_id, table_id, column_id, explicit.category, explicit.state, explicit.sensitivity, evidence)
+            return PrivacyClassificationResult(classifications=(self._classification(subject, source_id, table_id, column_id, explicit.category, explicit.state, explicit.sensitivity, evidence),), evidence=(evidence,))
         category = self._pattern_category(value)
         if category is not None:
             evidence = PrivacyEvidence(evidence_id=f"privacy-pattern-{hashlib.sha256(subject.encode()).hexdigest()[:16]}", evidence_type=PrivacyEvidenceType.DETERMINISTIC_PATTERN, subject_ref=subject, detail="deterministic pattern match; semantic identity is not asserted", detector_version="privacy-patterns-v1", provenance=self.policy.policy_id)
-            return self._classification(subject, source_id, table_id, column_id, category, ClassificationState.POTENTIALLY_SENSITIVE, SensitivityLevel.SENSITIVE, evidence)
-        return self._classification(subject, source_id, table_id, column_id, None, ClassificationState.UNKNOWN, self.policy.unknown_sensitivity, None)
+            return PrivacyClassificationResult(classifications=(self._classification(subject, source_id, table_id, column_id, category, ClassificationState.POTENTIALLY_SENSITIVE, SensitivityLevel.SENSITIVE, evidence),), evidence=(evidence,))
+        return PrivacyClassificationResult(classifications=(self._classification(subject, source_id, table_id, column_id, None, ClassificationState.UNKNOWN, self.policy.unknown_sensitivity, None),))
+
+    def classify_profile(self, profile: ProfileResult) -> PrivacyClassificationResult:
+        """Consume Step08 pattern summaries directly; no staged-row reread occurs."""
+        classifications: list[PrivacyClassification] = []
+        evidence: list[PrivacyEvidence] = []
+        for pattern in profile.patterns:
+            category = SensitiveDataCategory.EMAIL if pattern.pattern_type is PatternType.EMAIL_LIKE else SensitiveDataCategory.PHONE if pattern.pattern_type is PatternType.PHONE_LIKE else SensitiveDataCategory.FREE_TEXT_POTENTIALLY_SENSITIVE
+            evidence_item = PrivacyEvidence(evidence_id=f"privacy-profile-{pattern.pattern_id}", evidence_type=PrivacyEvidenceType.DETERMINISTIC_PATTERN, subject_ref=pattern.column_id, detail=f"Step08 profile observed {pattern.pattern_type.value}", detector_version=pattern.method_version, provenance=pattern.provenance.profiling_adapter.name)
+            classifications.append(self._classification(pattern.column_id, pattern.source_id, pattern.table_id, pattern.column_id, category, ClassificationState.POTENTIALLY_SENSITIVE, SensitivityLevel.SENSITIVE, evidence_item))
+            evidence.append(evidence_item)
+        return PrivacyClassificationResult(classifications=tuple(classifications), evidence=tuple(evidence))
 
     def classify_artifact(self, artifact_id: str, artifact_type: str, *, evidence_refs: Sequence[str] = ()) -> ArtifactSensitivity:
         normalized = artifact_type.lower()
@@ -107,16 +140,20 @@ class PrivacyPolicyService:
         digest = hmac.new(key, message, hashlib.sha256).hexdigest()
         return f"{policy.output_prefix}{digest}"
 
-    def sanitize_log_value(self, value: Any, *, category: SensitiveDataCategory | None = None) -> Any:
+    def sanitize_log_value(self, value: Any, *, category: SensitiveDataCategory | None = None, trusted_safe_metadata: bool = False) -> Any:
         if isinstance(value, Mapping):
-            return {str(key): ("<REDACTED_SECRET>" if self._secret_key(str(key)) else self.sanitize_log_value(item, category=category)) for key, item in value.items()}
+            return {str(key): ("<REDACTED_SECRET>" if self._secret_key(str(key)) else self.sanitize_log_value(item, category=category, trusted_safe_metadata=trusted_safe_metadata)) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
-            return [self.sanitize_log_value(item, category=category) for item in value]
+            return [self.sanitize_log_value(item, category=category, trusted_safe_metadata=trusted_safe_metadata) for item in value]
         if isinstance(value, str):
             sanitized = re.sub(r"[^@\s]+@[^@\s]+\.[^@\s]+", "<REDACTED_EMAIL>", value)
             sanitized = re.sub(r"\+?[0-9][0-9()\-\s]{6,}", "<REDACTED_PHONE>", sanitized)
-            return re.sub(r"(?i)(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+", "<REDACTED_SECRET>", sanitized)
+            sanitized = re.sub(r"(?i)(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+", "<REDACTED_SECRET>", sanitized)
+            return sanitized if trusted_safe_metadata and sanitized == value else (sanitized if sanitized != value else "<REDACTED_UNKNOWN>")
         return value
+
+    def sanitize_safe_metadata(self, value: Any) -> Any:
+        return self.sanitize_log_value(value, trusted_safe_metadata=True)
 
     def build_debug_bundle(self, *, artifact: ArtifactSensitivity, metadata: Mapping[str, Any]) -> Mapping[str, Any]:
         if artifact.artifact_type.lower() in {"raw_staging", "raw", "source_snapshot"}:
@@ -126,7 +163,7 @@ class PrivacyPolicyService:
     def prepare_external_payload(self, payload: Mapping[str, Any], *, aggregate_only: bool = False) -> ExternalProcessingDecision:
         if not aggregate_only:
             return ExternalProcessingDecision(allowed=False, action=PrivacyAction.BLOCK, reason="raw, sensitive and unknown external payloads are blocked by default", aggregate_only=False, blocked_fields=tuple(str(key) for key in payload), policy_id=self.policy.policy_id)
-        blocked = tuple(str(key) for key, value in payload.items() if not isinstance(value, (int, float)) or isinstance(value, bool))
+        blocked = tuple(str(key) for key, value in payload.items() if not isinstance(value, AggregateSafeMetric) and not (isinstance(value, (int, float)) and not isinstance(value, bool) and re.fullmatch(r"(?:row|record|table|column|batch|file|input|output|count|ratio|rate|sum|mean|average|min|max|amount|total|distinct|missing|valid|invalid|duplicate|null|coverage|percent|percentage)[_ -]?[a-z0-9_ -]*", str(key).lower())))
         if blocked:
             return ExternalProcessingDecision(allowed=False, action=PrivacyAction.BLOCK, reason="aggregate-safe payload contains a non-aggregate value", aggregate_only=True, blocked_fields=blocked, policy_id=self.policy.policy_id)
         return ExternalProcessingDecision(allowed=True, action=PrivacyAction.ALLOW_AGGREGATE, reason="only aggregate scalar values were supplied", aggregate_only=True, policy_id=self.policy.policy_id)
@@ -134,6 +171,17 @@ class PrivacyPolicyService:
     def cleanup_ephemeral(self, path: Path, *, allowed_root: Path, retention: RetentionPolicy | None = None) -> PrivacyDecision:
         root = allowed_root.resolve()
         target = path.resolve()
+        retention = retention or RetentionPolicy()
+        if self.project_root is not None:
+            expected_root = (self.project_root / retention.cleanup_root_name).resolve()
+            try:
+                root.relative_to(expected_root)
+            except ValueError:
+                raise PrivacyOperationError(PrivacyFailure(failure_id="privacy-retention-owner", kind=PrivacyFailureKind.UNSAFE_RETENTION_PATH, detail="cleanup root is not the project-authorized privacy directory")) from None
+        elif root.name != retention.cleanup_root_name:
+            raise PrivacyOperationError(PrivacyFailure(failure_id="privacy-retention-owner", kind=PrivacyFailureKind.UNSAFE_RETENTION_PATH, detail="cleanup root is not privacy-owned"))
+        if any(part.lower() in {"src", "source", "staging", "code", ".git"} for part in root.parts):
+            raise PrivacyOperationError(PrivacyFailure(failure_id="privacy-retention-owner", kind=PrivacyFailureKind.UNSAFE_RETENTION_PATH, detail="cleanup root is a protected source or code path"))
         try:
             target.relative_to(root)
         except ValueError:
@@ -162,6 +210,8 @@ class PrivacyPolicyService:
                     violations.append("sensitive value exposed outside restricted staging")
             elif classification.state is ClassificationState.UNKNOWN:
                 unknown += 1
+                if not allow_raw_staging:
+                    violations.append("unknown value exposed outside restricted staging")
         return PrivacyScanResult(scan_id=scan_id, policy_id=self.policy.policy_id, scanned_artifacts=1, scanned_values=len(values), raw_sensitive_matches=sensitive, raw_unknown_matches=unknown, restricted_staging_exceptions=int(allow_raw_staging), violations=tuple(violations), clean=not violations, created_at=datetime.now(timezone.utc))
 
     @staticmethod

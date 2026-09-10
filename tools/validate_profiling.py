@@ -36,7 +36,7 @@ def main() -> int:
     try:
         state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
         execution = state["specialist_execution"]
-        if execution["current_step"] not in (8, 9, 10, 11):
+        if execution["current_step"] not in (8, 9, 10, 11, 12):
             errors.append("state is not in Step08 implementation or a later specialist handoff")
         if execution["current_step"] == 9 and execution["last_completed_step"] != 8:
             errors.append("Step09 state must record Step08 completion")
@@ -44,8 +44,10 @@ def main() -> int:
             errors.append("Step10 state must record Step09 completion")
         if execution["current_step"] == 11 and execution["last_completed_step"] != 10:
             errors.append("Step11 state must record Step10 completion")
-        if state["gates"].get("G3_SOURCE_SAFETY") != "PENDING":
-            errors.append("formal G3 must remain PENDING")
+        if execution["current_step"] == 12 and execution["last_completed_step"] != 11:
+            errors.append("Step12 state must record Step11 completion")
+        if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"}:
+            errors.append("formal G3 state is invalid")
     except Exception as exc:
         errors.append(f"cannot read execution state: {exc.__class__.__name__}")
 

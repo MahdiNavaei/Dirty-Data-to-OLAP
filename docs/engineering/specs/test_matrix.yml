@@ -61,3 +61,6 @@ interface_test_requirements:
 
 privacy_test_requirements:
   - {category: privacy, purpose: "classification, minimization, exposure, retention and recursive output inspection", must_be_real: true, allowed_mocks: "synthetic canaries and runtime-only test keys", owner: "Step10", tier: TIER1, blocking: true}
+
+database_security_test_requirements:
+  - {category: database_security, purpose: "purpose isolation, provider assurance, SQLite authorizer/query guard, dlt connection hooks and secret-safe audit", must_be_real: true, allowed_mocks: "synthetic SQLite fixture and safe verifier findings", owner: "Step11", tier: TIER1, blocking: true}

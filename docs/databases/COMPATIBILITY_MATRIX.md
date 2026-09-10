@@ -16,3 +16,8 @@ MySQL/MariaDB and SQL Server. They do not establish live compatibility.
 
 Step07 owns mapping this foundation into the complete SourceAdapter and
 ingestion path.
+
+Step11 security status: SQLite has live reference evidence for URI read-only,
+query-only, authorizer, query guard and dlt/SQLAlchemy connection controls.
+PostgreSQL, MySQL, MariaDB and SQL Server have policy/verifier contracts but
+are NOT LIVE VERIFIED. Oracle is DEFERRED.
