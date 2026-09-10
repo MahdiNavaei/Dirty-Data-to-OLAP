@@ -8,7 +8,6 @@ resource, SQLAlchemy engine/table, cursor or row object escapes this module.
 from __future__ import annotations
 
 import sqlite3
-import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence, Protocol
@@ -351,17 +350,6 @@ class DltSqlSourceAdapter(SourceAdapter):
         except Exception:
             raise _failure(SourceFailureKind.ACCESS_FAILED, "discover_sql_source", "SQL source discovery failed") from None
         finally:
-            # dlt may retain lazy table-row generators after a source-wide
-            # bound stops iteration. Drop them before disposing the DBAPI
-            # connection so their cursor cleanup sees a live connection.
-            resource_iterator = None
-            resource = None
-            resource_by_name = {}
-            source = None
-            gc.collect()
-            # dlt can retain a lazy generator after a bounded stop. Do not
-            # close checked-out DBAPI connections underneath that generator;
-            # its own cursor finalizer must run first.
             engine.dispose()
 
     def create_bounded_snapshot(
@@ -408,8 +396,7 @@ class DltSqlSourceAdapter(SourceAdapter):
                 batch_index = 0
                 table_ordinal = 0
                 table_exhausted = True
-                resource_iterator = iter(resource)
-                for native_batch in resource_iterator:
+                for native_batch in resource:
                     if isinstance(native_batch, dict):
                         rows = [native_batch]
                     elif isinstance(native_batch, list):
@@ -436,9 +423,6 @@ class DltSqlSourceAdapter(SourceAdapter):
                     if selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE and selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
                         table_exhausted = False
                         break
-                close_iterator = getattr(resource_iterator, "close", None)
-                if callable(close_iterator):
-                    close_iterator()
                 if pending:
                     first = table_ordinal - len(pending)
                     batch = stager.stage_rows(source_id=catalog.source_id, snapshot_id=snapshot_id, table_id=table.table_id, batch_index=batch_index, first_ordinal=first, rows=pending, schema_fingerprint=catalog.source.schema_fingerprint, staging_root=staging_root)
