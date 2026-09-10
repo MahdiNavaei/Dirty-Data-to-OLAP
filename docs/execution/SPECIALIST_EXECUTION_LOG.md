@@ -909,4 +909,5 @@ handoff_to:
 - scope: surgical closure of the existing Step11 G3 evidence; no new specialist step and no Step12 implementation
 - repaired: stale G3 gate/README contradiction; resolver self-asserted provider safety; duplicate credential resolution; incomplete privilege coverage; weak finding vocabulary; validator and project-temp boundary gaps
 - evidence: security `23 passed`; full suite `96 passed, 41 warnings`; required validators, compileall and diff check PASS
+- closure_content_commit: `b659b6fdd29046e8132d8a4bbbe0ed514af88114`
 - final_state: Step11 PASS; G3/G3A/G3B PASS; last_completed_step=11; current_step=12; current_role=dependency_discovery_engineer; G4-G15=PENDING; blocked=false

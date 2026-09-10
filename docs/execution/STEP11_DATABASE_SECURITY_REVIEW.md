@@ -134,7 +134,8 @@ staged.
 
 ## STEP11 EVIDENCE / STEP12 HANDOFF
 
-Content commit: `b511e83bd1ea59bac56ebb424fdd04a01f976942`.
+Original Step11 content commit: `b511e83bd1ea59bac56ebb424fdd04a01f976942`.
+G3 integrity-closure content commit: `b659b6fdd29046e8132d8a4bbbe0ed514af88114`.
 Step12 remains unimplemented and receives the explicit handoff only after G3.
 
 ## EXECUTION STATE / GIT
