@@ -6,7 +6,7 @@ import re
 from enum import Enum
 from typing import Any, Mapping
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from .source import _SourceModel, stable_digest
 
@@ -65,6 +65,12 @@ class SemanticBudget(_SourceModel):
     timeout_seconds: float = Field(default=20.0, gt=0, le=60)
     max_retries: int = Field(default=0, ge=0, le=1)
 
+    @model_validator(mode="after")
+    def retry_policy_is_truthful(self) -> "SemanticBudget":
+        if self.max_retries != 0:
+            raise ValueError("semantic provider retries are disabled; max_retries must be zero")
+        return self
+
 
 class SemanticPrivacyContext(_SourceModel):
     purpose: str = "SEMANTIC_AI_LOCAL_ANALYSIS"
@@ -109,15 +115,15 @@ class SemanticContextItem(_SourceModel):
         forbidden = re.compile(r"(?i)(raw|value|record|row|password|secret|token|credential|email|phone|address)")
         if any(forbidden.search(str(key)) for key in self.safe_fields):
             raise ValueError("semantic context contains a raw or sensitive field")
-        if any(re.search(r"[^@\s]+@[^@\s]+\.[^@\s]+", str(value)) for value in self.safe_fields.values()):
-            raise ValueError("semantic context contains a raw email-like value")
         return self
 
 
 class SemanticContextManifest(_SourceModel):
     manifest_id: str
     subject_refs: tuple[str, ...]
-    evidence_refs: tuple[str, ...]
+    requested_evidence_refs: tuple[str, ...]
+    provided_context_item_refs: tuple[str, ...]
+    allowed_provider_evidence_refs: tuple[str, ...]
     items: tuple[SemanticContextItem, ...]
     scope: str = "one_subject_or_relationship"
     redaction_policy: str = "aggregate_safe_no_raw_values"
@@ -149,6 +155,7 @@ class SemanticProviderReference(_SourceModel):
     quantization: str | None = None
     capabilities: tuple[str, ...] = ()
     local_loopback_verified: bool = True
+    locality_evidence: str = "loopback_plus_exact_installed_model_digest"
 
 
 class SemanticPromptReference(_SourceModel):
@@ -182,17 +189,30 @@ class SemanticProviderHypothesis(_SourceModel):
     evidence_refs: tuple[str, ...] = ()
     rationale: str = Field(default="", max_length=600)
 
+    @field_validator("statement", "rationale")
+    @classmethod
+    def safe_provider_text(cls, value: str) -> str:
+        normalized = re.sub(r"\s+", " ", value).strip().lower()
+        patterns = (r"\bdrop\s+table\b", r"\bexecute\s+sql\b", r"\brun\s+tool\b", r"\bsend\s+(?:a\s+)?request\b", r"\bmodify\s+data\b", r"\baccepted\b", r"\bcanonical\s+merge\b", r"\bauto[-_ ]?approved\b", r"\bmerged\b")
+        if any(re.search(pattern, normalized) for pattern in patterns):
+            raise ValueError("provider text contains executable or authority language")
+        return value
+
     @model_validator(mode="after")
     def candidate_language(self) -> "SemanticProviderHypothesis":
-        forbidden = ("accepted", "confirmed", "canonical", "auto_approved", "merged", "execute", "repair", "sql")
-        if any(token in self.statement.lower() for token in forbidden):
-            raise ValueError("semantic hypothesis contains authority or executable language")
         return self
 
 
 class SemanticProviderOutput(_SourceModel):
     hypotheses: tuple[SemanticProviderHypothesis, ...] = Field(max_length=16)
     limitations: tuple[str, ...] = Field(default_factory=tuple, max_length=8)
+
+    @field_validator("limitations")
+    @classmethod
+    def safe_limitations(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for item in value:
+            SemanticProviderHypothesis.safe_provider_text(item)
+        return value
 
 
 class SemanticHypothesis(_SourceModel):
@@ -292,3 +312,7 @@ class SemanticEvidenceResult(_SourceModel):
 
 def semantic_evidence_id(*, request_id: str, task: SemanticTask, subjects: tuple[str, ...], hypotheses: tuple[SemanticHypothesis, ...], provider: SemanticProviderReference, prompt: SemanticPromptReference, input_fingerprint: str) -> str:
     return "semantic_" + stable_digest({"request": request_id, "task": task.value, "subjects": subjects, "hypotheses": [item.model_dump(mode="json") for item in hypotheses], "provider": provider.model_dump(mode="json"), "prompt": prompt.model_dump(mode="json"), "input": input_fingerprint})[:32]
+
+
+def semantic_hypothesis_id(*, task: SemanticTask, subjects: tuple[str, ...], kind: SemanticHypothesisKind, statement: str, evidence_refs: tuple[str, ...], prompt_hash: str, input_fingerprint: str, model_digest: str) -> str:
+    return "hypothesis_" + stable_digest({"task": task.value, "subjects": subjects, "kind": kind.value, "statement": re.sub(r"\s+", " ", statement).strip().lower(), "evidence_refs": tuple(sorted(evidence_refs)), "prompt": prompt_hash, "input": input_fingerprint, "model": model_digest})[:32]

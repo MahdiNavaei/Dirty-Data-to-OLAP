@@ -33,7 +33,7 @@ components:
     ports_used: [ControlStorePort, CapabilityRegistryPort]
     implementation_owner: Step27 Backend Engineer
     implementation_step: 27
-    implementation_status: IMPLEMENTED
+    implementation_status: PLANNED
     side_effect_class: control_metadata
     persistence_access: ControlStorePort
     optional: false
@@ -228,7 +228,7 @@ components:
     ports_used: [OptionalSemanticEvidenceAdapter, ArtifactStorePort]
     implementation_owner: Step16 LLM / Semantic AI Engineer
     implementation_step: 16
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: external_optional_and_artifact
     persistence_access: ArtifactStorePort
     optional: true
@@ -546,7 +546,7 @@ components:
     extension_port: OptionalSemanticEvidenceAdapter
     implementation_owner: Step16 LLM / Semantic AI Engineer
     implementation_step: 16
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     capability_required_for_v1: false
     runtime_stage_conditional: true
     side_effect_class: optional_external

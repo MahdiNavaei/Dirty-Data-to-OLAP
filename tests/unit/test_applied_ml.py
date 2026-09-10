@@ -48,6 +48,7 @@ def _rows():
         build_feature_vector(candidate)
         for candidate in (_candidate(index) for index in range(6))
     )
+    vectors = tuple(vector.model_copy(update={"logical_pair_key": "reverse:table_a.table_b"} if index in {0, 1} else {}) for index, vector in enumerate(vectors))
     labels = tuple(
         MLTrainingLabel(
             label_id=f"label_{index}",
@@ -68,6 +69,7 @@ def test_feature_builder_preserves_missingness_and_excludes_identifiers():
     vector = build_feature_vector(_candidate(0))
     assert "inclusion_coverage" in vector.missing_feature_ids
     assert vector.values["inclusion_coverage"] == 0.0
+    assert vector.values["inclusion_coverage_missing"] == 1.0
     assert all(
         token not in feature_id
         for feature_id in default_feature_schema().feature_order
@@ -84,6 +86,14 @@ def test_grouped_split_keeps_reverse_pair_groups_together():
         set(split.row_group_by_id[row_id] for row_id, value in split.assignments.items() if value == "train")
         & set(split.row_group_by_id[row_id] for row_id, value in split.assignments.items() if value == "test")
     )
+    reverse_rows = [row_id for row_id, group in split.row_group_by_id.items() if group == "group_0"]
+    assert len(reverse_rows) == 2 and len({split.assignments[row_id] for row_id in reverse_rows}) == 1
+
+
+def test_step15_fixture_matches_current_feature_schema():
+    fixture = json.loads(Path("benchmarks/applied_ml/step15_relationship_ranker_fixture.json").read_text(encoding="utf-8"))
+    assert fixture["feature_schema_id"] == default_feature_schema().schema_id
+    assert "matcher_max_score" not in json.dumps(fixture)
 
 
 def test_label_shuffle_and_source_id_permutation_are_leakage_negative_controls():
@@ -123,6 +133,13 @@ def test_real_sklearn_adapter_persists_json_and_reconstructs_contributions():
         score = ranker.score(vectors[1])
         contributions = ranker.contributions(vectors[1])
         assert score == pytest.approx(evidence.intercept + sum(item.contribution for item in contributions))
+        loaded = SklearnRelationshipRanker.from_json_artifact(schema, artifact)
+        assert loaded.score(vectors[1]) == pytest.approx(score)
+        tampered = json.loads(artifact.read_text(encoding="utf-8"))
+        tampered["coefficients"][0] = float(tampered["coefficients"][0]) + 1.0
+        artifact.write_text(json.dumps(tampered, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8", newline="")
+        with pytest.raises(ValueError, match="content hash"):
+            SklearnRelationshipRanker.from_json_artifact(schema, artifact)
     finally:
         if root.exists():
             shutil.rmtree(root)

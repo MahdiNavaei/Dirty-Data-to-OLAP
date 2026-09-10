@@ -49,3 +49,15 @@ The ML fixture is synthetic aggregate evidence, not production truth. The
 score is not a calibrated probability, temporal/production performance is
 unverified, and no acceptance or canonical identity decision is emitted.
 Formal G4 remains PENDING; G4A remains PASS; G5-G15 remain PENDING.
+
+## Step16 Upstream Hardening Closure
+
+Step16 closure reverified and hardened the upstream Step15 boundary: COMA and
+Cupid matcher ranks are separate baselines; label permutations are deterministic
+and limited to training labels while held-out labels remain original; reverse
+directions share an actual logical-pair/base-scenario group; one-fit stability
+does not manufacture zero variance; model identity binds configuration, dataset,
+split and sklearn version; application inference loads labels-free JSON artifacts
+with schema, coefficient, finiteness, configuration and content-hash validation;
+normal learned-evidence runtime has no explicit benchmark-label input; the feature
+schema version and fixture were updated together; and artifact tampering is tested.

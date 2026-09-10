@@ -89,7 +89,8 @@ stages:
     capability_required_for_v1: false
     dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING, DEPENDENCY_DISCOVERY]
     optional_dependencies: [SCHEMA_MATCHING, QUALITY_ANALYSIS]
-    input_artifact_types: [RelationshipCandidate, InclusionDependencyEvidence, SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, ColumnProfile, QualityResult, explicit benchmark labels]
+    input_artifact_types: [RelationshipCandidate, InclusionDependencyEvidence, SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, ColumnProfile, QualityResult]
+    optional_training_inputs: [MLTrainingLabel, benchmark dataset configuration]
     output_artifact_types: [MLFeatureVector, MLBaselineEvaluation, MLModelEvidence, LearnedRankingEvidence, MLFeatureContribution, MLRankStabilityObservation, ActiveLearningSuggestion, MLCalibrationExperiment]
     failure_consequence: SKIPPED or explicit UNAVAILABLE/INSUFFICIENT_DATA/FAILED; deterministic baseline is retained
     cacheable: true

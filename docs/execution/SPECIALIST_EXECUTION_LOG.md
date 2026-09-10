@@ -983,3 +983,14 @@ handoff_to:
 - intermediate_milestone: `G4A_INDEPENDENT_EVIDENCE_PRODUCERS=PASS`; learned output remains candidate ranking evidence only
 - handoff_to: `Step16 - LLM / Semantic AI Engineer`
 - next_state: `last_completed_step=15`, `current_step=16`, `current_role=llm_semantic_ai_engineer`, `G0-G3/G3A/G3B=PASS`, `G4=PENDING`, `G4A=PASS`, `G5-G15=PENDING`, `blocked=false`
+
+## Post-Step16 G4 Integrity Closure
+
+- execution_step: `16` closure only; Evidence Fusion implementation was not started
+- starting_head: `b2a780e4219bbd7a8e375090342b267bd844a3e8`
+- repaired: exact prompt provenance; recursive privacy minimization; exact semantic references; local-model fail-closed identity; request/output budgets; safe candidate language; project-owned hypothesis identity; final-byte artifact hashing; executable 11-case semantic safety benchmark; behavioral semantic/applied-ML validators; all listed Step15 upstream hardening defects
+- real_provider: Ollama `0.31.1`, verified local `qwen2.5:7b`, digest `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e`; benign, injection and ambiguity calls executed; repeatability exactly 3 calls
+- evaluation: 11-case live `SemanticSafetyEvaluation`; schema-valid `10/11`; reference-valid `1.0`; forbidden actions `0`; hallucinated refs `0`; privacy canaries `0`; prompt-injection escapes `0`; contained provider failures `1`; repeatability schema/exact/kind/reference rates all `1.0`
+- verification: isolated project-local venv with test/files/sql/profiling/excel/ml extras; unit `82 passed`; contract `5 passed`; integration `29 passed, 2 optional skips`; architecture `7 passed`; security `23 passed`; full suite `146 passed, 2 optional skips`; compileall, diff check and every `tools/validate_*.py` PASS
+- limitations: labels and semantic cases remain benchmark/evidence controls, not production truth; Step15 remains experimental and uncalibrated; no acceptance, canonical identity, mutation, deployment or release claim
+- final_state: `last_completed_step=16`, `current_step=17`, `current_role=evidence_fusion_engineer`, `G0-G4=PASS`, `G5-G15=PENDING`, `blocked=false`; Step17 implementation not started

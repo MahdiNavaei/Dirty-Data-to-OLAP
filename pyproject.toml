@@ -20,6 +20,7 @@ entity_resolution = [
 ]
 test = [
   "pytest>=8.4,<9",
+  "PyYAML>=6.0,<7",
 ]
 sql = [
   "dlt==1.30.0",

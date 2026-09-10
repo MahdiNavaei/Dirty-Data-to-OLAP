@@ -1,15 +1,17 @@
 {
   "fixture_id": "step15-relationship-ranker-v1",
   "task": "RELATIONSHIP_CANDIDATE_RANKING",
+  "feature_schema_id": "relationship-ranker-features-v2",
+  "feature_schema_version": "2",
   "scope": "synthetic aggregate evidence only",
   "labels_are": "explicit benchmark labels, not production truth",
   "rows": [
-    {"row_id": "ml-row-01", "candidate_ref": "candidate-01", "group_id": "scenario-01", "label": 1, "features": {"inclusion_coverage": 0.99, "ind_unmatched_ratio": 0.01, "target_uniqueness_ratio": 0.99, "type_compatible": 1.0, "low_cardinality_risk": 0.0, "matcher_max_score": 0.95}},
-    {"row_id": "ml-row-02", "candidate_ref": "candidate-02", "group_id": "scenario-01", "label": 0, "features": {"inclusion_coverage": 0.61, "ind_unmatched_ratio": 0.39, "target_uniqueness_ratio": 0.31, "type_compatible": 0.0, "low_cardinality_risk": 1.0, "matcher_max_score": 0.52}},
-    {"row_id": "ml-row-03", "candidate_ref": "candidate-03", "group_id": "scenario-02", "label": 1, "features": {"inclusion_coverage": 0.94, "ind_unmatched_ratio": 0.06, "target_uniqueness_ratio": 0.91, "type_compatible": 1.0, "low_cardinality_risk": 0.0, "matcher_max_score": 0.88}},
-    {"row_id": "ml-row-04", "candidate_ref": "candidate-04", "group_id": "scenario-02", "label": 0, "features": {"inclusion_coverage": 0.55, "ind_unmatched_ratio": 0.45, "target_uniqueness_ratio": 0.45, "type_compatible": 1.0, "low_cardinality_risk": 1.0, "matcher_max_score": 0.49}},
-    {"row_id": "ml-row-05", "candidate_ref": "candidate-05", "group_id": "scenario-03", "label": 1, "features": {"inclusion_coverage": 0.87, "ind_unmatched_ratio": 0.13, "target_uniqueness_ratio": 0.86, "type_compatible": 1.0, "low_cardinality_risk": 0.0, "matcher_max_score": 0.81}},
-    {"row_id": "ml-row-06", "candidate_ref": "candidate-06", "group_id": "scenario-03", "label": 0, "features": {"inclusion_coverage": 0.72, "ind_unmatched_ratio": 0.28, "target_uniqueness_ratio": 0.28, "type_compatible": 0.0, "low_cardinality_risk": 1.0, "matcher_max_score": 0.64}}
+    {"row_id": "ml-row-01", "candidate_ref": "candidate-01", "group_id": "scenario-01", "label": 1, "features": {"inclusion_coverage": 0.99, "ind_unmatched_ratio": 0.01, "target_uniqueness_ratio": 0.99, "type_compatible": 1.0, "low_cardinality_risk": 0.0, "matcher_valentine_coma_schema_v1_score": 0.95}},
+    {"row_id": "ml-row-02", "candidate_ref": "candidate-02", "group_id": "scenario-01", "label": 0, "features": {"inclusion_coverage": 0.61, "ind_unmatched_ratio": 0.39, "target_uniqueness_ratio": 0.31, "type_compatible": 0.0, "low_cardinality_risk": 1.0, "matcher_valentine_coma_schema_v1_score": 0.52}},
+    {"row_id": "ml-row-03", "candidate_ref": "candidate-03", "group_id": "scenario-02", "label": 1, "features": {"inclusion_coverage": 0.94, "ind_unmatched_ratio": 0.06, "target_uniqueness_ratio": 0.91, "type_compatible": 1.0, "low_cardinality_risk": 0.0, "matcher_valentine_coma_schema_v1_score": 0.88}},
+    {"row_id": "ml-row-04", "candidate_ref": "candidate-04", "group_id": "scenario-02", "label": 0, "features": {"inclusion_coverage": 0.55, "ind_unmatched_ratio": 0.45, "target_uniqueness_ratio": 0.45, "type_compatible": 1.0, "low_cardinality_risk": 1.0, "matcher_valentine_coma_schema_v1_score": 0.49}},
+    {"row_id": "ml-row-05", "candidate_ref": "candidate-05", "group_id": "scenario-03", "label": 1, "features": {"inclusion_coverage": 0.87, "ind_unmatched_ratio": 0.13, "target_uniqueness_ratio": 0.86, "type_compatible": 1.0, "low_cardinality_risk": 0.0, "matcher_valentine_coma_schema_v1_score": 0.81}},
+    {"row_id": "ml-row-06", "candidate_ref": "candidate-06", "group_id": "scenario-03", "label": 0, "features": {"inclusion_coverage": 0.72, "ind_unmatched_ratio": 0.28, "target_uniqueness_ratio": 0.28, "type_compatible": 0.0, "low_cardinality_risk": 1.0, "matcher_valentine_coma_schema_v1_score": 0.64}}
   ],
   "limitations": [
     "aggregate synthetic fixture only",

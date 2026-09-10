@@ -297,11 +297,11 @@ class LearnedRankingEvidence(_SourceModel):
 class MLRankStabilityObservation(_SourceModel):
     observation_id: str
     candidate_id: str
-    score_mean: float
-    score_stddev: float = Field(ge=0)
-    rank_mean: float
-    rank_stddev: float = Field(ge=0)
-    top_rank_frequency: float = Field(ge=0, le=1)
+    score_mean: float | None = None
+    score_stddev: float | None = Field(default=None, ge=0)
+    rank_mean: float | None = None
+    rank_stddev: float | None = Field(default=None, ge=0)
+    top_rank_frequency: float | None = Field(default=None, ge=0, le=1)
     methods: tuple[str, ...] = Field(min_length=1)
 
 

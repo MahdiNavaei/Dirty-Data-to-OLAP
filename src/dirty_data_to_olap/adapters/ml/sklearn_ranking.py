@@ -11,6 +11,7 @@ import json
 import os
 import platform
 import tempfile
+import math
 from pathlib import Path
 from typing import Any
 
@@ -130,8 +131,9 @@ class SklearnRelationshipRanker:
             sklearn_version=sklearn_version,
             missing_value_policy="project_contract_missing_as_zero_with_explicit_missing_feature_ids",
         )
+        identity_hash = hashlib.sha256(f"{config_hash}:{dataset_manifest.dataset_fingerprint}:{split_manifest.split_fingerprint}:{sklearn_version}".encode()).hexdigest()
         specification = MLModelSpecification(
-            model_id=f"{model_id}-{config_hash[:16]}",
+            model_id=f"{model_id}-{identity_hash[:24]}",
             task=self.feature_schema.task,
             hyperparameters=self.hyperparameters,
             random_seed=self.random_seed,
@@ -167,12 +169,29 @@ class SklearnRelationshipRanker:
     def from_json_artifact(cls, feature_schema: MLFeatureSchema, path: str | Path) -> "SklearnRelationshipRanker":
         """Load only the project JSON inference artifact; labels are not required."""
         artifact = Path(path)
+        try:
+            artifact.resolve().relative_to(Path.cwd().resolve())
+        except ValueError:
+            raise ValueError("model artifact escapes the project root") from None
         payload = json.loads(artifact.read_text(encoding="utf-8"))
-        if payload.get("feature_schema_id") != feature_schema.schema_id or tuple(payload.get("feature_order", ())) != feature_schema.feature_order:
+        if payload.get("artifact_version") != "step15-linear-json-v2":
+            raise ValueError("unsupported model artifact version")
+        declared_hash = payload.get("artifact_content_hash")
+        unsigned = dict(payload)
+        unsigned.pop("artifact_content_hash", None)
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")) + "\n"
+        if not isinstance(declared_hash, str) or _artifact_hash(canonical) != declared_hash:
+            raise ValueError("model artifact content hash validation failed")
+        if payload.get("task") != feature_schema.task.value or payload.get("feature_schema_id") != feature_schema.schema_id or payload.get("feature_schema_version") != feature_schema.version or tuple(payload.get("feature_order", ())) != feature_schema.feature_order:
             raise ValueError("model artifact feature schema does not match inference schema")
         coefficients = tuple(float(value) for value in payload.get("coefficients", ()))
         if len(coefficients) != len(feature_schema.feature_order):
             raise ValueError("model artifact coefficient count does not match feature schema")
+        if any(not math.isfinite(value) for value in coefficients) or not math.isfinite(float(payload.get("intercept"))):
+            raise ValueError("model artifact contains non-finite coefficients")
+        expected_config = ml_model_config_hash(task=feature_schema.task, feature_schema=feature_schema, estimator_family="sklearn.linear_model.LogisticRegression", hyperparameters=payload.get("hyperparameters", {}), random_seed=int(payload.get("random_seed", 0)), sklearn_version=str(payload.get("sklearn_version", "unknown")), missing_value_policy="project_contract_missing_as_zero_with_explicit_missing_feature_ids")
+        if expected_config != payload.get("model_config_hash"):
+            raise ValueError("model artifact model configuration identity is invalid")
         ranker = cls(feature_schema, random_seed=int(payload.get("random_seed", 0)))
         ranker._coefficients = coefficients
         ranker._intercept = float(payload["intercept"])
@@ -240,7 +259,7 @@ class SklearnRelationshipRanker:
         path.parent.mkdir(parents=True, exist_ok=True)
         _, _, version = self.capability()
         payload = {
-            "artifact_version": "step15-linear-json-v1",
+            "artifact_version": "step15-linear-json-v2",
             "model_id": evidence.specification.model_id,
             "task": evidence.specification.task.value,
             "feature_schema_id": self.feature_schema.schema_id,
@@ -258,19 +277,20 @@ class SklearnRelationshipRanker:
             "hyperparameters": dict(evidence.specification.hyperparameters),
             "random_seed": evidence.specification.random_seed,
         }
+        unsigned = dict(payload)
+        payload["artifact_content_hash"] = _artifact_hash(json.dumps(unsigned, sort_keys=True, separators=(",", ":")) + "\n")
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
         temporary: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
+                mode="wb",
                 dir=str(path.parent),
                 prefix=f".{path.name}.",
                 suffix=".tmp",
                 delete=False,
             ) as handle:
                 temporary = handle.name
-                handle.write(serialized)
+                handle.write(serialized.encode("utf-8"))
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, path)
@@ -281,7 +301,7 @@ class SklearnRelationshipRanker:
         artifact_digest = _artifact_hash(serialized)
         self._evidence = self._evidence.model_copy(
             update={
-                "artifact_location": str(path),
+                "artifact_location": str(path.resolve().relative_to(Path.cwd().resolve())).replace("\\", "/"),
                 "artifact_content_hash": artifact_digest,
             }
         )

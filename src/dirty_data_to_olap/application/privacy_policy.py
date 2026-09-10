@@ -64,7 +64,7 @@ class PrivacyPolicyService:
             return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="semantic AI context failed the fixed local-only contract", classification_id="semantic-ai-local-analysis", failure_ref="privacy-semantic-context-invalid")
         if validated.purpose != "SEMANTIC_AI_LOCAL_ANALYSIS" or not provider_ref.local_loopback_verified or provider_ref.endpoint not in {"http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434"}:
             return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="semantic AI provider is not verified loopback local", classification_id="semantic-ai-local-analysis", failure_ref="privacy-semantic-provider-not-local")
-        if not context_manifest.subject_refs or any(item not in context_manifest.evidence_refs for item in request.evidence_refs if item):
+        if not context_manifest.subject_refs or set(context_manifest.allowed_provider_evidence_refs) != set(context_manifest.provided_context_item_refs):
             return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="semantic AI request and context manifest are not bound", classification_id="semantic-ai-local-analysis", failure_ref="privacy-semantic-scope-unbound")
         authorization = SemanticAuthorization(
             authorization_id="semantic-auth-" + hashlib.sha256(f"{self.policy.policy_id}:{self.policy.version}:{request.request_id}:{request.task.value}:{context_manifest.input_fingerprint}:{provider_ref.model}:{provider_ref.model_digest}:{prompt_ref.prompt_version}".encode()).hexdigest()[:32],
@@ -74,7 +74,7 @@ class PrivacyPolicyService:
             task=request.task,
             context_manifest_fingerprint=context_manifest.input_fingerprint,
             subject_refs=request.subject_refs,
-            evidence_refs=request.evidence_refs,
+            evidence_refs=context_manifest.allowed_provider_evidence_refs,
             model=provider_ref.model,
             model_digest=provider_ref.model_digest,
             prompt_version=prompt_ref.prompt_version,

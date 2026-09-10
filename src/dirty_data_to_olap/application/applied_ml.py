@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import random
 from typing import Any, Iterable, Mapping
 
 from dirty_data_to_olap.adapters.ml.dataset import (
@@ -56,16 +57,17 @@ def _declared_score(vector: Any) -> float:
     return _value(vector, "declared_fk_present") if "declared_fk_present" not in vector.missing_feature_ids else 0.0
 
 
-def _matcher_rank_score(vector: Any) -> float:
-    ranks = [_value(vector, key) for key in vector.values if key.endswith("_rank") and not key.endswith("_missing") and key.startswith("matcher_") and key not in vector.missing_feature_ids]
-    return 1.0 / min(ranks) if ranks else 0.0
+def _matcher_family_rank_score(vector: Any, family: str) -> float:
+    key = next((key for key in vector.values if key.startswith(f"matcher_{family}_") and key.endswith("_rank") and not key.endswith("_missing")), None)
+    return 1.0 / _value(vector, key) if key and key not in vector.missing_feature_ids and _value(vector, key) > 0 else 0.0
 
 
 _BASELINES = (
     ("ind_coverage", "IND coverage baseline", _structural_score),
     ("target_uniqueness", "target uniqueness baseline", _uniqueness_score),
     ("declared_constraint", "declared constraint baseline", _declared_score),
-    ("individual_matcher_rank", "individual matcher rank baseline", _matcher_rank_score),
+    ("coma_rank", "COMA individual rank baseline", lambda vector: _matcher_family_rank_score(vector, "valentine_coma_schema_v1")),
+    ("cupid_rank", "Cupid individual rank baseline", lambda vector: _matcher_family_rank_score(vector, "valentine_cupid_schema_v1")),
 )
 
 
@@ -90,6 +92,12 @@ class AppliedMLService:
         max_active_learning_suggestions: int = 5,
     ) -> None:
         self.artifact_root = artifact_root
+        if artifact_root is not None:
+            resolved_root = artifact_root.resolve()
+            try:
+                resolved_root.relative_to(Path.cwd().resolve())
+            except ValueError:
+                raise ValueError("applied ML artifact root escapes the project root") from None
         self.random_seed = random_seed
         self.max_active_learning_suggestions = max_active_learning_suggestions
 
@@ -260,7 +268,18 @@ class AppliedMLService:
                 "reverse_pair_leakage_status": "PASS_GROUPS_SHARED_BY_LOGICAL_PAIR",
             }
         )
-        shuffled_rows = tuple(row.model_copy(update={"label": row.label.model_copy(update={"label": 1 - row.label.label})}) for row in dataset_rows)
+        train_labels = [row.label.label for row in dataset_rows if split_manifest.assignments.get(row.row_id) == "train"]
+        permutation = list(train_labels)
+        random.Random(self.random_seed + 1).shuffle(permutation)
+        cursor = 0
+        shuffled_rows = []
+        for row in dataset_rows:
+            if split_manifest.assignments.get(row.row_id) == "train":
+                shuffled_rows.append(row.model_copy(update={"label": row.label.model_copy(update={"label": permutation[cursor]})}))
+                cursor += 1
+            else:
+                shuffled_rows.append(row)
+        shuffled_rows = tuple(shuffled_rows)
         shuffle_metrics = None
         try:
             shuffled_ranker = SklearnRelationshipRanker(feature_schema, random_seed=self.random_seed + 1)
@@ -301,11 +320,11 @@ class AppliedMLService:
             MLRankStabilityObservation(
                 observation_id=f"stability_{stable_digest(vector.candidate_id)[:24]}",
                 candidate_id=vector.candidate_id,
-                score_mean=score_by_candidate[vector.candidate_id],
-                score_stddev=0.0,
-                rank_mean=float(rank_by_candidate[vector.candidate_id]),
-                rank_stddev=0.0,
-                top_rank_frequency=1.0 if rank_by_candidate[vector.candidate_id] <= 3 else 0.0,
+                score_mean=None,
+                score_stddev=None,
+                rank_mean=None,
+                rank_stddev=None,
+                top_rank_frequency=None,
                 methods=("INSUFFICIENT_STABILITY_EVIDENCE",),
             )
             for vector in ranked
@@ -375,3 +394,10 @@ class AppliedMLService:
                 "no acceptance, canonicalization, or production probability is emitted",
             ),
         )
+
+    def score_candidates_from_artifact(self, candidates: Iterable[Any], artifact_path: Path, **kwargs: Any) -> tuple[tuple[str, float], ...]:
+        """Label-free application inference from a validated JSON artifact."""
+        schema = default_feature_schema()
+        ranker = SklearnRelationshipRanker.from_json_artifact(schema, artifact_path)
+        vectors = tuple(build_feature_vector(candidate, **kwargs) for candidate in candidates)
+        return tuple((vector.candidate_id, ranker.score(vector)) for vector in vectors)

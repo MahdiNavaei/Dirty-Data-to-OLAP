@@ -56,8 +56,8 @@ def _defs() -> tuple[MLFeatureDefinition, ...]:
 def default_feature_schema() -> MLFeatureSchema:
     definitions = _defs()
     return MLFeatureSchema(
-        schema_id="relationship-ranker-features-v1",
-        version="1",
+        schema_id="relationship-ranker-features-v2",
+        version="2",
         task=MLTask.RELATIONSHIP_CANDIDATE_RANKING,
         features=definitions,
         feature_order=tuple(item.feature_id for item in definitions),
