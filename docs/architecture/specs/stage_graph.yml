@@ -51,7 +51,7 @@ stages:
     capability_required_for_v1: true
     conditional: true
     dependencies: [SOURCE_SNAPSHOT_STAGE, PROFILING]
-    optional_dependencies: []
+    optional_dependencies: [DEPENDENCY_DISCOVERY]
     input_artifact_types: [SourceCatalogs, SourceSnapshotResults, BatchReference, ColumnProfile, TableProfile, SchemaMatchRequest]
     optional_input_artifact_types: [DependencyEvidence, "MatchingAuthorization when INSTANCE_AWARE"]
     output_artifact_types: [SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, SchemaMatchFailure, SchemaMatchCapability, SchemaMatchPruningSummary, SchemaMatchArtifactReference]

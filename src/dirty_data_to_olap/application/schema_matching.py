@@ -18,7 +18,7 @@ class SchemaMatchingService:
     def match(self, request: SchemaMatchRequest, catalogs: Mapping[str, Any], snapshots: Mapping[str, Any], *, profiles: Any | None = None, dependencies: Mapping[str, Any] | None = None, artifact_root: Path | None = None) -> SchemaMatchResult:
         authorization = None
         if request.mode is SchemaMatchMode.INSTANCE_AWARE:
-            artifact_ids = tuple(batch.batch_id for snapshot in snapshots.values() for batch in snapshot.batches)
+            artifact_ids = tuple(batch.batch_id for source_id, snapshot in snapshots.items() for batch in snapshot.batches if batch.table_id in request.selected_table_ids_by_source[source_id])
             decision = self.privacy_policy.authorize_schema_matching_analysis(request.privacy_context, source_ids=request.source_ids, snapshot_ids=request.snapshot_ids, table_ids_by_source=request.selected_table_ids_by_source, column_ids_by_table=request.selected_column_ids_by_table, artifact_ids=artifact_ids)
             if decision.allowed:
                 authorization = self.privacy_policy.matching_authorization_for_decision(decision)

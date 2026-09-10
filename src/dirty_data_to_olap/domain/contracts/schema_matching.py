@@ -39,6 +39,7 @@ class SchemaMatchSignalFamily(str, Enum):
     DEPENDENCY = "DEPENDENCY"
     DECLARED_METADATA = "DECLARED_METADATA"
     DOMAIN_ASSERTION = "DOMAIN_ASSERTION"
+    TABLE_CONTEXT = "TABLE_CONTEXT"
 
 
 class SchemaMatchFailureKind(str, Enum):
@@ -70,7 +71,7 @@ class SchemaMatchSearchPolicy(_SourceModel):
     max_matchers: int = Field(default=2, ge=1, le=8)
     top_k_per_left_column: int = Field(default=3, ge=1, le=100)
     max_output_candidates: int = Field(default=2_000, ge=1, le=100_000)
-    max_runtime_seconds: int = Field(default=120, ge=1, le=86_400)
+    max_runtime_seconds: int = Field(default=120, ge=1, le=86_400, description="Cooperative pre-call/post-call budget; it does not interrupt an in-process Valentine call")
     reject_type_incompatible: bool = True
 
 
@@ -200,6 +201,10 @@ class SchemaMatchObservationScope(_SourceModel):
     sample_identity: str
     raw_values_local_only: bool = True
     reduced_scope: bool = False
+    excluded_table_ids_by_source: Mapping[str, tuple[str, ...]] = Field(default_factory=dict)
+    excluded_column_ids_by_table: Mapping[str, tuple[str, ...]] = Field(default_factory=dict)
+    instance_rows_read: int = Field(default=0, ge=0)
+    instance_evidence_used: bool = False
 
 
 class SchemaMatchSignal(_SourceModel):
@@ -290,7 +295,12 @@ class SchemaMatchPruningSummary(_SourceModel):
     column_pairs_evaluated: int
     matcher_calls: int
     evaluated_by_matcher: Mapping[str, int]
+    provider_table_pair_calls_by_matcher: Mapping[str, int] = Field(default_factory=dict)
+    provider_visible_column_pairs_by_matcher: Mapping[str, int] = Field(default_factory=dict)
+    eligible_column_pairs_by_matcher: Mapping[str, int] = Field(default_factory=dict)
     returned_by_matcher: Mapping[str, int]
+    retained_by_matcher: Mapping[str, int] = Field(default_factory=dict)
+    top_k_retained_by_matcher: Mapping[str, int] = Field(default_factory=dict)
     output_candidates_emitted: int
     output_truncated: bool
     truncation_reasons: tuple[str, ...] = ()
@@ -313,6 +323,9 @@ class SchemaMatchEvaluation(_SourceModel):
     mean_reciprocal_rank: float = Field(ge=0)
     labeled_positive_count: int = Field(ge=0)
     evaluated_candidate_count: int = Field(ge=0)
+    hard_negative_count: int = Field(default=0, ge=0)
+    hard_negative_exposed_at_k: Mapping[str, int] = Field(default_factory=dict)
+    false_positive_at_k: Mapping[str, int] = Field(default_factory=dict)
     limitations: tuple[str, ...] = ()
 
 
@@ -348,6 +361,7 @@ def schema_match_config_hash(request: SchemaMatchRequest) -> str:
         "normalization_policy_version": request.normalization_policy_version,
         "abbreviation_dictionary_version": request.abbreviation_dictionary_version,
         "abbreviation_dictionary": request.abbreviation_dictionary,
+        "sample_seed": request.sample_seed if request.mode is SchemaMatchMode.INSTANCE_AWARE else None,
         "matcher_references": [item.model_dump(mode="json") for item in request.matcher_references],
         "search_policy": request.search_policy.model_dump(mode="json"),
     })

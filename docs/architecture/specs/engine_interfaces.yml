@@ -62,7 +62,8 @@ interfaces:
     forbidden_behavior: [source reconnect, source writes, native Desbordante objects in project contracts, raw values in artifacts/logs, unbounded combinations, confirmed FK without project decision, authorization from context alone, silent provider null coercion]
   - interface_id: SchemaMatchingAdapter
     purpose: Bounded, explainable ranked cross-source mapping candidates over pinned snapshots.
-    input_contracts: [SourceCatalogs, SourceSnapshotResults, Profiles, DependencyEvidence, SchemaMatchRequest, MatchingAuthorization]
+    input_contracts: [SourceCatalogs, SourceSnapshotResults, BatchReference, Profiles, SchemaMatchRequest]
+    optional_input_contracts: [DependencyEvidence, MatchingAuthorization when INSTANCE_AWARE]
     output_contracts: [SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, SchemaMatchFailure, SchemaMatchCapability, SchemaMatchPruningSummary, SchemaMatchArtifactReference]
     side_effects: [read_complete_hash_bound_staged_artifacts, write_artifacts, local_instance_sampling]
     idempotency: pinned source/snapshot hashes, request configuration and adapter version

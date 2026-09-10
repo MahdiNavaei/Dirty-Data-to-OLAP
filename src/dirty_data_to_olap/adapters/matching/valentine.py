@@ -29,6 +29,10 @@ from dirty_data_to_olap.domain.contracts.schema_matching import (
 from dirty_data_to_olap.domain.contracts.source import AdapterReference, SourceCatalog, SourceSnapshotResult, TableObservationStatus
 
 
+class _UnsupportedMatcherMode(ValueError):
+    """A matcher configuration cannot run under the requested observation mode."""
+
+
 class ValentineSchemaMatchingAdapter:
     """Use only the official Valentine package behind project-owned contracts."""
 
@@ -66,7 +70,7 @@ class ValentineSchemaMatchingAdapter:
         try:
             self._validate_entry(request, catalogs, snapshots, authorization)
             frames, metadata, scope = self._load_frames(request, catalogs, snapshots)
-        except (ValueError, DependencyInputIntegrityError) as error:
+        except (ValueError, PermissionError, DependencyInputIntegrityError) as error:
             failures.append(SchemaMatchFailure(failure_id=self._failure_id(request, "input"), request_id=request.request_id, kind=SchemaMatchFailureKind.STAGED_INPUT_INTEGRITY_FAILED if isinstance(error, DependencyInputIntegrityError) else SchemaMatchFailureKind.PRIVACY_BLOCKED if isinstance(error, PermissionError) else SchemaMatchFailureKind.INPUT_INVALID, detail=str(error)))
             return self._result(request, catalogs, snapshots, capability, failures, scope=self._empty_scope(request, catalogs, snapshots), config_hash=config_hash, status=SchemaMatchStatus.FAILED)
         if capability.status is not SchemaMatchCapabilityStatus.AVAILABLE:
@@ -91,10 +95,14 @@ class ValentineSchemaMatchingAdapter:
             failures.append(self._budget_failure(request, "max_table_pairs"))
 
         matcher_refs = request.matcher_references[:policy.max_matchers]
-        native_results: dict[str, Mapping[Any, float]] = {}
-        matcher_details: dict[str, Mapping[Any, Mapping[str, float]]] = {}
+        native_results: dict[str, list[tuple[Any, float]]] = {}
         evaluated_by_matcher: dict[str, int] = {}
+        provider_table_pair_calls: dict[str, int] = {}
+        provider_visible_column_pairs: dict[str, int] = {}
+        eligible_column_pairs_by_matcher: dict[str, int] = {}
         returned_by_matcher: dict[str, int] = {}
+        retained_by_matcher: dict[str, int] = {}
+        top_k_retained_by_matcher: dict[str, int] = {}
         matcher_calls = 0
         runtime_limited = False
         try:
@@ -105,18 +113,11 @@ class ValentineSchemaMatchingAdapter:
             failures.append(SchemaMatchFailure(failure_id=self._failure_id(request, "runtime-import"), request_id=request.request_id, kind=SchemaMatchFailureKind.CAPABILITY_UNAVAILABLE, detail="official Valentine import failed after capability discovery", retryable=True))
             return self._result(request, catalogs, snapshots, capability, failures, scope=scope, config_hash=config_hash, status=SchemaMatchStatus.FAILED)
 
-        selected_frames = {name: frame for name, frame in frames.items()}
         metadata_by_name = {name: item for name, item in metadata.items()}
-        eligible_budget = sum(
-            1
-            for left_source, left_table, right_source, right_table in table_pairs
-            for left in metadata_by_name[f"{left_source}::{left_table}"]["columns"].values()
-            for right in metadata_by_name[f"{right_source}::{right_table}"]["columns"].values()
-            if self._eligible_types(left, right, policy)
-        )
-        if eligible_budget > policy.max_column_pairs:
+        pair_inputs, column_stats = self._bounded_pair_inputs(table_pairs, frames, metadata_by_name, request)
+        if column_stats["provider_visible"] > policy.max_column_pairs:
             failures.append(self._budget_failure(request, "max_column_pairs"))
-            matcher_refs = ()
+            pair_inputs = ()
         for reference in matcher_refs:
             if time.monotonic() - started > policy.max_runtime_seconds:
                 runtime_limited = True
@@ -124,14 +125,40 @@ class ValentineSchemaMatchingAdapter:
                 break
             try:
                 matcher = self._build_matcher(reference, request.mode, Coma, Cupid, DistributionBased)
-                result = valentine.valentine_match(list(selected_frames.values()), matcher, df_names=list(selected_frames), instance_sample_size=policy.max_instance_rows_per_table)
-                native_results[reference.matcher_id] = result
-                matcher_details[reference.matcher_id] = {pair: result.get_details(pair) or {} for pair in result}
-                matcher_calls += 1
-                evaluated_by_matcher[reference.matcher_id] = len(self._eligible_pair_keys(metadata_by_name, policy))
-                returned_by_matcher[reference.matcher_id] = len(result)
+                native_results[reference.matcher_id] = []
+                provider_table_pair_calls[reference.matcher_id] = 0
+                provider_visible_column_pairs[reference.matcher_id] = column_stats["provider_visible"]
+                eligible_column_pairs_by_matcher[reference.matcher_id] = column_stats["eligible"]
+                evaluated_by_matcher[reference.matcher_id] = column_stats["eligible"]
+                returned_by_matcher[reference.matcher_id] = 0
+                for left_name, right_name, left_frame, right_frame in pair_inputs:
+                    if time.monotonic() - started > policy.max_runtime_seconds:
+                        runtime_limited = True
+                        failures.append(self._budget_failure(request, "max_runtime_seconds"))
+                        break
+                    result = valentine.valentine_match(
+                        [left_frame, right_frame],
+                        matcher,
+                        df_names=[left_name, right_name],
+                        instance_sample_size=policy.max_instance_rows_per_table,
+                    )
+                    native_results[reference.matcher_id].extend((pair, float(raw)) for pair, raw in result.items())
+                    provider_table_pair_calls[reference.matcher_id] += 1
+                    matcher_calls += 1
+                    returned_by_matcher[reference.matcher_id] += len(result)
             except Exception as error:
+                native_results.pop(reference.matcher_id, None)
+                provider_table_pair_calls.pop(reference.matcher_id, None)
+                provider_visible_column_pairs.pop(reference.matcher_id, None)
+                eligible_column_pairs_by_matcher.pop(reference.matcher_id, None)
+                evaluated_by_matcher.pop(reference.matcher_id, None)
+                returned_by_matcher.pop(reference.matcher_id, None)
+                if isinstance(error, _UnsupportedMatcherMode):
+                    kind = SchemaMatchFailureKind.UNSUPPORTED_MODE
+                else:
+                    kind = SchemaMatchFailureKind.MATCHER_FAILED
                 failures.append(SchemaMatchFailure(failure_id=self._failure_id(request, reference.matcher_id), request_id=request.request_id, kind=SchemaMatchFailureKind.MATCHER_FAILED, matcher_id=reference.matcher_id, detail=f"Valentine matcher failed: {error.__class__.__name__}", retryable=True))
+                failures[-1] = failures[-1].model_copy(update={"kind": kind, "detail": str(error) if kind is SchemaMatchFailureKind.UNSUPPORTED_MODE else f"Valentine matcher failed: {error.__class__.__name__}"})
 
         scores: list[SchemaMatchScore] = []
         signal_map: dict[str, SchemaMatchSignal] = {}
@@ -143,7 +170,7 @@ class ValentineSchemaMatchingAdapter:
             if result is None:
                 continue
             directional = []
-            for pair, raw in result.items():
+            for pair, raw in result:
                 left = metadata_by_name.get(pair.source_table)
                 right = metadata_by_name.get(pair.target_table)
                 if left is None or right is None or left["source_id"] == right["source_id"]:
@@ -168,6 +195,8 @@ class ValentineSchemaMatchingAdapter:
                 scores.append(score)
                 candidate_scores.setdefault(candidate_id, []).append(score_id)
                 candidate_meta[candidate_id] = (left_col, right_col)
+            retained_by_matcher[reference.matcher_id] = sum(1 for score in scores if score.matcher.matcher_id == reference.matcher_id)
+            top_k_retained_by_matcher[reference.matcher_id] = retained_by_matcher[reference.matcher_id]
 
         for candidate_id, (left_col, right_col) in candidate_meta.items():
             left_endpoint, right_endpoint = sorted((left_col, right_col), key=lambda item: (item["source_id"], item["table_id"], item["column_id"]))
@@ -176,15 +205,23 @@ class ValentineSchemaMatchingAdapter:
             candidate_meta[candidate_id] = (left_endpoint, right_endpoint)
             candidate_signal_refs[candidate_id] = signal_refs
 
-        ordered_candidates = sorted(candidate_meta.items(), key=lambda item: (-max((score.raw_native_score for score in scores if score.score_id in candidate_scores[item[0]]), default=0.0), item[0]))
+        matcher_order = {reference.matcher_id: index for index, reference in enumerate(matcher_refs)}
+        score_by_id = {score.score_id: score for score in scores}
+        ordered_candidates = sorted(
+            candidate_meta.items(),
+            key=lambda item: (
+                min((matcher_order.get(score_by_id[ref].matcher.matcher_id, len(matcher_order)), score_by_id[ref].rank, score_by_id[ref].source_column_id, score_by_id[ref].target_column_id) for ref in candidate_scores[item[0]]),
+                item[0],
+            ),
+        )
         output_truncated = len(ordered_candidates) > policy.max_output_candidates
         if output_truncated:
             failures.append(self._budget_failure(request, "max_output_candidates"))
         ordered_candidates = ordered_candidates[:policy.max_output_candidates]
         candidates = tuple(self._candidate(candidate_id, pair[0], pair[1], candidate_scores[candidate_id], candidate_signal_refs[candidate_id], scope) for candidate_id, pair in ordered_candidates)
-        complete = bool(native_results) and not failures and not runtime_limited and not output_truncated and len(native_results) == len(matcher_refs)
-        pruning = self._pruning(request, catalogs, source_pairs, table_pairs, metadata_by_name, policy, scores, evaluated_by_matcher, returned_by_matcher, matcher_calls, output_truncated, failures)
-        status = SchemaMatchStatus.COMPLETE if complete else SchemaMatchStatus.INCOMPLETE if native_results else SchemaMatchStatus.FAILED
+        complete = bool(native_results) and not failures and not runtime_limited and not output_truncated and len(native_results) == len(matcher_refs) and not scope.reduced_scope
+        pruning = self._pruning(request, catalogs, source_pairs, table_pairs, metadata_by_name, policy, scores, evaluated_by_matcher, provider_table_pair_calls, provider_visible_column_pairs, eligible_column_pairs_by_matcher, returned_by_matcher, retained_by_matcher, top_k_retained_by_matcher, matcher_calls, len(candidates), output_truncated, failures, column_stats, scope)
+        status = SchemaMatchStatus.COMPLETE if complete else SchemaMatchStatus.INCOMPLETE if native_results or any(failure.kind is SchemaMatchFailureKind.BUDGET_EXCEEDED for failure in failures) else SchemaMatchStatus.FAILED
         result = SchemaMatchResult(request=request, observation_scope=scope, candidates=candidates, scores=tuple(scores), signals=tuple(signal_map.values()), failures=tuple(failures), capabilities=(capability,), pruning=pruning, status=status)
         if artifact_root is not None:
             result = SchemaMatchingArtifactStore(self.project_root).publish(result, run_root=artifact_root)
@@ -193,11 +230,43 @@ class ValentineSchemaMatchingAdapter:
     def _validate_entry(self, request, catalogs, snapshots, authorization):
         if set(catalogs) != set(request.source_ids) or set(snapshots) != set(request.source_ids):
             raise ValueError("matching inputs must cover every selected source")
+        table_bindings: dict[str, str] = {}
+        column_bindings: dict[str, str] = {}
         for source_id in request.source_ids:
             if catalogs[source_id].source_id != source_id or snapshots[source_id].snapshot.source_id != source_id or snapshots[source_id].snapshot.snapshot_id != request.snapshot_ids[source_id]:
                 raise ValueError("catalog and snapshot bindings do not match the request")
+            tables = {table.table_id: table for table in catalogs[source_id].tables}
+            requested_tables = request.selected_table_ids_by_source[source_id]
+            if len(set(requested_tables)) != len(requested_tables):
+                raise ValueError("selected table IDs must be unique per source")
+            for table_id in requested_tables:
+                table = tables.get(table_id)
+                if table is None:
+                    if table_id in table_bindings:
+                        raise ValueError(f"table ID {table_id} belongs to another source")
+                    raise ValueError(f"unknown table ID: {table_id}")
+                if table.source_id != source_id:
+                    raise ValueError(f"table ID {table_id} belongs to another source")
+                table_bindings[table_id] = source_id
+                available = {column.column_id: column for column in catalogs[source_id].columns if column.table_id == table_id}
+                requested_columns = request.selected_column_ids_by_table.get(table_id, ())
+                if len(set(requested_columns)) != len(requested_columns):
+                    raise ValueError(f"selected column IDs must be unique for table {table_id}")
+                for column_id in requested_columns:
+                    column = available.get(column_id)
+                    if column is None:
+                        if column_id in column_bindings:
+                            raise ValueError(f"column ID {column_id} belongs to another table")
+                        raise ValueError(f"unknown column ID: {column_id}")
+                    if column.table_id != table_id:
+                        raise ValueError(f"column ID {column_id} belongs to another table")
+                    column_bindings[column_id] = table_id
+        unknown_column_scope_tables = set(request.selected_column_ids_by_table) - set(table_bindings)
+        if unknown_column_scope_tables:
+            raise ValueError(f"column scope references an unselected or unknown table: {sorted(unknown_column_scope_tables)[0]}")
         if request.mode is SchemaMatchMode.INSTANCE_AWARE:
-            if self.privacy_policy is None or not authorization or not self.privacy_policy.verify_schema_matching_authorization(authorization, source_ids=request.source_ids, snapshot_ids=request.snapshot_ids, table_ids_by_source=request.selected_table_ids_by_source, column_ids_by_table=request.selected_column_ids_by_table, artifact_ids=tuple(batch.batch_id for snapshot in snapshots.values() for batch in snapshot.batches)):
+            artifact_ids = tuple(batch.batch_id for source_id, snapshot in snapshots.items() for batch in snapshot.batches if batch.table_id in request.selected_table_ids_by_source[source_id])
+            if self.privacy_policy is None or not authorization or not self.privacy_policy.verify_schema_matching_authorization(authorization, source_ids=request.source_ids, snapshot_ids=request.snapshot_ids, table_ids_by_source=request.selected_table_ids_by_source, column_ids_by_table=request.selected_column_ids_by_table, artifact_ids=artifact_ids):
                 raise PermissionError("instance-aware matching requires policy-issued exact-scope authorization")
 
     def _load_frames(self, request, catalogs, snapshots):
@@ -208,46 +277,66 @@ class ValentineSchemaMatchingAdapter:
         complete: dict[str, bool] = {}
         modes: dict[str, Any] = {}
         sampled_refs: list[tuple[str, str, str]] = []
+        excluded_tables: dict[str, tuple[str, ...]] = {}
+        excluded_columns: dict[str, tuple[str, ...]] = {}
+        instance_rows_read = 0
         for source_id in request.source_ids:
             catalog = catalogs[source_id]
             snapshot = snapshots[source_id]
             modes[source_id] = snapshot.snapshot.observation_scope.mode
-            selected_tables = tuple(table for table in catalog.tables if table.table_id in request.selected_table_ids_by_source[source_id])[:request.search_policy.max_tables_per_source]
+            requested_table_ids = request.selected_table_ids_by_source[source_id]
+            selected_tables = tuple(table for table in catalog.tables if table.table_id in requested_table_ids)[:request.search_policy.max_tables_per_source]
+            excluded_tables[source_id] = tuple(table_id for table_id in requested_table_ids if table_id not in {table.table_id for table in selected_tables})
             for table in selected_tables:
                 columns = tuple(column for column in catalog.columns if column.table_id == table.table_id)
                 requested = request.selected_column_ids_by_table.get(table.table_id)
                 if requested:
                     columns = tuple(column for column in columns if column.column_id in requested)
                 remaining = request.search_policy.max_columns_per_source - sum(len(item["columns"]) for item in metadata.values() if item["source_id"] == source_id)
-                columns = columns[:max(remaining, 0)]
-                rows = []
-                for item in self.reader.iter_table(snapshot, catalog, table, [column.physical_name for column in columns], project_root=self.project_root):
-                    rows.append(item)
-                selected = self._sample_rows(rows, request.search_policy.max_instance_rows_per_table, request.sample_seed)
+                kept_columns = columns[:max(remaining, 0)]
+                excluded_columns[table.table_id] = tuple(column.column_id for column in columns if column not in kept_columns)
+                columns = kept_columns
+                selected = []
+                rows_count = 0
+                if request.mode is SchemaMatchMode.INSTANCE_AWARE:
+                    selected, rows_count = self._sample_stream(self.reader.iter_table(snapshot, catalog, table, [column.physical_name for column in columns], project_root=self.project_root), request.search_policy.max_instance_rows_per_table, request.sample_seed)
+                    instance_rows_read += rows_count
                 sampled_refs.extend((source_id, table.table_id, item.record_ref) for item in selected)
                 table_key = f"{source_id}::{table.table_id}"
                 import pandas as pd
                 frames[table_key] = pd.DataFrame([item.values for item in selected], columns=[column.physical_name for column in columns])
-                metadata[table_key] = {"source_id": source_id, "snapshot_id": request.snapshot_ids[source_id], "table_id": table.table_id, "columns": {column.physical_name: {"source_id": source_id, "snapshot_id": request.snapshot_ids[source_id], "table_id": table.table_id, "column_id": column.column_id, "physical_name": column.physical_name, "normalized_type": column.normalized_physical_type, "descriptor": column} for column in columns}, "profiles": {}}
+                metadata[table_key] = {"source_id": source_id, "snapshot_id": request.snapshot_ids[source_id], "table_id": table.table_id, "table_name": table.physical_name, "columns": {column.physical_name: {"source_id": source_id, "snapshot_id": request.snapshot_ids[source_id], "table_id": table.table_id, "column_id": column.column_id, "physical_name": column.physical_name, "normalized_type": column.normalized_physical_type, "descriptor": column} for column in columns}, "profiles": {}}
                 table_id = table.table_id
-                staged_rows[table_id] = len(rows)
+                staged_rows[table_id] = rows_count
                 sampled_rows[table_id] = len(selected)
                 observation = next((item for item in snapshot.table_observations if item.table_id == table_id), None)
                 complete[table_id] = observation is not None and observation.status is TableObservationStatus.FULLY_OBSERVED
-        sample_identity = hashlib.sha256(json.dumps(sorted(sampled_refs), separators=(",", ":")).encode()).hexdigest()[:32]
-        scope = SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table={key: tuple(value) for key, value in request.selected_column_ids_by_table.items()}, source_snapshot_modes=modes, complete_by_table=complete, staged_rows_by_table=staged_rows, sampled_rows_by_table=sampled_rows, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity=sample_identity, reduced_scope=any(value < staged_rows.get(key, 0) for key, value in sampled_rows.items()))
+        if request.mode is SchemaMatchMode.SCHEMA_ONLY:
+            sample_identity = "schema_only_no_instance_sample_v1"
+        else:
+            sample_identity = hashlib.sha256(json.dumps(sorted(sampled_refs), separators=(",", ":")).encode()).hexdigest()[:32]
+        scope = SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table={key: tuple(value) for key, value in request.selected_column_ids_by_table.items()}, source_snapshot_modes=modes, complete_by_table=complete, staged_rows_by_table=staged_rows, sampled_rows_by_table=sampled_rows, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity=sample_identity, reduced_scope=bool(excluded_tables and any(excluded_tables.values())) or bool(excluded_columns and any(excluded_columns.values())) or any(value < staged_rows.get(key, 0) for key, value in sampled_rows.items()), excluded_table_ids_by_source=excluded_tables, excluded_column_ids_by_table=excluded_columns, instance_rows_read=instance_rows_read, instance_evidence_used=request.mode is SchemaMatchMode.INSTANCE_AWARE and instance_rows_read > 0)
         return frames, metadata, scope
 
     @staticmethod
-    def _sample_rows(rows, limit, seed):
-        if len(rows) <= limit:
-            return rows
-        ranked = sorted(enumerate(rows), key=lambda item: hashlib.sha256(f"{seed}:{item[1].record_ref}".encode()).hexdigest())
-        return [rows[index] for index, _ in sorted(ranked[:limit])]
+    def _sample_stream(rows, limit, seed):
+        selected = []
+        count = 0
+        for item in rows:
+            count += 1
+            selected.append(item)
+            selected.sort(key=lambda value: hashlib.sha256(f"{seed}:{value.record_ref}".encode()).hexdigest())
+            if len(selected) > limit:
+                selected.pop()
+        selected.sort(key=lambda value: value.extraction_ordinal)
+        return selected, count
 
     @staticmethod
     def _build_matcher(reference, mode, Coma, Cupid, DistributionBased):
         config = dict(reference.configuration)
+        consumes_instances = reference.name == "DistributionBased" or (reference.name == "Coma" and bool(config.get("use_instances", False)))
+        if mode is SchemaMatchMode.SCHEMA_ONLY and consumes_instances:
+            raise _UnsupportedMatcherMode(f"matcher {reference.matcher_id} consumes instance evidence and is unsupported in SCHEMA_ONLY mode")
         if reference.name == "Coma":
             return Coma(**config)
         if reference.name == "Cupid":
@@ -255,6 +344,39 @@ class ValentineSchemaMatchingAdapter:
         if reference.name == "DistributionBased":
             return DistributionBased(**config)
         raise ValueError(f"unsupported official Valentine matcher: {reference.name}")
+
+    def _bounded_pair_inputs(self, table_pairs, frames, metadata, request):
+        inputs = []
+        provider_visible = 0
+        eligible = 0
+        type_pruned = 0
+        for left_source, left_table, right_source, right_table in table_pairs:
+            left_key = f"{left_source}::{left_table}"
+            right_key = f"{right_source}::{right_table}"
+            left_meta = metadata[left_key]
+            right_meta = metadata[right_key]
+            left_columns = tuple(left_meta["columns"].values())
+            right_columns = tuple(right_meta["columns"].values())
+            eligible_left = []
+            eligible_right = []
+            for left in left_columns:
+                if any(self._eligible_types(left, right, request.search_policy) for right in right_columns):
+                    eligible_left.append(left)
+            for right in right_columns:
+                if any(self._eligible_types(left, right, request.search_policy) for left in left_columns):
+                    eligible_right.append(right)
+            all_pairs = len(left_columns) * len(right_columns)
+            eligible_pairs = sum(1 for left in left_columns for right in right_columns if self._eligible_types(left, right, request.search_policy))
+            type_pruned += all_pairs - eligible_pairs
+            eligible += eligible_pairs
+            if not eligible_left or not eligible_right:
+                continue
+            provider_visible += len(eligible_left) * len(eligible_right)
+            import pandas as pd
+            left_names = [column["physical_name"] for column in eligible_left]
+            right_names = [column["physical_name"] for column in eligible_right]
+            inputs.append((left_key, right_key, frames[left_key].loc[:, left_names] if len(frames[left_key].columns) else pd.DataFrame(columns=left_names), frames[right_key].loc[:, right_names] if len(frames[right_key].columns) else pd.DataFrame(columns=right_names)))
+        return tuple(inputs), {"provider_visible": provider_visible, "eligible": eligible, "type_pruned": type_pruned}
 
     @staticmethod
     def _endpoint(column):
@@ -276,9 +398,12 @@ class ValentineSchemaMatchingAdapter:
 
     def _signals_for(self, left, right, profiles, dependencies, request, signal_map):
         refs = []
-        name_value = SequenceMatcher(None, self._normalize(left["physical_name"]), self._normalize(right["physical_name"])).ratio()
-        name = SchemaMatchSignal(signal_id=schema_match_signal_id(SchemaMatchSignalFamily.NAME_LEXICAL, left["column_id"], right["column_id"], round(name_value, 8)), family=SchemaMatchSignalFamily.NAME_LEXICAL, value=name_value, semantics="deterministic Unicode/case/separator/camel-token lexical similarity; physical names retained only at the adapter boundary")
+        name_value = SequenceMatcher(None, self._normalize(left["physical_name"], request), self._normalize(right["physical_name"], request)).ratio()
+        name = SchemaMatchSignal(signal_id=schema_match_signal_id(SchemaMatchSignalFamily.NAME_LEXICAL, left["column_id"], right["column_id"], round(name_value, 8)), family=SchemaMatchSignalFamily.NAME_LEXICAL, value=name_value, semantics=f"project lexical signal using Unicode/case/separator/camel-token normalization; abbreviation dictionary version {request.abbreviation_dictionary_version or 'none'}; never modifies native matcher scores")
         signal_map[name.signal_id] = name; refs.append(name.signal_id)
+        table_context_value = SequenceMatcher(None, self._normalize(left.get("table_name", left["table_id"]), request), self._normalize(right.get("table_name", right["table_id"]), request)).ratio()
+        context = SchemaMatchSignal(signal_id=schema_match_signal_id(SchemaMatchSignalFamily.TABLE_CONTEXT, left["table_id"], right["table_id"], round(table_context_value, 8)), family=SchemaMatchSignalFamily.TABLE_CONTEXT, value=table_context_value, semantics="table-context similarity/risk is separate evidence; it does not auto-reject a column pair or alter the native score")
+        signal_map[context.signal_id] = context; refs.append(context.signal_id)
         structural_value = 1.0 if self._eligible_types(left, right, request.search_policy) else 0.0
         structural = SchemaMatchSignal(signal_id=schema_match_signal_id(SchemaMatchSignalFamily.SCHEMA_STRUCTURAL, left["column_id"], right["column_id"], structural_value), family=SchemaMatchSignalFamily.SCHEMA_STRUCTURAL, value=structural_value, semantics="conservative normalized physical-type compatibility; not a semantic assertion")
         signal_map[structural.signal_id] = structural; refs.append(structural.signal_id)
@@ -325,21 +450,44 @@ class ValentineSchemaMatchingAdapter:
         return tuple(dict.fromkeys(refs))
 
     @staticmethod
-    def _normalize(value):
+    def _normalize(value, request=None):
         value = unicodedata.normalize("NFKC", value)
         value = re.sub(r"([a-z])([A-Z])", r"\1 \2", value)
-        return " ".join(re.findall(r"[\w]+", value.casefold(), flags=re.UNICODE))
+        tokens = re.findall(r"[\w]+", value.casefold(), flags=re.UNICODE)
+        dictionary = {str(key).casefold(): str(item).casefold() for key, item in (request.abbreviation_dictionary.items() if request is not None else ())}
+        return " ".join(dictionary.get(token, token) for token in tokens)
 
     @staticmethod
     def _candidate(candidate_id, left, right, score_refs, signals, scope):
-        return SchemaMatchCandidate(candidate_id=candidate_id, source_id=left["source_id"], source_snapshot_id=left["snapshot_id"], source_table_id=left["table_id"], source_column_id=left["column_id"], source_column_name=left["physical_name"], target_source_id=right["source_id"], target_snapshot_id=right["snapshot_id"], target_table_id=right["table_id"], target_column_id=right["column_id"], target_column_name=right["physical_name"], score_refs=tuple(score_refs), signal_refs=tuple(signals), observation_scope=scope, risk_flags=("candidate_only", "native_score_not_probability"))
+        return SchemaMatchCandidate(candidate_id=candidate_id, source_id=left["source_id"], source_snapshot_id=left["snapshot_id"], source_table_id=left["table_id"], source_column_id=left["column_id"], source_column_name=left["physical_name"], target_source_id=right["source_id"], target_snapshot_id=right["snapshot_id"], target_table_id=right["table_id"], target_column_id=right["column_id"], target_column_name=right["physical_name"], score_refs=tuple(score_refs), signal_refs=tuple(signals), observation_scope=scope, risk_flags=("candidate_only", "native_score_not_probability", "table_context_requires_review"))
 
-    def _pruning(self, request, catalogs, source_pairs, table_pairs, metadata, policy, scores, evaluated_by_matcher, returned_by_matcher, matcher_calls, output_truncated, failures):
-        all_columns = sum(len(tuple(column for column in catalog.columns if column.table_id in request.selected_table_ids_by_source[source_id])) for source_id, catalog in catalogs.items())
+    def _pruning(self, request, catalogs, source_pairs, table_pairs, metadata, policy, scores, evaluated_by_matcher, provider_table_pair_calls, provider_visible_column_pairs, eligible_column_pairs_by_matcher, returned_by_matcher, retained_by_matcher, top_k_retained_by_matcher, matcher_calls, output_candidates_emitted, output_truncated, failures, column_stats, scope):
         before = sum(len(metadata[f"{left_source}::{left_table}"]["columns"]) * len(metadata[f"{right_source}::{right_table}"]["columns"]) for left_source, left_table, right_source, right_table in table_pairs)
-        type_pruned = sum(1 for left_source, left_table, right_source, right_table in table_pairs for left in metadata[f"{left_source}::{left_table}"]["columns"].values() for right in metadata[f"{right_source}::{right_table}"]["columns"].values() if not self._eligible_types(left, right, policy))
-        evaluated = max(before - type_pruned, 0)
-        return SchemaMatchPruningSummary(source_pairs_before_bound=len(request.source_ids) * (len(request.source_ids) - 1) // 2, source_pairs_evaluated=len(source_pairs), tables_before_bound=sum(len(request.selected_table_ids_by_source[source_id]) for source_id in request.source_ids), tables_evaluated=sum(len(request.selected_table_ids_by_source[source_id][:policy.max_tables_per_source]) for source_id in request.source_ids), table_pairs_before_bound=sum(len(request.selected_table_ids_by_source[left_source][:policy.max_tables_per_source]) * len(request.selected_table_ids_by_source[right_source][:policy.max_tables_per_source]) for left_source, right_source in source_pairs), table_pairs_evaluated=len(table_pairs), column_pairs_before_pruning=before, column_pairs_pruned_by_type=type_pruned, column_pairs_pruned_by_scope=0, column_pairs_pruned_by_context=0, column_pairs_pruned_by_budget=max(evaluated - policy.max_column_pairs, 0), column_pairs_evaluated=min(evaluated, policy.max_column_pairs), matcher_calls=matcher_calls, evaluated_by_matcher=evaluated_by_matcher, returned_by_matcher=returned_by_matcher, output_candidates_emitted=min(len({score.score_id for score in scores}), policy.max_output_candidates), output_truncated=output_truncated, truncation_reasons=tuple(failure.detail for failure in failures if failure.kind is SchemaMatchFailureKind.BUDGET_EXCEEDED))
+        return SchemaMatchPruningSummary(
+            source_pairs_before_bound=len(request.source_ids) * (len(request.source_ids) - 1) // 2,
+            source_pairs_evaluated=len(source_pairs),
+            tables_before_bound=sum(len(request.selected_table_ids_by_source[source_id]) for source_id in request.source_ids),
+            tables_evaluated=sum(len(request.selected_table_ids_by_source[source_id][:policy.max_tables_per_source]) for source_id in request.source_ids),
+            table_pairs_before_bound=sum(len(request.selected_table_ids_by_source[left_source][:policy.max_tables_per_source]) * len(request.selected_table_ids_by_source[right_source][:policy.max_tables_per_source]) for left_source, right_source in source_pairs),
+            table_pairs_evaluated=len(table_pairs),
+            column_pairs_before_pruning=before,
+            column_pairs_pruned_by_type=column_stats["type_pruned"],
+            column_pairs_pruned_by_scope=sum(len(value) for value in scope.excluded_column_ids_by_table.values()),
+            column_pairs_pruned_by_context=0,
+            column_pairs_pruned_by_budget=max(column_stats["provider_visible"] - policy.max_column_pairs, 0),
+            column_pairs_evaluated=min(column_stats["provider_visible"], policy.max_column_pairs),
+            matcher_calls=matcher_calls,
+            evaluated_by_matcher=evaluated_by_matcher,
+            provider_table_pair_calls_by_matcher=provider_table_pair_calls,
+            provider_visible_column_pairs_by_matcher=provider_visible_column_pairs,
+            eligible_column_pairs_by_matcher=eligible_column_pairs_by_matcher,
+            returned_by_matcher=returned_by_matcher,
+            retained_by_matcher=retained_by_matcher,
+            top_k_retained_by_matcher=top_k_retained_by_matcher,
+            output_candidates_emitted=output_candidates_emitted,
+            output_truncated=output_truncated,
+            truncation_reasons=tuple(failure.detail for failure in failures if failure.kind is SchemaMatchFailureKind.BUDGET_EXCEEDED),
+        )
 
     def _result(self, request, catalogs, snapshots, capability, failures, *, scope, config_hash, status):
         empty = SchemaMatchPruningSummary(source_pairs_before_bound=0, source_pairs_evaluated=0, tables_before_bound=0, tables_evaluated=0, table_pairs_before_bound=0, table_pairs_evaluated=0, column_pairs_before_pruning=0, column_pairs_pruned_by_type=0, column_pairs_pruned_by_scope=0, column_pairs_pruned_by_context=0, column_pairs_pruned_by_budget=0, column_pairs_evaluated=0, matcher_calls=0, evaluated_by_matcher={}, returned_by_matcher={}, output_candidates_emitted=0, output_truncated=False)
@@ -347,18 +495,13 @@ class ValentineSchemaMatchingAdapter:
 
     @staticmethod
     def _empty_scope(request, catalogs, snapshots):
-        return SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table=dict(request.selected_column_ids_by_table), source_snapshot_modes={key: snapshots[key].snapshot.observation_scope.mode for key in request.source_ids}, complete_by_table={}, staged_rows_by_table={}, sampled_rows_by_table={}, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity="empty")
+        return SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table=dict(request.selected_column_ids_by_table), source_snapshot_modes={key: snapshots[key].snapshot.observation_scope.mode for key in request.source_ids}, complete_by_table={}, staged_rows_by_table={}, sampled_rows_by_table={}, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity="empty", instance_rows_read=0, instance_evidence_used=False)
 
     @staticmethod
     def _failure_id(request, value): return "schema_failure_" + hashlib.sha256(f"{request.request_id}:{value}".encode()).hexdigest()[:32]
 
     @staticmethod
     def _budget_failure(request, value): return SchemaMatchFailure(failure_id=ValentineSchemaMatchingAdapter._failure_id(request, value), request_id=request.request_id, kind=SchemaMatchFailureKind.BUDGET_EXCEEDED, detail=f"schema matching bound reached: {value}")
-
-    @staticmethod
-    def _eligible_pair_keys(metadata, policy):
-        return tuple(metadata)
-
 
 class SchemaMatchingArtifactStore:
     """Atomic aggregate-only JSON publication under the execution context."""

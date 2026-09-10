@@ -157,7 +157,7 @@ components:
     ownership: Dirty Data to OLAP
     responsibilities: [generate bounded ranked cross-source mapping candidates, preserve explainable signal families and matcher coverage]
     input_contracts: [SourceCatalogs, SourceSnapshotResults, BatchReference, ColumnProfile, TableProfile, DependencyEvidence, SchemaMatchRequest, MatchingAuthorization]
-    optional_input_contracts: [ColumnProfile, TableProfile, DependencyEvidence, MatchingAuthorization when schema_only]
+    optional_input_contracts: [ColumnProfile, TableProfile, DependencyEvidence, MatchingAuthorization when INSTANCE_AWARE]
     output_contracts: [SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, SchemaMatchFailure, SchemaMatchCapability, SchemaMatchPruningSummary, SchemaMatchArtifactReference]
     depends_on: [application.discovery, application.source_snapshot, application.profiling, application.privacy_policy, domain.contracts]
     ports_used: [SchemaMatchingAdapter, ArtifactStorePort]
@@ -467,7 +467,8 @@ components:
     layer: adapters
     ownership: adapter implementation
     responsibilities: [read complete hash-bound staged snapshots, execute official Valentine, normalize raw scores and signal provenance]
-    input_contracts: [SourceCatalogs, SourceSnapshotResults, ColumnProfile, TableProfile, DependencyEvidence, SchemaMatchRequest, MatchingAuthorization]
+    input_contracts: [SourceCatalogs, SourceSnapshotResults, BatchReference, ColumnProfile, TableProfile, DependencyEvidence, SchemaMatchRequest]
+    optional_input_contracts: [DependencyEvidence, MatchingAuthorization when INSTANCE_AWARE]
     output_contracts: [SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, SchemaMatchFailure, SchemaMatchCapability, SchemaMatchPruningSummary]
     depends_on: [domain.contracts]
     extension_port: SchemaMatchingAdapter
