@@ -954,3 +954,18 @@ handoff_to:
 - oss_research: exact official Valentine commit `5d5163f04da304985bd51a476ccf7653de3979c3` cloned/detached/reviewed for source, tests and Apache-2.0 license, then removed; official `valentine==1.0.0` runtime executed from project-local scratch and removed after regression
 - tests_run: focused Step13 integration `6 passed, 9 warnings`; schema contracts `3 passed`; warnings are official PuLP deprecations during native Valentine execution
 - state: Step13 remains complete; `last_completed_step=13`, `current_step=14`, `current_role=entity_resolution_engineer`, `G0-G3/G3A/G3B=PASS`, `G4/G4A/G5-G15=PENDING`, `blocked=false`; Step14 implementation not started
+
+## Specialist Step14 - Entity Resolution Engineer
+
+- execution_step: `14`
+- role_id: `entity_resolution_engineer`
+- status: `PASS` for bounded local probabilistic linkage evidence; formal G4 remains pending
+- starting_head: `4fc5f45d092d9ff1a60e3c50d586bc192869e253`
+- implementation: project-owned ER contracts and exact privacy authorization; staged-only Splink 4.0.17 adapter; conservative normalization; explicit LINK_ONLY/DEDUPE_ONLY/LINK_AND_DEDUPE modes; bounded blocking and pair budgets; u random sampling and EM m-training; model-weight/probability separation; candidate edges/clusters and false-merge diagnostics; atomic aggregate-only artifact publication; Step13 row/type-accounting hardening
+- oss_research: official Splink research commit `ca89ee92d5472b5e5de71cff3001193e04faf0e7` inspected; stable official tag/runtime `v4.0.17`, MIT, Python `>=3.10,<4`; research clone and runtime scratch are removed before final handoff
+- evaluation: benchmark fixture covers duplicate, cross-source spelling, email case, explicit phone policy, common-name hard negative, placeholder, household, missing fields, Persian Unicode, same-source duplicate, transitive bridge and three-record cluster; labels remain synthetic and separate from production evidence
+- tests_run: real official Splink adapter integration, ER contract/privacy tests, Step13 contract regression, full regression and all required validators are recorded after final cleanup
+- intermediate_milestone: `G4A_INDEPENDENT_EVIDENCE_PRODUCERS=PASS`; no Step13 score fusion; no canonical identity or accepted merge produced
+- limitations: model-implied probability is not calibrated business confidence; no canonical finalization, human identity acceptance, production-scale, deployment or release claim; Step15 not started
+- handoff_to: `Step15 - Applied ML Engineer`
+- next_state: `last_completed_step=14`, `current_step=15`, `current_role=applied_ml_engineer`, `G0-G3/G3A/G3B=PASS`, `G4=PENDING`, `G4A intermediate=PASS`, `G5-G15=PENDING`, `blocked=false`

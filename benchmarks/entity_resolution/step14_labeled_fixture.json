@@ -1,0 +1,22 @@
+{
+  "fixture_id": "step14-entity-resolution-cases-v1",
+  "purpose": "bounded candidate and false-merge evaluation labels; labels are not production truth",
+  "cases": [
+    {"case_id": "exact_duplicate", "kind": "positive", "record_refs": ["crm-r1", "erp-r1"]},
+    {"case_id": "cross_source_spelling", "kind": "positive", "record_refs": ["crm-r1", "erp-r1"]},
+    {"case_id": "email_case", "kind": "positive", "record_refs": ["crm-r2", "erp-r2"]},
+    {"case_id": "phone_explicit_country_policy", "kind": "positive", "record_refs": ["crm-r3", "erp-r3"]},
+    {"case_id": "common_name_nonmatch", "kind": "negative", "record_refs": ["crm-r4", "erp-r4"]},
+    {"case_id": "placeholder_phone", "kind": "negative", "record_refs": ["crm-r5", "erp-r5"]},
+    {"case_id": "shared_household", "kind": "negative", "record_refs": ["crm-r6", "erp-r6"]},
+    {"case_id": "missing_fields", "kind": "positive", "record_refs": ["crm-r7", "erp-r7"]},
+    {"case_id": "persian_unicode", "kind": "positive", "record_refs": ["crm-r8", "erp-r8"]},
+    {"case_id": "same_source_duplicate", "kind": "positive", "record_refs": ["crm-r9", "crm-r10"]},
+    {"case_id": "transitive_bridge", "kind": "review", "record_refs": ["crm-r11", "erp-r11", "crm-r12"]},
+    {"case_id": "clear_three_record_cluster", "kind": "positive", "record_refs": ["crm-r13", "erp-r13", "erp-r14"]}
+  ],
+  "limitations": [
+    "fixture labels are benchmark labels, not canonical identity truth",
+    "record references are synthetic and contain no raw identity values"
+  ]
+}

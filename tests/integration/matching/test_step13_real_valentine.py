@@ -160,6 +160,9 @@ def test_schema_only_is_allowed_without_instance_authorization_and_sampling_is_s
         assert first.observation_scope.reduced_scope is False
         assert first.observation_scope.sample_identity == second.observation_scope.sample_identity == "schema_only_no_instance_sample_v1"
         assert first.observation_scope.instance_rows_read == second.observation_scope.instance_rows_read == 0
+        assert first.observation_scope.staged_rows_by_table == {"crm_customers": 4, "erp_customers": 4}
+        assert first.observation_scope.sampled_rows_by_table == {"crm_customers": 0, "erp_customers": 0}
+        assert first.observation_scope.instance_rows_read_by_table == {"crm_customers": 0, "erp_customers": 0}
         assert not first.failures
     finally:
         shutil.rmtree(root, ignore_errors=True)

@@ -15,6 +15,9 @@ dependencies = [
 matching = [
     "valentine==1.0.0",
 ]
+entity_resolution = [
+    "splink==4.0.17",
+]
 test = [
   "pytest>=8.4,<9",
 ]

@@ -142,6 +142,19 @@ class ValentineSchemaMatchingAdapter:
                         df_names=[left_name, right_name],
                         instance_sample_size=policy.max_instance_rows_per_table,
                     )
+                    column_stats["post_provider_type_rejected"] += sum(
+                        1
+                        for pair in result
+                        if (
+                            (metadata_by_name.get(pair.source_table) or {}).get("columns", {}).get(pair.source_column) is not None
+                            and (metadata_by_name.get(pair.target_table) or {}).get("columns", {}).get(pair.target_column) is not None
+                            and not self._eligible_types(
+                                metadata_by_name[pair.source_table]["columns"][pair.source_column],
+                                metadata_by_name[pair.target_table]["columns"][pair.target_column],
+                                policy,
+                            )
+                        )
+                    )
                     native_results[reference.matcher_id].extend((pair, float(raw)) for pair, raw in result.items())
                     provider_table_pair_calls[reference.matcher_id] += 1
                     matcher_calls += 1
@@ -280,6 +293,7 @@ class ValentineSchemaMatchingAdapter:
         excluded_tables: dict[str, tuple[str, ...]] = {}
         excluded_columns: dict[str, tuple[str, ...]] = {}
         instance_rows_read = 0
+        instance_rows_read_by_table: dict[str, int] = {}
         for source_id in request.source_ids:
             catalog = catalogs[source_id]
             snapshot = snapshots[source_id]
@@ -298,24 +312,30 @@ class ValentineSchemaMatchingAdapter:
                 columns = kept_columns
                 selected = []
                 rows_count = 0
+                observation = next((item for item in snapshot.table_observations if item.table_id == table.table_id), None)
+                available_rows = observation.rows_observed if observation is not None else 0
                 if request.mode is SchemaMatchMode.INSTANCE_AWARE:
                     selected, rows_count = self._sample_stream(self.reader.iter_table(snapshot, catalog, table, [column.physical_name for column in columns], project_root=self.project_root), request.search_policy.max_instance_rows_per_table, request.sample_seed)
                     instance_rows_read += rows_count
+                instance_rows_read_by_table[table.table_id] = rows_count
                 sampled_refs.extend((source_id, table.table_id, item.record_ref) for item in selected)
                 table_key = f"{source_id}::{table.table_id}"
                 import pandas as pd
                 frames[table_key] = pd.DataFrame([item.values for item in selected], columns=[column.physical_name for column in columns])
                 metadata[table_key] = {"source_id": source_id, "snapshot_id": request.snapshot_ids[source_id], "table_id": table.table_id, "table_name": table.physical_name, "columns": {column.physical_name: {"source_id": source_id, "snapshot_id": request.snapshot_ids[source_id], "table_id": table.table_id, "column_id": column.column_id, "physical_name": column.physical_name, "normalized_type": column.normalized_physical_type, "descriptor": column} for column in columns}, "profiles": {}}
                 table_id = table.table_id
-                staged_rows[table_id] = rows_count
+                # This is the available staged row count, not rows consumed by
+                # this adapter. Schema-only mode must never read raw staging just
+                # to populate accounting.
+                staged_rows[table_id] = available_rows
                 sampled_rows[table_id] = len(selected)
-                observation = next((item for item in snapshot.table_observations if item.table_id == table_id), None)
                 complete[table_id] = observation is not None and observation.status is TableObservationStatus.FULLY_OBSERVED
         if request.mode is SchemaMatchMode.SCHEMA_ONLY:
             sample_identity = "schema_only_no_instance_sample_v1"
         else:
             sample_identity = hashlib.sha256(json.dumps(sorted(sampled_refs), separators=(",", ":")).encode()).hexdigest()[:32]
-        scope = SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table={key: tuple(value) for key, value in request.selected_column_ids_by_table.items()}, source_snapshot_modes=modes, complete_by_table=complete, staged_rows_by_table=staged_rows, sampled_rows_by_table=sampled_rows, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity=sample_identity, reduced_scope=bool(excluded_tables and any(excluded_tables.values())) or bool(excluded_columns and any(excluded_columns.values())) or any(value < staged_rows.get(key, 0) for key, value in sampled_rows.items()), excluded_table_ids_by_source=excluded_tables, excluded_column_ids_by_table=excluded_columns, instance_rows_read=instance_rows_read, instance_evidence_used=request.mode is SchemaMatchMode.INSTANCE_AWARE and instance_rows_read > 0)
+        sample_reduced = request.mode is SchemaMatchMode.INSTANCE_AWARE and any(value < staged_rows.get(key, 0) for key, value in sampled_rows.items())
+        scope = SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table={key: tuple(value) for key, value in request.selected_column_ids_by_table.items()}, source_snapshot_modes=modes, complete_by_table=complete, staged_rows_by_table=staged_rows, sampled_rows_by_table=sampled_rows, instance_rows_read_by_table=instance_rows_read_by_table, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity=sample_identity, reduced_scope=bool(excluded_tables and any(excluded_tables.values())) or bool(excluded_columns and any(excluded_columns.values())) or sample_reduced, excluded_table_ids_by_source=excluded_tables, excluded_column_ids_by_table=excluded_columns, instance_rows_read=instance_rows_read, instance_evidence_used=request.mode is SchemaMatchMode.INSTANCE_AWARE and instance_rows_read > 0)
         return frames, metadata, scope
 
     @staticmethod
@@ -349,7 +369,9 @@ class ValentineSchemaMatchingAdapter:
         inputs = []
         provider_visible = 0
         eligible = 0
-        type_pruned = 0
+        project_ineligible = 0
+        workload_avoided = 0
+        post_provider_type_rejected = 0
         for left_source, left_table, right_source, right_table in table_pairs:
             left_key = f"{left_source}::{left_table}"
             right_key = f"{right_source}::{right_table}"
@@ -367,16 +389,21 @@ class ValentineSchemaMatchingAdapter:
                     eligible_right.append(right)
             all_pairs = len(left_columns) * len(right_columns)
             eligible_pairs = sum(1 for left in left_columns for right in right_columns if self._eligible_types(left, right, request.search_policy))
-            type_pruned += all_pairs - eligible_pairs
+            project_ineligible += all_pairs - eligible_pairs
             eligible += eligible_pairs
             if not eligible_left or not eligible_right:
                 continue
-            provider_visible += len(eligible_left) * len(eligible_right)
+            visible_for_provider = len(eligible_left) * len(eligible_right)
+            provider_visible += visible_for_provider
+            # The rectangular provider input may contain cross-pairs that the
+            # project-level type predicate rejects. They are provider-visible,
+            # therefore not workload avoided and not pre-provider pruning.
+            workload_avoided += all_pairs - visible_for_provider
             import pandas as pd
             left_names = [column["physical_name"] for column in eligible_left]
             right_names = [column["physical_name"] for column in eligible_right]
             inputs.append((left_key, right_key, frames[left_key].loc[:, left_names] if len(frames[left_key].columns) else pd.DataFrame(columns=left_names), frames[right_key].loc[:, right_names] if len(frames[right_key].columns) else pd.DataFrame(columns=right_names)))
-        return tuple(inputs), {"provider_visible": provider_visible, "eligible": eligible, "type_pruned": type_pruned}
+        return tuple(inputs), {"provider_visible": provider_visible, "eligible": eligible, "project_ineligible": project_ineligible, "workload_avoided": workload_avoided, "post_provider_type_rejected": post_provider_type_rejected}
 
     @staticmethod
     def _endpoint(column):
@@ -471,7 +498,7 @@ class ValentineSchemaMatchingAdapter:
             table_pairs_before_bound=sum(len(request.selected_table_ids_by_source[left_source][:policy.max_tables_per_source]) * len(request.selected_table_ids_by_source[right_source][:policy.max_tables_per_source]) for left_source, right_source in source_pairs),
             table_pairs_evaluated=len(table_pairs),
             column_pairs_before_pruning=before,
-            column_pairs_pruned_by_type=column_stats["type_pruned"],
+            column_pairs_pruned_by_type=column_stats["workload_avoided"],
             column_pairs_pruned_by_scope=sum(len(value) for value in scope.excluded_column_ids_by_table.values()),
             column_pairs_pruned_by_context=0,
             column_pairs_pruned_by_budget=max(column_stats["provider_visible"] - policy.max_column_pairs, 0),
@@ -481,6 +508,9 @@ class ValentineSchemaMatchingAdapter:
             provider_table_pair_calls_by_matcher=provider_table_pair_calls,
             provider_visible_column_pairs_by_matcher=provider_visible_column_pairs,
             eligible_column_pairs_by_matcher=eligible_column_pairs_by_matcher,
+            column_pairs_project_ineligible=column_stats["project_ineligible"],
+            column_pairs_post_provider_type_rejected=column_stats["post_provider_type_rejected"],
+            column_pairs_workload_avoided=column_stats["workload_avoided"],
             returned_by_matcher=returned_by_matcher,
             retained_by_matcher=retained_by_matcher,
             top_k_retained_by_matcher=top_k_retained_by_matcher,
@@ -495,7 +525,7 @@ class ValentineSchemaMatchingAdapter:
 
     @staticmethod
     def _empty_scope(request, catalogs, snapshots):
-        return SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table=dict(request.selected_column_ids_by_table), source_snapshot_modes={key: snapshots[key].snapshot.observation_scope.mode for key in request.source_ids}, complete_by_table={}, staged_rows_by_table={}, sampled_rows_by_table={}, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity="empty", instance_rows_read=0, instance_evidence_used=False)
+        return SchemaMatchObservationScope(source_ids=request.source_ids, snapshot_ids=dict(request.snapshot_ids), table_ids_by_source={key: tuple(value) for key, value in request.selected_table_ids_by_source.items()}, column_ids_by_table=dict(request.selected_column_ids_by_table), source_snapshot_modes={key: snapshots[key].snapshot.observation_scope.mode for key in request.source_ids}, complete_by_table={}, staged_rows_by_table={}, sampled_rows_by_table={}, instance_rows_read_by_table={}, sample_seed=request.sample_seed, sample_mode=request.sample_mode, sample_algorithm_version=request.sample_algorithm_version, sample_identity="empty", instance_rows_read=0, instance_evidence_used=False)
 
     @staticmethod
     def _failure_id(request, value): return "schema_failure_" + hashlib.sha256(f"{request.request_id}:{value}".encode()).hexdigest()[:32]

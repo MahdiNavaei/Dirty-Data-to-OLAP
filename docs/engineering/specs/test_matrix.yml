@@ -51,7 +51,7 @@ interface_test_requirements:
   - {interface_id: QualityStagedReader, categories: [contract, integration, security]}
   - {interface_id: DependencyDiscoveryAdapter, categories: [contract, adapter_contract, integration, evaluation, security]}
   - {interface_id: SchemaMatchingAdapter, categories: [adapter_contract, evaluation]}
-  - {interface_id: EntityResolutionAdapter, categories: [adapter_contract, evaluation]}
+  - {interface_id: EntityResolutionAdapter, categories: [adapter_contract, integration, evaluation, security, failure_recovery]}
   - {interface_id: OptionalSemanticEvidenceAdapter, categories: [adapter_contract, failure_recovery]}
   - {interface_id: MaterializerPort, categories: [adapter_contract, integration]}
   - {interface_id: ControlStorePort, categories: [contract, failure_recovery]}

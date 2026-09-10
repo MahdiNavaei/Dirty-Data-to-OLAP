@@ -275,13 +275,13 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [run selected entity-family linkage and retain linkage evidence without assigning canonical identity]
-    input_contracts: [EntityResolutionSpec, SourceRecordReference]
-    output_contracts: [EntityMatchEdge, EntityCluster]
+    input_contracts: [EntityResolutionSpec, SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, IdentityFieldSpecification, EntityResolutionAuthorization, EvidenceReferences]
+    output_contracts: [EntityMatchEdge, EntityCluster, EntityClusterDiagnostic, EntityResolutionResult, EntityResolutionFailure, EntityResolutionCapability, EntityResolutionArtifactReference]
     depends_on: [application.canonical_hypotheses, domain.contracts]
     ports_used: [EntityResolutionAdapter, ArtifactStorePort]
     implementation_owner: Step14 Entity Resolution Engineer
     implementation_step: 14
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: true
@@ -486,13 +486,13 @@ components:
     layer: adapters
     ownership: adapter implementation
     responsibilities: [normalize linkage output]
-    input_contracts: [EntityResolutionSpec, SourceRecordReference]
-    output_contracts: [EntityMatchEdge, EntityCluster]
+    input_contracts: [EntityResolutionSpec, SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, IdentityFieldSpecification, EntityResolutionAuthorization, EvidenceReferences]
+    output_contracts: [EntityMatchEdge, EntityCluster, EntityClusterDiagnostic, EntityResolutionResult, EntityResolutionFailure, EntityResolutionCapability, EntityResolutionArtifactReference]
     depends_on: [domain.contracts]
     extension_port: EntityResolutionAdapter
     implementation_owner: Step14 Entity Resolution Engineer
     implementation_step: 14
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: true

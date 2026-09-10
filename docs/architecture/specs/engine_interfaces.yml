@@ -76,8 +76,8 @@ interfaces:
     forbidden_behavior: [native Valentine objects in project contracts, score-as-probability, raw values in artifacts/logs, source reconnect, canonical mutation, unbounded pairs]
   - interface_id: EntityResolutionAdapter
     purpose: Selected entity-family linkage.
-    input_contracts: [EntityResolutionSpec, SourceRecordReference, IdentityFieldSpecification, EvidenceReferences]
-    output_contracts: [EntityMatchEdge, EntityCluster]
+    input_contracts: [EntityResolutionSpec, SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, IdentityFieldSpecification, EntityResolutionAuthorization, EvidenceReferences]
+    output_contracts: [EntityMatchEdge, EntityCluster, EntityClusterDiagnostic, EntityResolutionResult, EntityResolutionFailure, EntityResolutionCapability, EntityResolutionArtifactReference]
     side_effects: [write_artifacts]
     idempotency: pinned inputs/configuration/adapter version
     optional: true

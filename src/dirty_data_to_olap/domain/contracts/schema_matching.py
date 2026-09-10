@@ -195,6 +195,7 @@ class SchemaMatchObservationScope(_SourceModel):
     complete_by_table: Mapping[str, bool]
     staged_rows_by_table: Mapping[str, int]
     sampled_rows_by_table: Mapping[str, int]
+    instance_rows_read_by_table: Mapping[str, int] = Field(default_factory=dict)
     sample_seed: int
     sample_mode: str
     sample_algorithm_version: str
@@ -298,6 +299,9 @@ class SchemaMatchPruningSummary(_SourceModel):
     provider_table_pair_calls_by_matcher: Mapping[str, int] = Field(default_factory=dict)
     provider_visible_column_pairs_by_matcher: Mapping[str, int] = Field(default_factory=dict)
     eligible_column_pairs_by_matcher: Mapping[str, int] = Field(default_factory=dict)
+    column_pairs_project_ineligible: int = Field(default=0, ge=0)
+    column_pairs_post_provider_type_rejected: int = Field(default=0, ge=0)
+    column_pairs_workload_avoided: int = Field(default=0, ge=0)
     returned_by_matcher: Mapping[str, int]
     retained_by_matcher: Mapping[str, int] = Field(default_factory=dict)
     top_k_retained_by_matcher: Mapping[str, int] = Field(default_factory=dict)

@@ -52,6 +52,7 @@ class PrivacyPolicyService:
         self.project_root = project_root.resolve() if project_root else None
         self._dependency_authorizations: dict[str, object] = {}
         self._matching_authorizations: dict[str, object] = {}
+        self._entity_resolution_authorizations: dict[str, object] = {}
 
     @staticmethod
     def load_policy(config_path: Path | None = None) -> PrivacyPolicy:
@@ -202,7 +203,59 @@ class PrivacyPolicyService:
     def matching_authorization_for_decision(self, decision: PrivacyDecision):
         return self._matching_authorizations.get(decision.authorization_id)
 
+    def authorize_entity_resolution_analysis(self, context, *, spec, source_ids: Sequence[str], snapshot_ids: Mapping[str, str], table_ids_by_source: Mapping[str, Sequence[str]], identity_column_ids: Sequence[str], batch_ids: Sequence[str] = (), artifact_ids: Sequence[str] = ()) -> PrivacyDecision:
+        """Issue exact-scope authorization for local staged identity analysis."""
+        from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionAuthorization, EntityResolutionPrivacyContext
+
+        try:
+            validated = EntityResolutionPrivacyContext.model_validate(context)
+        except Exception:
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="entity resolution context failed the local-only privacy contract", classification_id="entity-resolution-local-analysis", failure_ref="privacy-entity-resolution-context-invalid")
+        ids = tuple(source_ids)
+        if not ids or set(snapshot_ids) != set(ids) or set(table_ids_by_source) != set(ids) or not tuple(identity_column_ids):
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="entity resolution authorization requires exact source, snapshot, table and identity-column bindings", classification_id="entity-resolution-local-analysis", failure_ref="privacy-entity-resolution-scope-unbound")
+        if self.project_root is not None:
+            temp_root = (self.project_root / validated.project_temp_root).resolve()
+            try:
+                temp_root.relative_to(self.project_root)
+            except ValueError:
+                return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="entity resolution ephemeral root escapes the project", classification_id="entity-resolution-local-analysis", failure_ref="privacy-entity-resolution-temp-root-invalid")
+        normalized_tables = {key: tuple(value) for key, value in table_ids_by_source.items()}
+        normalized_columns = tuple(identity_column_ids)
+        authorization = EntityResolutionAuthorization(
+            authorization_id=f"entity-resolution-auth-{hashlib.sha256(f'{self.policy.policy_id}:{self.policy.version}:{spec.spec_id}:{spec.fingerprint}:{ids}:{dict(snapshot_ids)}:{normalized_tables}:{normalized_columns}:{tuple(batch_ids)}'.encode()).hexdigest()[:32]}",
+            policy_id=self.policy.policy_id,
+            policy_version=self.policy.version,
+            entity_family=spec.entity_family,
+            spec_id=spec.spec_id,
+            spec_fingerprint=spec.fingerprint,
+            source_ids=ids,
+            snapshot_ids=dict(snapshot_ids),
+            table_ids_by_source=normalized_tables,
+            identity_column_ids=normalized_columns,
+            batch_ids=tuple(batch_ids),
+            artifact_ids=tuple(artifact_ids),
+            issued_at=datetime.now(timezone.utc),
+        )
+        self._entity_resolution_authorizations[authorization.authorization_id] = authorization
+        return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="entity resolution is authorized for exact local ephemeral staged scope only", classification_id="entity-resolution-local-analysis", required_transformation="aggregate_project_owned_evidence", authorization_id=authorization.authorization_id)
+
+    def verify_entity_resolution_authorization(self, authorization, *, spec, source_ids: Sequence[str], snapshot_ids: Mapping[str, str], table_ids_by_source: Mapping[str, Sequence[str]], identity_column_ids: Sequence[str], batch_ids: Sequence[str] = (), artifact_ids: Sequence[str] = ()) -> bool:
+        from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionAuthorization
+
+        if not isinstance(authorization, EntityResolutionAuthorization):
+            return False
+        issued = self._entity_resolution_authorizations.get(authorization.authorization_id)
+        if issued is None or issued != authorization:
+            return False
+        return issued.spec_id == spec.spec_id and issued.spec_fingerprint == spec.fingerprint and issued.entity_family == spec.entity_family and issued.source_ids == tuple(source_ids) and dict(issued.snapshot_ids) == dict(snapshot_ids) and issued.table_ids_by_source == {key: tuple(value) for key, value in table_ids_by_source.items()} and issued.identity_column_ids == tuple(identity_column_ids) and (not batch_ids or issued.batch_ids == tuple(batch_ids)) and (not artifact_ids or issued.artifact_ids == tuple(artifact_ids)) and issued.policy_id == self.policy.policy_id and issued.policy_version == self.policy.version
+
+    def entity_resolution_authorization_for_decision(self, decision: PrivacyDecision):
+        return self._entity_resolution_authorizations.get(decision.authorization_id)
+
     def decide_exposure(self, classification: PrivacyClassification, request: ExposureRequest) -> PrivacyDecision:
+        if request.context is ExposureContext.ENTITY_RESOLUTION_LOCAL_ANALYSIS and request.purpose == "ENTITY_RESOLUTION_LOCAL_ANALYSIS":
+            return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="entity resolution raw values are allowed only within exact local ephemeral analysis scope", classification_id=classification.classification_id, required_transformation="aggregate_project_owned_evidence")
         if request.context is ExposureContext.RAW_STAGING and self.policy.raw_staging_allowed and request.requested_mode == "raw":
             return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="raw is allowed only in restricted source-faithful staging", classification_id=classification.classification_id)
         if request.context is ExposureContext.EXTERNAL_PROCESSING:

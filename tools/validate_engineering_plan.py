@@ -262,7 +262,7 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
             "post-gate current specialist is Step06 through Step14 when G3 passes",
@@ -274,7 +274,8 @@ def main() -> int:
             or (execution.get("current_step") == 11 and execution.get("current_role") == "database_security_specialist")
             or (execution.get("current_step") == 12 and execution.get("current_role") == "dependency_discovery_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 13 and execution.get("current_role") == "schema_matching_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS")
-            or (execution.get("current_step") == 14 and execution.get("current_role") == "entity_resolution_engineer" and execution.get("last_completed_step") == 13 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
+            or (execution.get("current_step") == 14 and execution.get("current_role") == "entity_resolution_engineer" and execution.get("last_completed_step") == 13 and gates.get("G3_SOURCE_SAFETY") == "PASS")
+            or (execution.get("current_step") == 15 and execution.get("current_role") == "applied_ml_engineer" and execution.get("last_completed_step") == 14 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
         )
 
     # 4-5: required artifacts parse and carry provenance.

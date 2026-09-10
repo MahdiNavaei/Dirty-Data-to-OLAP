@@ -129,7 +129,7 @@ stages:
     capability_required_for_v1: false
     dependencies: [CANONICAL_HYPOTHESES]
     optional_dependencies: []
-    input_artifact_types: [EntityResolutionSpec, SourceRecordReference]
+    input_artifact_types: [EntityResolutionSpec, SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, IdentityFieldSpecification, EntityResolutionAuthorization, EvidenceReferences]
     output_artifact_types: [EntityMatchEdge, EntityCluster]
     failure_consequence: affected family FAILED or NEEDS_REVIEW
     cacheable: true
