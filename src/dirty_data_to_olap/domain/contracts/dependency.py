@@ -90,6 +90,10 @@ class DependencyObservationScope(_SourceModel):
     input_batch_ids: tuple[str, ...]
     input_batch_hashes: tuple[str, ...]
     input_record_reference_count: int = Field(ge=0)
+    staged_rows_by_table: Mapping[str, int] = Field(default_factory=dict)
+    provider_rows_by_table: Mapping[str, int] = Field(default_factory=dict)
+    null_excluded_rows_by_table: Mapping[str, int] = Field(default_factory=dict)
+    provider_scope_semantics: str = "provider_not_started"
 
     @model_validator(mode="after")
     def validate_tables(self) -> "DependencyObservationScope":
@@ -97,6 +101,9 @@ class DependencyObservationScope(_SourceModel):
             raise ValueError("dependency scope row counts must cover selected tables")
         if set(self.complete_by_table) != set(self.table_ids):
             raise ValueError("dependency scope completeness must cover selected tables")
+        for name, values in (("staged_rows_by_table", self.staged_rows_by_table), ("provider_rows_by_table", self.provider_rows_by_table), ("null_excluded_rows_by_table", self.null_excluded_rows_by_table)):
+            if values and set(values) != set(self.table_ids):
+                raise ValueError(f"dependency scope {name} must cover selected tables")
         return self
 
 

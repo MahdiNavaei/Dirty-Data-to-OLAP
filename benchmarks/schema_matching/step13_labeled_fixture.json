@@ -1,0 +1,21 @@
+{
+  "fixture_id": "step13-cross-source-hard-negatives-v1",
+  "description": "Synthetic labels kept separate from matcher inputs.",
+  "positives": [
+    ["crm_customers-customer_code", "erp_customers-client_no"],
+    ["crm_customers-status", "erp_customers-status"]
+  ],
+  "hard_negatives": [
+    ["crm_orders-status", "erp_customers-status", "same_name_different_table_context"],
+    ["crm_customers-status", "erp_customers-status_code", "low_cardinality_overlap_not_semantic_proof"],
+    ["crm_customers-customer_code", "erp_customers-order_total", "type_incompatible"],
+    ["crm_customers-\u0634\u0646\u0627\u0633\u0647_\u0645\u0634\u062a\u0631\u06cc", "erp_customers-client_no", "multilingual_name_without_fabricated_translation"]
+  ],
+  "domain_assertion_example": {
+    "assertion_id": "domain-assertion-crm-erp-customer-code-v1",
+    "version": "1",
+    "left_column_id": "crm_customers-customer_code",
+    "right_column_id": "erp_customers-client_no",
+    "effect": "evidence_only"
+  }
+}

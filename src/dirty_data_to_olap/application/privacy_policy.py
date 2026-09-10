@@ -51,6 +51,7 @@ class PrivacyPolicyService:
         self.policy = policy or self.load_policy(config_path)
         self.project_root = project_root.resolve() if project_root else None
         self._dependency_authorizations: dict[str, object] = {}
+        self._matching_authorizations: dict[str, object] = {}
 
     @staticmethod
     def load_policy(config_path: Path | None = None) -> PrivacyPolicy:
@@ -153,6 +154,53 @@ class PrivacyPolicyService:
 
     def authorization_for_decision(self, decision: PrivacyDecision):
         return self._dependency_authorizations.get(decision.authorization_id)
+
+    def authorize_schema_matching_analysis(self, context, *, source_ids: Sequence[str], snapshot_ids: Mapping[str, str], table_ids_by_source: Mapping[str, Sequence[str]], column_ids_by_table: Mapping[str, Sequence[str]] = (), artifact_ids: Sequence[str] = ()) -> PrivacyDecision:
+        """Issue exact-scope local authorization for instance-aware matching."""
+        from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchPrivacyContext, MatchingAuthorization
+
+        try:
+            validated = SchemaMatchPrivacyContext.model_validate(context)
+        except Exception:
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="schema matching privacy context failed the local-only contract", classification_id="schema-matching-local-analysis", failure_ref="privacy-schema-matching-context-invalid")
+        ids = tuple(source_ids)
+        if len(ids) < 2 or set(snapshot_ids) != set(ids) or set(table_ids_by_source) != set(ids):
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="matching authorization requires exact multi-source snapshot and table bindings", classification_id="schema-matching-local-analysis", failure_ref="privacy-schema-matching-scope-unbound")
+        if self.project_root is not None:
+            temp_root = (self.project_root / validated.project_temp_root).resolve()
+            try:
+                temp_root.relative_to(self.project_root)
+            except ValueError:
+                return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="matching ephemeral input root escapes the project", classification_id="schema-matching-local-analysis", failure_ref="privacy-schema-matching-temp-root-invalid")
+        normalized_tables = {key: tuple(value) for key, value in table_ids_by_source.items()}
+        normalized_columns = {key: tuple(value) for key, value in dict(column_ids_by_table or {}).items()}
+        auth = MatchingAuthorization(
+            authorization_id=f"schema-matching-auth-{hashlib.sha256(f'{self.policy.policy_id}:{self.policy.version}:{ids}:{dict(snapshot_ids)}:{normalized_tables}:{normalized_columns}'.encode()).hexdigest()[:32]}",
+            purpose=validated.purpose,
+            policy_id=self.policy.policy_id,
+            policy_version=self.policy.version,
+            source_ids=ids,
+            snapshot_ids=dict(snapshot_ids),
+            table_ids_by_source=normalized_tables,
+            column_ids_by_table=normalized_columns,
+            artifact_ids=tuple(artifact_ids),
+            issued_at=datetime.now(timezone.utc),
+        )
+        self._matching_authorizations[auth.authorization_id] = auth
+        return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="instance-aware matching is authorized for local ephemeral staged rows only", classification_id="schema-matching-local-analysis", required_transformation="aggregate_project_owned_evidence", authorization_id=auth.authorization_id)
+
+    def verify_schema_matching_authorization(self, authorization, *, source_ids: Sequence[str], snapshot_ids: Mapping[str, str], table_ids_by_source: Mapping[str, Sequence[str]], column_ids_by_table: Mapping[str, Sequence[str]] = (), artifact_ids: Sequence[str] = ()) -> bool:
+        from dirty_data_to_olap.domain.contracts.schema_matching import MatchingAuthorization
+
+        if not isinstance(authorization, MatchingAuthorization):
+            return False
+        issued = self._matching_authorizations.get(authorization.authorization_id)
+        if issued is None or issued != authorization:
+            return False
+        return issued.source_ids == tuple(source_ids) and dict(issued.snapshot_ids) == dict(snapshot_ids) and issued.table_ids_by_source == {key: tuple(value) for key, value in table_ids_by_source.items()} and issued.column_ids_by_table == {key: tuple(value) for key, value in dict(column_ids_by_table or {}).items()} and (not artifact_ids or issued.artifact_ids == tuple(artifact_ids)) and issued.policy_id == self.policy.policy_id and issued.policy_version == self.policy.version
+
+    def matching_authorization_for_decision(self, decision: PrivacyDecision):
+        return self._matching_authorizations.get(decision.authorization_id)
 
     def decide_exposure(self, classification: PrivacyClassification, request: ExposureRequest) -> PrivacyDecision:
         if request.context is ExposureContext.RAW_STAGING and self.policy.raw_staging_allowed and request.requested_mode == "raw":

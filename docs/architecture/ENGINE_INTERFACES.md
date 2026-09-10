@@ -66,14 +66,14 @@ directly.
 
 ## SchemaMatchingAdapter
 
-- Purpose: generate cross-source mapping candidates.
-- Input: project-owned table/column/profile contracts.
-- Output: SchemaMatchCandidate with raw score semantics and provenance.
-- Side effects: artifact-plane writes only.
-- Idempotency: pinned inputs and matcher version.
+- Purpose: generate bounded, explainable cross-source mapping candidates over pinned snapshots.
+- Input: multiple SourceCatalog/SourceSnapshotResult pairs, optional profiles and dependency evidence, SchemaMatchRequest and instance-mode policy authorization.
+- Output: SchemaMatchCandidate plus separate native SchemaMatchScore, signal-family, capability, failure, pruning and artifact contracts.
+- Side effects: complete hash-bound staged reads, deterministic local sampling and atomic aggregate-only artifact writes.
+- Idempotency: pinned source/snapshot hashes, request configuration and matcher version.
 - Optionality: conditional by plan.
-- Failure: stage failure or explicit optional skip; no automatic canonical mutation.
-- Forbidden: native Valentine results or scores presented as probabilities.
+- Failure: explicit failure or conditional skip; a selected multi-source request with no successful matcher is not complete.
+- Forbidden: native Valentine results in project contracts, raw values in artifacts/logs, source reconnect, unbounded pair search, canonical mutation or scores presented as probabilities.
 
 ## EntityResolutionAdapter
 

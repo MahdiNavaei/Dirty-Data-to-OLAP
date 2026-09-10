@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import shutil
 import hashlib
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from dirty_data_to_olap.adapters.dependencies.desbordante import DesbordanteDependencyAdapter, ProviderFD, ProviderIND, ProviderUCC, _encode_cell, _ind_metrics
+from dirty_data_to_olap.adapters.dependencies.desbordante import DesbordanteDependencyAdapter, DesbordanteDockerEngine, ProviderFD, ProviderIND, ProviderUCC, _encode_cell, _ind_metrics
 from dirty_data_to_olap.application.privacy_policy import PrivacyPolicyService
 from dirty_data_to_olap.adapters.dependencies.staged import DependencyInputIntegrityError, DependencyStagedReader
 from dirty_data_to_olap.domain.contracts.dependency import (
@@ -45,6 +46,23 @@ from dirty_data_to_olap.domain.contracts.source import (
     RecordLocatorKind,
 )
 from dirty_data_to_olap.adapters.dependencies.staged import StagedDependencyRow
+
+
+def test_docker_engine_executes_inspected_immutable_identity(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(stdout="[]", stderr="")
+
+    monkeypatch.setattr("dirty_data_to_olap.adapters.dependencies.desbordante.subprocess.run", fake_run)
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("id\n1\n", encoding="utf-8")
+    engine = DesbordanteDockerEngine("sha256:immutable-image-id")
+    engine.image = "mutable-tag-retargeted:latest"
+    engine._run("ucc", [input_path], {"max_arity": 1})
+    assert calls[0][8] == "sha256:immutable-image-id"
+    assert "mutable-tag-retargeted:latest" not in calls[0]
 
 
 class _Ucc:

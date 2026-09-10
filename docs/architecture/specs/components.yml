@@ -155,14 +155,15 @@ components:
     name: Schema Matching Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [generate ranked cross-source mapping candidates]
-    input_contracts: [SourceCatalog, ColumnProfile]
-    output_contracts: [SchemaMatchCandidate]
-    depends_on: [application.discovery, domain.contracts]
+    responsibilities: [generate bounded ranked cross-source mapping candidates, preserve explainable signal families and matcher coverage]
+    input_contracts: [SourceCatalogs, SourceSnapshotResults, BatchReference, ColumnProfile, TableProfile, DependencyEvidence, SchemaMatchRequest, MatchingAuthorization]
+    optional_input_contracts: [ColumnProfile, TableProfile, DependencyEvidence, MatchingAuthorization when schema_only]
+    output_contracts: [SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, SchemaMatchFailure, SchemaMatchCapability, SchemaMatchPruningSummary, SchemaMatchArtifactReference]
+    depends_on: [application.discovery, application.source_snapshot, application.profiling, application.privacy_policy, domain.contracts]
     ports_used: [SchemaMatchingAdapter, ArtifactStorePort]
     implementation_owner: Step13 Schema Matching Engineer
     implementation_step: 13
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -465,14 +466,14 @@ components:
     name: Schema Matching Adapter Family
     layer: adapters
     ownership: adapter implementation
-    responsibilities: [normalize matcher candidates and raw score semantics]
-    input_contracts: [SchemaMatchRequest]
-    output_contracts: [SchemaMatchCandidate]
+    responsibilities: [read complete hash-bound staged snapshots, execute official Valentine, normalize raw scores and signal provenance]
+    input_contracts: [SourceCatalogs, SourceSnapshotResults, ColumnProfile, TableProfile, DependencyEvidence, SchemaMatchRequest, MatchingAuthorization]
+    output_contracts: [SchemaMatchCandidate, SchemaMatchScore, SchemaMatchSignal, SchemaMatchFailure, SchemaMatchCapability, SchemaMatchPruningSummary]
     depends_on: [domain.contracts]
     extension_port: SchemaMatchingAdapter
     implementation_owner: Step13 Schema Matching Engineer
     implementation_step: 13
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false

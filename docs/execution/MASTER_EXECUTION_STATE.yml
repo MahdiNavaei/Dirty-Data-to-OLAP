@@ -63,7 +63,7 @@ repository:
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
   last_verified_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
-  commit_recording_note: "This SHA identifies the Step11 G3 integrity-closure content commit; the follow-up metadata commit records the final G3 decision, Step11 completion, Step12 handoff metadata and final validation."
+  commit_recording_note: "last_verified_commit identifies the latest verified repository commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit, while metadata commits are recorded separately in the specialist receipt and log."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'

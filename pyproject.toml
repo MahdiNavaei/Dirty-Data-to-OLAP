@@ -12,6 +12,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+matching = [
+    "valentine==1.0.0",
+]
 test = [
   "pytest>=8.4,<9",
 ]

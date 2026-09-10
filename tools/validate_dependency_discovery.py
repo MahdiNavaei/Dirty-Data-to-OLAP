@@ -72,7 +72,7 @@ def main() -> int:
     checks.append(("research clone is not runtime dependency", not (ROOT / "research/oss/desbordante-core").exists()))
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     checks.append(("G4 remains pending", state["gates"]["G4_BOUNDED_INTELLIGENCE"] == "PENDING"))
-    checks.append(("Step13 implementation is absent", not (ROOT / "src/dirty_data_to_olap/application/schema_matching.py").exists()))
+    checks.append(("Step13 implementation is present without changing dependency ownership", (ROOT / "src/dirty_data_to_olap/application/schema_matching.py").exists() and (ROOT / "src/dirty_data_to_olap/application/dependency_discovery.py").exists()))
 
     try:
         actual = subprocess.run(["git", "rev-parse", "0b6e3032183c09296b2ba7c0e3c4cd36545ca73b^{commit}"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()

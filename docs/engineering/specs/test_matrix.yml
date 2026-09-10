@@ -29,7 +29,7 @@ stage_test_requirements:
   - {stage_id: SOURCE_SNAPSHOT_STAGE, required_categories: [contract, security, integration], owner: "Step07"}
   - {stage_id: PROFILING, required_categories: [unit, adapter_contract, performance], owner: "Step08"}
   - {stage_id: DEPENDENCY_DISCOVERY, required_categories: [unit, contract, adapter_contract, integration, evaluation, security], owner: "Step12"}
-  - {stage_id: SCHEMA_MATCHING, required_categories: [adapter_contract, evaluation], owner: "Step13"}
+  - {stage_id: SCHEMA_MATCHING, required_categories: [unit, contract, adapter_contract, integration, evaluation, security], owner: "Step13"}
   - {stage_id: QUALITY_ANALYSIS, required_categories: [unit, contract, evaluation], owner: "Step09"}
   - {stage_id: OPTIONAL_SEMANTIC_EVIDENCE, required_categories: [contract, security, failure_recovery], owner: "Step16"}
   - {stage_id: EVIDENCE_FUSION, required_categories: [unit, contract, evaluation], owner: "Step17"}

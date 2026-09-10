@@ -147,7 +147,9 @@ else:
  for x in a.get_inds():
   l=x.get_lhs(); r=x.get_rhs(); fn=getattr(x,"get_error",None); out.append({"left_table_index":int(l.table_index),"left_column_indices":[int(v) for v in l.column_indices],"right_table_index":int(r.table_index),"right_column_indices":[int(v) for v in r.column_indices],"native_metric_value":float(fn()) if callable(fn) else None})
 print(json.dumps(out,separators=(",",":")))'''
-        command = ["docker","run","--rm","--network","none","--read-only","--mount",f"type=bind,source={root},target=/input,readonly",self.image,"python","-c",script,kind,json.dumps(container_paths),json.dumps(options)]
+        # The mutable tag is used only for discovery. Execution uses the
+        # identity inspected during engine construction.
+        command = ["docker","run","--rm","--network","none","--read-only","--mount",f"type=bind,source={root},target=/input,readonly",self.image_digest,"python","-c",script,kind,json.dumps(container_paths),json.dumps(options)]
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=max(self.timeout_seconds, 0.1))
         except subprocess.TimeoutExpired as error:
@@ -223,6 +225,7 @@ class DesbordanteDependencyAdapter:
         if isinstance(self.engine,DesbordanteDockerEngine): self.engine.timeout_seconds=request.search_policy.max_runtime_seconds
         try:
             paths={t.table_id:self._write_engine_input(temp_root,t,columns_by_table[t.table_id],rows_by_table[t.table_id],request.null_policy) for t in selected}
+            scope = self._provider_scope(scope, rows_by_table, columns_by_table, request.null_policy)
             provenance=lambda algorithm,ids: DependencyProvenance(source_id=request.source_id,snapshot_id=request.snapshot_id,table_ids=tuple(ids),engine=self.engine.name,engine_version=self.engine.version,algorithm=algorithm,algorithm_config_hash=dependency_config_hash(request),adapter=self.adapter_reference,created_at=datetime.now(timezone.utc),null_semantics=self._null_semantics(request.null_policy),provider_runtime=getattr(self.engine, 'runtime_identity', 'test/provider-boundary'))
             ucc, keys=self._discover_keys(request,selected,columns_by_table,rows_by_table,paths,scope,provenance,failures)
             fds=self._discover_fds(request,selected,columns_by_table,rows_by_table,refs_by_table,paths,scope,provenance,failures)
@@ -312,7 +315,14 @@ class DesbordanteDependencyAdapter:
 
     def _scope(self,request,snapshot_result,tables):
         ids={t.table_id for t in tables}; batches=tuple(b for b in snapshot_result.batches if b.table_id in ids); obs={o.table_id:o for o in snapshot_result.table_observations}; rows={t.table_id:sum(b.row_count for b in batches if b.table_id==t.table_id) for t in tables}
-        return DependencyObservationScope(source_id=request.source_id,snapshot_id=request.snapshot_id,table_ids=tuple(t.table_id for t in tables),mode=snapshot_result.snapshot.observation_scope.mode,rows_by_table=rows,complete_by_table={t.table_id:obs.get(t.table_id) is not None and obs[t.table_id].status is TableObservationStatus.FULLY_OBSERVED for t in tables},input_batch_ids=tuple(b.batch_id for b in batches),input_batch_hashes=tuple(b.content_hash for b in batches),input_record_reference_count=sum(1 for r in snapshot_result.record_references if r.table_id in ids))
+        return DependencyObservationScope(source_id=request.source_id,snapshot_id=request.snapshot_id,table_ids=tuple(t.table_id for t in tables),mode=snapshot_result.snapshot.observation_scope.mode,rows_by_table=rows,staged_rows_by_table=rows,provider_rows_by_table={table_id: 0 for table_id in ids},null_excluded_rows_by_table={table_id: 0 for table_id in ids},provider_scope_semantics="provider_not_started",complete_by_table={t.table_id:obs.get(t.table_id) is not None and obs[t.table_id].status is TableObservationStatus.FULLY_OBSERVED for t in tables},input_batch_ids=tuple(b.batch_id for b in batches),input_batch_hashes=tuple(b.content_hash for b in batches),input_record_reference_count=sum(1 for r in snapshot_result.record_references if r.table_id in ids))
+
+    @staticmethod
+    def _provider_scope(scope, rows_by_table, columns_by_table, null_policy):
+        provider = {table_id: sum(1 for row in rows if _row_eligible(row, columns_by_table[table_id], null_policy)) for table_id, rows in rows_by_table.items()}
+        excluded = {table_id: len(rows_by_table[table_id]) - provider[table_id] for table_id in rows_by_table}
+        semantics = "complete_case_filter_over_projected_columns" if null_policy is NullPolicy.EXCLUDE_PHYSICAL_NULL else "all_projected_rows_encoded_with_declared_null_semantics"
+        return scope.model_copy(update={"provider_rows_by_table": provider, "null_excluded_rows_by_table": excluded, "provider_scope_semantics": semantics})
 
     def _search_stats(self,request,requested,selected,all_columns,columns):
         input_columns=sum(len(all_columns[t.table_id]) for t in requested)
