@@ -49,9 +49,9 @@ interfaces:
     forbidden_behavior: [source reconnect, source writes, raw-value artifact persistence]
   - interface_id: DependencyDiscoveryAdapter
     purpose: Bounded UCC, FD, AFD, IND and approximate-IND evidence generation over immutable staged rows.
-    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, Profiles, DependencyRequest, DependencyPrivacyContext]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
-    side_effects: [read_staged_artifacts, write_artifacts, project_local_ephemeral_engine_input]
+    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, Profiles, DependencyRequest, DependencyPrivacyContext, DependencyAuthorization]
+    output_contracts: [UniqueColumnCombinationEvidence, KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, DependencyMetricObservation, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
+    side_effects: [read_staged_artifacts, write_artifacts, project_local_ephemeral_engine_input, local_provider_process]
     idempotency: pinned inputs/configuration/adapter version
     optional: false
     capability_required_for_v1: true
@@ -59,7 +59,7 @@ interfaces:
     capability_id: dependencies.adapter
     failure_mode: capability/input/engine failure is recorded; incomplete output is non-consumable and no guessed relationship is emitted
     adapter_component: adapters.dependencies
-    forbidden_behavior: [source reconnect, source writes, native Desbordante objects in project contracts, raw values in artifacts/logs, unbounded combinations, confirmed FK without project decision]
+    forbidden_behavior: [source reconnect, source writes, native Desbordante objects in project contracts, raw values in artifacts/logs, unbounded combinations, confirmed FK without project decision, authorization from context alone, silent provider null coercion]
   - interface_id: SchemaMatchingAdapter
     purpose: Ranked cross-source mapping candidates.
     input_contracts: [SourceCatalog, Profiles, SchemaMatchRequest]

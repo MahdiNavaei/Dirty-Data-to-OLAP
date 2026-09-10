@@ -139,9 +139,9 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [bounded candidate keys, FDs, AFDs, INDs, approximate INDs, search statistics and relationship hypotheses]
-    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext]
+    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext, DependencyAuthorization]
     optional_input_contracts: [ColumnProfile, TableProfile]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
+    output_contracts: [UniqueColumnCombinationEvidence, KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, DependencyMetricObservation, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
     depends_on: [application.discovery, domain.contracts]
     ports_used: [DependencyDiscoveryAdapter, ArtifactStorePort]
     implementation_owner: Step12 Dependency Discovery Engineer
@@ -446,10 +446,10 @@ components:
     name: Dependency Adapter Family
     layer: adapters
     ownership: adapter implementation
-    responsibilities: [read complete staged rows, apply bounded search policy, normalize Desbordante evidence and publish aggregate artifacts]
-    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext]
+    responsibilities: [read complete staged rows, require policy-issued authorization, apply bounded search policy, normalize native or local Docker Desbordante evidence and publish aggregate artifacts]
+    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext, DependencyAuthorization]
     optional_input_contracts: [ColumnProfile, TableProfile]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
+    output_contracts: [UniqueColumnCombinationEvidence, KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, DependencyMetricObservation, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
     depends_on: [domain.contracts]
     extension_port: DependencyDiscoveryAdapter
     implementation_owner: Step12 Dependency Discovery Engineer

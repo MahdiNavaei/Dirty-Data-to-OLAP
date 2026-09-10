@@ -51,6 +51,7 @@ class DependencyFailureKind(str, Enum):
     ENGINE_FAILED = "ENGINE_FAILED"
     BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
     ARTIFACT_FAILED = "ARTIFACT_FAILED"
+    UNSUPPORTED_ALGORITHM = "UNSUPPORTED_ALGORITHM"
 
 
 class NullPolicy(str, Enum):
@@ -66,6 +67,9 @@ class DependencySearchPolicy(_SourceModel):
     max_tables: int = Field(default=32, ge=1, le=10_000)
     max_columns_per_table: int = Field(default=64, ge=1, le=10_000)
     max_determinant_width: int = Field(default=3, ge=1, le=8)
+    max_ucc_arity: int = Field(default=3, ge=1, le=8)
+    max_fd_lhs_arity: int = Field(default=3, ge=1, le=8)
+    max_ind_arity: int = Field(default=3, ge=1, le=8)
     max_column_pairs: int = Field(default=2_000, ge=1, le=1_000_000)
     max_output_candidates: int = Field(default=500, ge=1, le=100_000)
     max_runtime_seconds: int = Field(default=120, ge=1, le=86_400)
@@ -122,6 +126,30 @@ class DependencyPrivacyContext(_SourceModel):
         return self
 
 
+class DependencyAuthorization(_SourceModel):
+    """An authorization issued by PrivacyPolicyService for one exact input scope."""
+
+    authorization_id: str = Field(min_length=1)
+    purpose: str
+    policy_id: str
+    policy_version: str
+    source_id: str
+    snapshot_id: str
+    table_ids: tuple[str, ...] = Field(min_length=1)
+    artifact_ids: tuple[str, ...] = ()
+    local_only: bool = True
+    network_allowed: bool = False
+    external_processing_allowed: bool = False
+    issued_at: datetime
+    required_transformation: str = "aggregate_project_owned_evidence"
+
+    @model_validator(mode="after")
+    def fail_closed(self) -> "DependencyAuthorization":
+        if not self.local_only or self.network_allowed or self.external_processing_allowed:
+            raise ValueError("dependency authorization must be local-only and non-external")
+        return self
+
+
 class DependencyRequest(_SourceModel):
     request_id: str = Field(min_length=1)
     source_id: str
@@ -144,6 +172,8 @@ class DependencyProvenance(_SourceModel):
     algorithm_config_hash: str
     adapter: AdapterReference
     created_at: datetime
+    null_semantics: str = "unspecified"
+    provider_runtime: str = "unspecified"
 
 
 class DependencyViolation(_SourceModel):
@@ -160,6 +190,7 @@ class KeyCandidate(_SourceModel):
     snapshot_id: str
     table_id: str
     columns: tuple[str, ...] = Field(min_length=1)
+    ucc_evidence_id: str = Field(min_length=1)
     key_type: str = "UNIQUE_CANDIDATE"
     uniqueness_ratio: float = Field(ge=0, le=1)
     physical_missing_ratio: float = Field(ge=0, le=1)
@@ -182,6 +213,9 @@ class FunctionalDependencyEvidence(_SourceModel):
     error_ratio: float = Field(ge=0, le=1)
     violation_count: int = Field(ge=0)
     violations: tuple[DependencyViolation, ...] = ()
+    project_metric_name: str = "distinct_rhs_alternatives_excess_per_eligible_row"
+    project_metric_definition: str = "sum(max(distinct dependent values per determinant - 1, 0)) / eligible rows"
+    metric_observations: tuple["DependencyMetricObservation", ...] = ()
     null_policy: NullPolicy
     observation_scope: DependencyObservationScope
     state: DependencyEvidenceState
@@ -206,6 +240,7 @@ class InclusionDependencyEvidence(_SourceModel):
     type_compatible: bool
     low_cardinality_risk: bool = False
     violations: tuple[DependencyViolation, ...] = ()
+    metric_observations: tuple["DependencyMetricObservation", ...] = ()
     null_policy: NullPolicy
     observation_scope: DependencyObservationScope
     state: DependencyEvidenceState
@@ -244,6 +279,34 @@ class RelationshipCandidate(_SourceModel):
         return self
 
 
+class UniqueColumnCombinationEvidence(_SourceModel):
+    """Measured UCC evidence; it is not a primary-key assertion."""
+
+    evidence_id: str
+    source_id: str
+    snapshot_id: str
+    table_id: str
+    column_ids: tuple[str, ...] = Field(min_length=1)
+    uniqueness_ratio: float = Field(ge=0, le=1)
+    physical_missing_ratio: float = Field(ge=0, le=1)
+    duplicate_count: int = Field(ge=0)
+    observation_scope: DependencyObservationScope
+    state: DependencyEvidenceState
+    provenance: DependencyProvenance
+
+
+class DependencyMetricObservation(_SourceModel):
+    """A provider-native or explicitly project-computed metric observation."""
+
+    metric_name: str = Field(min_length=1)
+    metric_value: float | None = Field(default=None, ge=0)
+    direction: str = Field(min_length=1)
+    threshold: float | None = Field(default=None, ge=0)
+    provider_algorithm: str = Field(min_length=1)
+    definition: str = Field(min_length=1)
+    project_computed: bool
+
+
 class DependencyFailure(_SourceModel):
     failure_id: str
     request_id: str
@@ -266,9 +329,26 @@ class DependencyCapability(_SourceModel):
 class DependencySearchStats(_SourceModel):
     input_tables: int = Field(ge=0)
     input_columns: int = Field(ge=0)
+    columns_excluded_by_bound: int = Field(default=0, ge=0)
+    tables_excluded_by_bound: int = Field(default=0, ge=0)
     candidate_column_pairs: int = Field(ge=0)
+    candidate_pairs_before_pruning: int = Field(default=0, ge=0)
+    pruned_by_type: int = Field(default=0, ge=0)
+    pruned_by_scope: int = Field(default=0, ge=0)
+    pruned_by_budget: int = Field(default=0, ge=0)
     pruned_column_pairs: int = Field(ge=0)
+    evaluated_pairs: int = Field(default=0, ge=0)
     searched_determinants: int = Field(ge=0)
+    ucc_search_arity: int = Field(default=0, ge=0)
+    ucc_arity_bounded: bool = True
+    fd_search_arity: int = Field(default=0, ge=0)
+    fd_arity_bounded: bool = True
+    ind_search_arity: int = Field(default=0, ge=0)
+    ind_arity_bounded: bool = True
+    provider_calls: int = Field(default=0, ge=0)
+    output_truncation: bool = False
+    runtime_timeout: bool = False
+    completeness: str = "COMPLETE"
     emitted_candidates: int = Field(ge=0)
     truncated: bool = False
     truncation_reasons: tuple[str, ...] = ()
@@ -285,6 +365,7 @@ class DependencyArtifactReference(_SourceModel):
 class DependencyResult(_SourceModel):
     request: DependencyRequest
     observation_scope: DependencyObservationScope
+    ucc_evidence: tuple[UniqueColumnCombinationEvidence, ...] = ()
     key_candidates: tuple[KeyCandidate, ...] = ()
     functional_dependencies: tuple[FunctionalDependencyEvidence, ...] = ()
     inclusion_dependencies: tuple[InclusionDependencyEvidence, ...] = ()
@@ -297,7 +378,21 @@ class DependencyResult(_SourceModel):
 
 
 def dependency_config_hash(request: DependencyRequest) -> str:
-    return stable_digest({"request": request.model_dump(mode="json"), "schema": "dependency-contracts-v1"})
+    policy = request.search_policy.model_dump(mode="json")
+    return stable_digest(
+        {
+            "requested_kinds": sorted(kind.value for kind in request.requested_kinds),
+            "search_policy": policy,
+            "null_policy": request.null_policy.value,
+            "algorithm_policy_version": request.algorithm_policy_version,
+            "privacy_execution_mode": {
+                "local_only": request.privacy_context.local_only,
+                "external_processing_allowed": request.privacy_context.external_processing_allowed,
+                "network_allowed": request.privacy_context.network_allowed,
+            },
+            "schema": "dependency-contracts-v2",
+        }
+    )
 
 
 def dependency_id(prefix: str, value: Any) -> str:

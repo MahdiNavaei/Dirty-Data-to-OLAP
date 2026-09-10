@@ -33,7 +33,7 @@ specialist_execution:
   last_completed_step: 12
   last_completed_role: "dependency_discovery_engineer"
   last_completed_specialist: "Step12 — Dependency Discovery Engineer"
-  last_completed_content_commit: "0b6e303f220f85d0e5c756039c8f0e88d670ba27"
+  last_completed_content_commit: "0b6e3032183c09296b2ba7c0e3c4cd36545ca73b"
   next_step: "Step13 — Schema Matching Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
@@ -61,7 +61,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "b659b6fdd29046e8132d8a4bbbe0ed514af88114"
+  last_verified_commit: "0b6e3032183c09296b2ba7c0e3c4cd36545ca73b"
   commit_recording_note: "This SHA identifies the Step11 G3 integrity-closure content commit; the follow-up metadata commit records the final G3 decision, Step11 completion, Step12 handoff metadata and final validation."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'

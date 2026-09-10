@@ -49,6 +49,8 @@ class DependencyArtifactStore:
 
         for item in result.key_candidates:
             publish_item("key_candidates", "dependency_key_candidate", item.candidate_id, item.model_dump(mode="json"))
+        for item in result.ucc_evidence:
+            publish_item("ucc_evidence", "dependency_ucc_evidence", item.evidence_id, item.model_dump(mode="json"))
         for item in result.functional_dependencies:
             publish_item("functional_dependencies", "dependency_functional_dependency", item.evidence_id, item.model_dump(mode="json"))
         for item in result.inclusion_dependencies:

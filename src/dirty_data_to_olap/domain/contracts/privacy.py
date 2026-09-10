@@ -196,6 +196,7 @@ class PrivacyDecision(_PrivacyModel):
     classification_id: str | None = None
     required_transformation: str | None = None
     failure_ref: str | None = None
+    authorization_id: str | None = None
 
 
 class ExternalProcessingDecision(_PrivacyModel):

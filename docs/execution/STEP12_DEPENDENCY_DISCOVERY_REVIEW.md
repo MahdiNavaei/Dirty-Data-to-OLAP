@@ -30,3 +30,36 @@ The current Windows host does not import Desbordante, so the host adapter report
 - `python tools/validate_dependency_discovery.py` -> `PASS: dependency_checks=11`.
 - Existing validators -> data architecture, data quality, database security, domain docs, privacy, profiling, solution architecture, source ingestion and engineering post-gate all PASS; engineering post-gate reports `73` checks and `23/23` negative tests, while solution architecture reports every negative-test family PASS.
 - `python -m compileall -q src tools tests` and `git diff --check` -> PASS.
+
+## Post-Step12 Independent Integrity Closure
+
+The original Step12 `PASS` required correction. Its recorded content SHA was
+`0b6e303f220f85d0e5c756039c8f0e88d670ba27`, which is not a Git commit in this
+repository; the actual original content commit is
+`0b6e3032183c09296b2ba7c0e3c4cd36545ca73b`. The production adapter could not execute a mature
+provider on this Windows host, and the first implementation had integrity
+defects in UCC/key separation, stable identifiers, configuration fingerprinting,
+privacy authorization, null/provider semantics, approximate metrics, orphan
+provenance, relationship gating, and search completeness.
+
+The surgical closure repaired those defects. The adapter now requires a
+policy-issued exact-scope `DependencyAuthorization`, uses stable table and
+column IDs, separates `UniqueColumnCombinationEvidence` from derived
+`KeyCandidate`, records native metric availability without fabrication, keeps
+orphan references aligned, gates relationship candidates on observed target
+uniqueness/type/low-cardinality evidence, and reports independent UCC/FD/IND
+arity and pruning bounds. On Windows it invokes the externally/local provisioned
+Desbordante image through a network-disabled, read-only Docker process with a
+real subprocess timeout. Containerization does not remove AGPL obligations;
+image distribution authorization remains a project-policy limitation.
+
+Executed closure evidence:
+
+- `python -m pytest tests/unit/test_dependency_discovery.py -q --disable-warnings` -> `10 passed`.
+- `python -m pytest tests/integration/dependencies/test_step12_real_provider.py -q --disable-warnings` -> `1 passed`; actual chain was `DependencyDiscoveryService -> DesbordanteDependencyAdapter -> desbordante-docker`, producing UCC, FD and IND contracts.
+- `python -m pytest -q --disable-warnings --maxfail=1` -> `107 passed, 41 warnings`; the existing dlt/SQLAlchemy cursor-finalizer traceback occurs after successful completion and is non-failing.
+- `python -m compileall -q src tools tests` -> PASS; `git diff --check` -> PASS.
+- Validators -> domain docs, data architecture, solution architecture, engineering post-gate, source ingestion, profiling, data quality, privacy, database security and dependency discovery all PASS. Dependency validator: `21` behavioral checks; engineering post-gate: `73` checks and `23/23` negative tests; solution architecture: `10/10` dependency negative tests.
+- Published artifact inspection -> UCC evidence, derived key reference, FD, IND, runtime/null provenance, rejected relationship cases and aggregate-only JSON verified; raw fixture values absent.
+
+The original content commit remains `0b6e3032183c09296b2ba7c0e3c4cd36545ca73b`. The integrity-closure source commit and the metadata follow-up commit are recorded separately in Git history. Step13 implementation was not started; G4/G4A and later gates remain pending.

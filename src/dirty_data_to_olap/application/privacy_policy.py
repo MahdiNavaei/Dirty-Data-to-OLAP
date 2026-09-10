@@ -45,11 +45,12 @@ class PrivacyOperationError(ValueError):
 
 
 class PrivacyPolicyService:
-    """A deterministic cross-cutting guard; it is not an authorization system."""
+    """A deterministic cross-cutting policy and authorization boundary."""
 
     def __init__(self, policy: PrivacyPolicy | None = None, *, config_path: Path | None = None, project_root: Path | None = None) -> None:
         self.policy = policy or self.load_policy(config_path)
         self.project_root = project_root.resolve() if project_root else None
+        self._dependency_authorizations: dict[str, object] = {}
 
     @staticmethod
     def load_policy(config_path: Path | None = None) -> PrivacyPolicy:
@@ -103,21 +104,55 @@ class PrivacyPolicyService:
             return ArtifactSensitivity(artifact_id=artifact_id, artifact_type=artifact_type, sensitivity=SensitivityLevel.SENSITIVE, classification_state=ClassificationState.POTENTIALLY_SENSITIVE, raw_value_allowed=False, log_allowed=False, debug_allowed=False, export_allowed=False, external_processing_allowed=False, retention_class="derived_sensitive", evidence_refs=tuple(evidence_refs))
         return ArtifactSensitivity(artifact_id=artifact_id, artifact_type=artifact_type, sensitivity=SensitivityLevel.INTERNAL, classification_state=ClassificationState.UNKNOWN, raw_value_allowed=False, log_allowed=False, debug_allowed=False, export_allowed=False, external_processing_allowed=False, retention_class="controlled_metadata", evidence_refs=tuple(evidence_refs))
 
-    def authorize_dependency_analysis(self, context) -> PrivacyDecision:
-        """Authorize the bounded local structural-analysis boundary only."""
-        from dirty_data_to_olap.domain.contracts.dependency import DependencyPrivacyContext
+    def authorize_dependency_analysis(self, context, *, source_id: str | None = None, snapshot_id: str | None = None, table_ids: Sequence[str] = (), artifact_ids: Sequence[str] = ()) -> PrivacyDecision:
+        """Issue a decision bound to the exact dependency input scope.
+
+        A context is only a request for policy evaluation.  It is never an
+        authorization token accepted by the dependency adapter.
+        """
+        from dirty_data_to_olap.domain.contracts.dependency import DependencyAuthorization, DependencyPrivacyContext
 
         try:
             validated = DependencyPrivacyContext.model_validate(context)
         except Exception:
             return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="dependency context failed the local-only privacy contract", classification_id="dependency-local-analysis", failure_ref="privacy-dependency-context-invalid")
+        if not source_id or not snapshot_id or not tuple(table_ids):
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="dependency authorization requires source, snapshot and table bindings", classification_id="dependency-local-analysis", failure_ref="privacy-dependency-scope-unbound")
         if self.project_root is not None:
             temp_root = (self.project_root / validated.project_temp_root).resolve()
             try:
                 temp_root.relative_to(self.project_root)
             except ValueError:
                 return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="dependency ephemeral input root escapes the project", classification_id="dependency-local-analysis", failure_ref="privacy-dependency-temp-root-invalid")
-        return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="dependency analysis is authorized for local ephemeral staging only", classification_id="dependency-local-analysis", required_transformation="aggregate_project_owned_evidence")
+        authorization = DependencyAuthorization(
+            authorization_id=f"dependency-auth-{hashlib.sha256(f'{self.policy.policy_id}:{self.policy.version}:{source_id}:{snapshot_id}:{tuple(table_ids)}'.encode()).hexdigest()[:32]}",
+            purpose=validated.purpose,
+            policy_id=self.policy.policy_id,
+            policy_version=self.policy.version,
+            source_id=source_id,
+            snapshot_id=snapshot_id,
+            table_ids=tuple(table_ids),
+            artifact_ids=tuple(artifact_ids),
+            local_only=validated.local_only,
+            network_allowed=validated.network_allowed,
+            external_processing_allowed=validated.external_processing_allowed,
+            issued_at=datetime.now(timezone.utc),
+        )
+        self._dependency_authorizations[authorization.authorization_id] = authorization
+        return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="dependency analysis is authorized for local ephemeral staging only", classification_id="dependency-local-analysis", required_transformation=authorization.required_transformation, authorization_id=authorization.authorization_id)
+
+    def verify_dependency_authorization(self, authorization, *, source_id: str, snapshot_id: str, table_ids: Sequence[str], artifact_ids: Sequence[str] = ()) -> bool:
+        from dirty_data_to_olap.domain.contracts.dependency import DependencyAuthorization
+
+        if not isinstance(authorization, DependencyAuthorization):
+            return False
+        issued = self._dependency_authorizations.get(authorization.authorization_id)
+        if issued is None or issued != authorization:
+            return False
+        return issued.source_id == source_id and issued.snapshot_id == snapshot_id and issued.table_ids == tuple(table_ids) and (not artifact_ids or issued.artifact_ids == tuple(artifact_ids)) and issued.policy_id == self.policy.policy_id and issued.policy_version == self.policy.version
+
+    def authorization_for_decision(self, decision: PrivacyDecision):
+        return self._dependency_authorizations.get(decision.authorization_id)
 
     def decide_exposure(self, classification: PrivacyClassification, request: ExposureRequest) -> PrivacyDecision:
         if request.context is ExposureContext.RAW_STAGING and self.policy.raw_staging_allowed and request.requested_mode == "raw":
