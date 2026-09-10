@@ -62,6 +62,7 @@ repository:
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
   last_verified_commit: "0b6e3032183c09296b2ba7c0e3c4cd36545ca73b"
+  integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   commit_recording_note: "This SHA identifies the Step11 G3 integrity-closure content commit; the follow-up metadata commit records the final G3 decision, Step11 completion, Step12 handoff metadata and final validation."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
