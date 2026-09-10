@@ -4,6 +4,8 @@ Status: PASS for the bounded project-owned evidence-fusion implementation.
 
 Starting HEAD: `1d3a49a59cfd43cc9a1921a8df68144f682c9e5d`.
 
+Content commits: `4223437d0c46c18cf72e7a9aecb827df5603e693` (`feat: implement provenance-aware evidence fusion`) and `9f70d67250bb0f7a813caf2647355d48f9a5b4a3` (`fix: close evidence fusion handoff validation`).
+
 ## Scope and upstream hardening
 
 Required governance, product/domain, architecture, engineering, Step17 and
@@ -33,9 +35,10 @@ case descriptions are stored without runtime truth leakage under
 
 ## Verification and limitations
 
-Focused Step17 tests, actual DependencyResult integration, artifact hashing,
-privacy canary, architecture boundary checks and the fusion validator passed.
-Full regression and all repository validators were run for the final receipt.
+Focused Step17 tests: `34 passed`; actual DependencyResult integration,
+artifact hashing, privacy canary, architecture boundary checks and the fusion
+validator passed. Full regression: `158 passed, 2 skipped`; compileall,
+diff-check and all repository validators passed for the final receipt.
 Optional provider availability remains environment-dependent; Step18
 evaluation, calibration, canonical modeling, review UI, repair execution and
 release claims remain future work.

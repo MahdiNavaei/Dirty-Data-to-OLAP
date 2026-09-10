@@ -994,3 +994,22 @@ handoff_to:
 - verification: isolated project-local venv with test/files/sql/profiling/excel/ml extras; unit `82 passed`; contract `5 passed`; integration `29 passed, 2 optional skips`; architecture `7 passed`; security `23 passed`; full suite `146 passed, 2 optional skips`; compileall, diff check and every `tools/validate_*.py` PASS
 - limitations: labels and semantic cases remain benchmark/evidence controls, not production truth; Step15 remains experimental and uncalibrated; no acceptance, canonical identity, mutation, deployment or release claim
 - final_state: `last_completed_step=16`, `current_step=17`, `current_role=evidence_fusion_engineer`, `G0-G4=PASS`, `G5-G15=PENDING`, `blocked=false`; Step17 implementation not started
+
+## Specialist Step17 - Evidence Fusion Engineer
+
+- execution_step: `17`
+- role_id: `evidence_fusion`
+- execution_state_role: `evidence_fusion_engineer`
+- status: `PASS` for the bounded project-owned evidence-fusion and review-ready decision scope
+- starting_head: `1d3a49a59cfd43cc9a1921a8df68144f682c9e5d`
+- content_commit_sha: `9f70d67250bb0f7a813caf2647355d48f9a5b4a3`
+- inputs_reviewed: current Git/state, Step17 and Step18 playbooks, governance, product/domain/data, architecture and engineering specifications, and actual Step08-Step16 contracts/implementations/tests
+- upstream_hardening: exact Step16 generation reference; character/token budget separation; honest reference denominator; transport-only containment metric; available-but-invalid capability status; project-owned semantic scratch; full baseline SHA; Step15 benchmark-label runtime/training reconciliation
+- implementation: project-owned fusion contracts/service; typed producer status; declared constraints; domain assertions; directional relationship and symmetric mapping subjects; evidence bundles/lineage/correlation groups; source-aware normalization; missing/scope/reliability semantics; first-class conflicts; review-only decisions; atomic byte-hashed result artifact; bounded benchmark and validator
+- fusion_policy: `relationship-fusion-v1` and `mapping-fusion-v1`, version `1.0`, `UNCALIBRATED`, automation disabled, G5 required for promotion
+- conflict_cases: `SEMANTIC_STRUCTURAL_CONFLICT`, `DECLARED_DATA_CONFLICT`, `TYPE_SEMANTIC_CONFLICT`, `SAMPLE_FULLSCAN_CONFLICT`, `MULTIPLE_TARGET_AMBIGUITY`
+- tests: focused Step17 `34 passed`; full regression `158 passed, 2 optional skips`; validators, compileall and diff-check PASS
+- g4_state: `PASS`; g5_state: `PENDING`; g3a/g3b/g4a: `PASS`
+- limitations: no calibration, acceptance, canonical model, ER runtime dependency, repair execution, production capacity or release claim
+- handoff_to: `Step18 - ML Evaluation Engineer`
+- next_state: `last_completed_step=17`, `current_step=18`, `current_role=ml_evaluation_engineer`, `G0-G4=PASS`, `G5-G15=PENDING`, `blocked=false`; do not begin Step18 in this execution
