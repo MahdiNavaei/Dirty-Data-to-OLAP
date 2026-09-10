@@ -918,7 +918,7 @@ handoff_to:
 - role_id: `dependency_discovery_engineer`
 - status: `PASS` for the bounded local implementation/evidence scope
 - starting_head: `2208ca957ca1bbfb3798cc1e4498d9fe287a2c3c`
-- content_commit_sha: `PENDING_STEP12_CONTENT_COMMIT`
+- content_commit_sha: `0b6e303f220f85d0e5c756039c8f0e88d670ba27`
 - inputs_reviewed: current Git/state, Step12 and Step13 playbooks, product/domain/data/software/engineering contracts, Step11 review/handoff, source/staging/profiling/privacy implementations, Desbordante pinned source metadata/bindings/tests/license and current host capability
 - implementation: project-owned dependency contracts; complete staged-only reader; replaceable Desbordante UCC/FD/AFD/IND boundary; bounded column/pair/determinant/output search policy; physical-null policy; aggregate-only hashed artifacts; privacy authorization; low-cardinality relationship trap rejection; Step12 validator and tests
 - provider_evidence: pinned Desbordante source built in disposable Linux Docker; real provider returned UCC, FD and exact IND results over the two-table fixture. Host Windows import is unavailable and is recorded as an explicit capability state.
