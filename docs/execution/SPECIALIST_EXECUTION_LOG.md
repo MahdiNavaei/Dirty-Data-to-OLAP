@@ -1030,7 +1030,7 @@ handoff_to:
 
 - execution_step: `17` surgical scoring/subject-binding closure; Step18 not started
 - starting_head: `828ee7db8b873d092a5328208cb53724a59274e4`
-- repaired_content_commit: `1c5004f`
+- repaired_content_commit: `1c5004f7226ab291b90f43c3175ca37842fd7407`
 - repaired: policy JSON/YAML metric and conflict-rule consistency; optional declared-FK denominator behavior; signed incompatible-type scoring; matcher-family separation and order invariance; valid SchemaMatchResult integration; exact profile/quality/repair topology binding; relevant conflict eligibility; producer identity, stale duplicate and NOT_CONFIGURED semantics; semantic single-subject binding; benchmark disagreement controls and 21-check behavioral validator
 - verification: unit `102 passed`; contract `7 passed`; integration `33 passed, 2 optional skips`; architecture `9 passed`; security `24 passed`; full `175 passed, 2 optional skips, 41 warnings`; compileall, diff-check, all validators and engineering post-gate `73` PASS
 - state: G4/G4A remain PASS; G5-G15 remain PENDING; all decisions remain REVIEW_REQUIRED or INCOMPLETE_REQUIRED_EVIDENCE; no calibration, canonical identity, ReviewDecision or repair execution
