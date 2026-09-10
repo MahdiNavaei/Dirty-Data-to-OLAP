@@ -31,6 +31,7 @@ files = [
 ]
 profiling = [
   "DataProfiler==0.13.4",
+  "setuptools<81",
 ]
 excel = [
   "openpyxl>=3.1,<4",
