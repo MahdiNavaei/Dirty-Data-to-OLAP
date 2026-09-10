@@ -27,14 +27,14 @@ post_bootstrap_repairs:
     scope: "Stage-scoped temporal review checkpoints, artifact-bound ReviewDecision compatibility, review invalidation/replay semantics and topological validator checks"
     specialist_step_started: false
 specialist_execution:
-  current_step: 15
-  current_role: "applied_ml_engineer"
-  current_specialist: "Step15 — Applied ML Engineer"
-  last_completed_step: 14
-  last_completed_role: "entity_resolution_engineer"
-  last_completed_specialist: "Step14 — Entity Resolution Engineer"
-  last_completed_content_commit: "90bed1cb9f8f7317110556c356bc4020fb68841a"
-  next_step: "Step15 — Applied ML Engineer"
+  current_step: 16
+  current_role: "llm_semantic_ai_engineer"
+  current_specialist: "Step16 — LLM / Semantic AI Engineer"
+  last_completed_step: 15
+  last_completed_role: "applied_ml_engineer"
+  last_completed_specialist: "Step15 — Applied ML Engineer"
+  last_completed_content_commit: "30b5319e25b059fd2652d9affdb4fed03ea262d6"
+  next_step: "Step16 — LLM / Semantic AI Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
@@ -62,7 +62,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "90bed1cb9f8f7317110556c356bc4020fb68841a"
+  last_verified_commit: "30b5319e25b059fd2652d9affdb4fed03ea262d6"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   commit_recording_note: "last_verified_commit identifies the latest verified repository commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit, while metadata commits are recorded separately in the specialist receipt and log."
 filesystem_boundary:

@@ -970,3 +970,16 @@ handoff_to:
 - limitations: model-implied probability is not calibrated business confidence; no canonical finalization, human identity acceptance, production-scale, deployment or release claim; Step15 not started
 - handoff_to: `Step15 - Applied ML Engineer`
 - next_state: `last_completed_step=14`, `current_step=15`, `current_role=applied_ml_engineer`, `G0-G3/G3A/G3B=PASS`, `G4=PENDING`, `G4A intermediate=PASS`, `G5-G15=PENDING`, `blocked=false`
+
+## Specialist Step15 - Applied ML Engineer
+
+- execution_step: `15`
+- role_id: `applied_ml_engineer`
+- status: `PASS` for optional experimental candidate-ranking evidence; formal G4 remains pending
+- implementation: project-owned applied-ML contracts; aggregate feature builder; deterministic structural baseline; grouped dataset and split policy; real optional scikit-learn 1.7.2 adapter; atomic JSON-only model persistence; score contributions; rank stability; bounded calibration experiment; non-mutating active-learning suggestions; Step14 benchmark/evaluator hardening; architecture ownership and integration updates
+- oss_research: official scikit-learn 1.7.2 source, tests, metadata and BSD-3-Clause license reviewed; no source copied; research clone removed
+- evaluation: Step15 validator 21 checks PASS; unit 57 passed; contract 5 passed; integration 27 passed with Splink and Valentine optional-provider skips; architecture 7 passed; security 23 passed; full suite 118 passed with 2 optional-provider skips; compileall and diff check PASS
+- limitations: synthetic aggregate benchmark only; ranking score is uncalibrated; no production/temporal performance, acceptance decision, canonical identity or probability claim
+- intermediate_milestone: `G4A_INDEPENDENT_EVIDENCE_PRODUCERS=PASS`; learned output remains candidate ranking evidence only
+- handoff_to: `Step16 - LLM / Semantic AI Engineer`
+- next_state: `last_completed_step=15`, `current_step=16`, `current_role=llm_semantic_ai_engineer`, `G0-G3/G3A/G3B=PASS`, `G4=PENDING`, `G4A=PASS`, `G5-G15=PENDING`, `blocked=false`
