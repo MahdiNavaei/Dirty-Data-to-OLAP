@@ -33,7 +33,7 @@ specialist_execution:
   last_completed_step: 13
   last_completed_role: "schema_matching_engineer"
   last_completed_specialist: "Step13 — Schema Matching Engineer"
-  last_completed_content_commit: "9e4d3e0"
+  last_completed_content_commit: "9e4d3e0a497d4fbb727d02c0a153a0db25026b68"
   next_step: "Step14 — Entity Resolution Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
@@ -62,7 +62,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "9e4d3e0"
+  last_verified_commit: "9e4d3e0a497d4fbb727d02c0a153a0db25026b68"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   commit_recording_note: "last_verified_commit identifies the latest verified repository commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit, while metadata commits are recorded separately in the specialist receipt and log."
 filesystem_boundary:
