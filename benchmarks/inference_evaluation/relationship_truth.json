@@ -1,0 +1,18 @@
+{
+  "schema_version":"1",
+  "truth_id":"step18-relationship-truth-v1",
+  "truth_kind":"RELATIONSHIP",
+  "provenance":"benchmarks/labels/domain-reviewed/relationships.yml; benchmark-only physical bindings",
+  "labels":[
+    {"query_id":"rq-clean","scenario_group_id":"rel-clean","true_candidate_ids":["rc-clean-true"]},
+    {"query_id":"rq-orphan-005","scenario_group_id":"rel-orphan-005","true_candidate_ids":["rc-orphan-005-true"]},
+    {"query_id":"rq-orphan-02","scenario_group_id":"rel-orphan-02","true_candidate_ids":["rc-orphan-02-true"]},
+    {"query_id":"rq-orphan-10","scenario_group_id":"rel-orphan-10","true_candidate_ids":["rc-orphan-10-true"]},
+    {"query_id":"rq-duplicate","scenario_group_id":"rel-duplicate-target","true_candidate_ids":["rc-duplicate-true"]},
+    {"query_id":"rq-low-cardinality","scenario_group_id":"rel-low-cardinality","true_candidate_ids":["rc-low-cardinality-true"]},
+    {"query_id":"rq-type-trap","scenario_group_id":"rel-type-trap","true_candidate_ids":["rc-type-true"]},
+    {"query_id":"rq-composite","scenario_group_id":"rel-composite","true_candidate_ids":["rc-composite-true"]},
+    {"query_id":"rq-multiple-target","scenario_group_id":"rel-multiple-target","true_candidate_ids":["rc-multiple-true"]},
+    {"query_id":"rq-missing","scenario_group_id":"rel-missing-candidate","true_candidate_ids":["rc-missing-true"]}
+  ]
+}

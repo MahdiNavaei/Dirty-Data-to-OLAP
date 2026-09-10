@@ -1,0 +1,24 @@
+{
+  "report_id": "step18-inference-baseline-v1",
+  "dataset_id": "step18-inference-quality-v1",
+  "protocol_version": "step18-protocol-v1",
+  "gate_recommendation": "REVIEW_ONLY_VALIDATED",
+  "automation_recommendation": "NOT_AUTHORIZED",
+  "automation_enabled": false,
+  "calibration_status": "INSUFFICIENT_CALIBRATION_DATA",
+  "threshold_study_status": "NO_AUTOMATION_THRESHOLD_SELECTED",
+  "provider_status": {
+    "dependency_discovery": "EXECUTED",
+    "schema_matching": "EXECUTED",
+    "entity_resolution": "EXECUTED",
+    "applied_ml": "EXECUTED",
+    "semantic_ai": "OPTIONAL_NOT_EXECUTED"
+  },
+  "metrics": {
+    "relationship_fusion": {"precision": 0.5, "recall": 1.0, "f1": 0.6666666666666666, "average_precision": 0.5, "candidate_recall": 0.6666666666666666, "mrr": 0.5, "recall_at_3": 1.0},
+    "schema_matching": {"precision": 0.3333333333333333, "recall": 1.0, "f1": 0.5, "no_match_false_positive_count": 1},
+    "entity_resolution": {"pairwise_precision": 1.0, "pairwise_recall": 1.0, "pairwise_f1": 1.0, "false_merges": 0, "false_splits": 0}
+  },
+  "limitations": ["synthetic and aggregate-safe benchmark", "uncalibrated scores", "semantic AI optional and not executed", "no automation or canonicalization"],
+  "step19_started": false
+}

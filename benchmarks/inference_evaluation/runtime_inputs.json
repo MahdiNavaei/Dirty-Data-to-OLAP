@@ -1,0 +1,37 @@
+{
+  "schema_version": "1",
+  "fixture_id": "step18-runtime-inputs-v1",
+  "note": "Inference-only synthetic inputs. No truth labels or expected answers are present.",
+  "relationship_queries": [
+    {"query_id":"rq-clean","scenario_group_id":"rel-clean","candidates":[{"candidate_id":"rc-clean-true","score":0.93,"evidence":["coverage-high","unique-high","type-compatible"]},{"candidate_id":"rc-clean-negative","score":0.18,"evidence":["coverage-low"]}],"slices":["declared_relationship"]},
+    {"query_id":"rq-orphan-005","scenario_group_id":"rel-orphan-005","candidates":[{"candidate_id":"rc-orphan-005-true","score":0.86,"evidence":["orphan-005"]},{"candidate_id":"rc-orphan-005-negative","score":0.22,"evidence":["unrelated-domain"]}],"slices":["orphan_rate:0.5%","hidden_relationship"]},
+    {"query_id":"rq-orphan-02","scenario_group_id":"rel-orphan-02","candidates":[{"candidate_id":"rc-orphan-02-true","score":0.71,"evidence":["orphan-02"]},{"candidate_id":"rc-orphan-02-negative","score":0.36,"evidence":["unrelated-domain"]}],"slices":["orphan_rate:2%","hidden_relationship"]},
+    {"query_id":"rq-orphan-10","scenario_group_id":"rel-orphan-10","candidates":[{"candidate_id":"rc-orphan-10-true","score":0.49,"evidence":["orphan-10"]},{"candidate_id":"rc-orphan-10-negative","score":0.43,"evidence":["unrelated-domain"]}],"slices":["orphan_rate:10%","hidden_relationship"]},
+    {"query_id":"rq-duplicate","scenario_group_id":"rel-duplicate-target","candidates":[{"candidate_id":"rc-duplicate-true","score":0.52,"evidence":["target-duplicate","conflict"]},{"candidate_id":"rc-duplicate-alt","score":0.51,"evidence":["target-duplicate","conflict"]}],"conflict":true,"slices":["target_duplicates"]},
+    {"query_id":"rq-low-cardinality","scenario_group_id":"rel-low-cardinality","candidates":[{"candidate_id":"rc-low-cardinality-negative","score":0.91,"evidence":["small-domain"]},{"candidate_id":"rc-low-cardinality-true","score":0.39,"evidence":["type-compatible"]}],"slices":["low_cardinality_trap"]},
+    {"query_id":"rq-type-trap","scenario_group_id":"rel-type-trap","candidates":[{"candidate_id":"rc-type-negative","score":0.74,"evidence":["same-name","type-mismatch"]},{"candidate_id":"rc-type-true","score":0.68,"evidence":["renamed-column"]}],"slices":["type_mismatch","same_name_different_meaning"]},
+    {"query_id":"rq-composite","scenario_group_id":"rel-composite","candidates":[{"candidate_id":"rc-composite-true","score":0.79,"evidence":["composite-key"]},{"candidate_id":"rc-composite-partial","score":0.63,"evidence":["partial-composite-key"]}],"slices":["composite_key","partial_composite_key"]},
+    {"query_id":"rq-multiple-target","scenario_group_id":"rel-multiple-target","candidates":[{"candidate_id":"rc-multiple-true","score":0.64,"evidence":["multiple-target","conflict"]},{"candidate_id":"rc-multiple-alt","score":0.63,"evidence":["multiple-target","conflict"]}],"conflict":true,"slices":["multiple_target"]},
+    {"query_id":"rq-missing","scenario_group_id":"rel-missing-candidate","candidates":[{"candidate_id":"rc-missing-negative","score":0.57,"evidence":["unrelated-domain"]}],"incomplete":true,"slices":["missing_relationship_candidate","incomplete"]}
+  ],
+  "schema_queries": [
+    {"query_id":"sq-renamed","scenario_group_id":"schema-renamed","candidates":[{"candidate_id":"sc-renamed-true","score":0.91,"matcher":"coma"},{"candidate_id":"sc-renamed-negative","score":0.49,"matcher":"cupid"}],"slices":["renamed_column"]},
+    {"query_id":"sq-hard-negative","scenario_group_id":"schema-hard-negative","candidates":[{"candidate_id":"sc-hard-negative","score":0.88,"matcher":"coma"},{"candidate_id":"sc-hard-negative-true","score":0.55,"matcher":"cupid"}],"slices":["same_name_different_meaning","low_cardinality_trap","type_incompatible"]},
+    {"query_id":"sq-multilingual","scenario_group_id":"schema-multilingual","candidates":[{"candidate_id":"sc-multilingual-true","score":0.76,"matcher":"cupid"},{"candidate_id":"sc-multilingual-negative","score":0.44,"matcher":"coma"}],"slices":["multilingual_persian"]},
+    {"query_id":"sq-no-match","scenario_group_id":"schema-no-match","candidates":[{"candidate_id":"sc-no-match-negative","score":0.67,"matcher":"coma"}],"slices":["no_match"]},
+    {"query_id":"sq-multiple-target","scenario_group_id":"schema-multiple-target","candidates":[{"candidate_id":"sc-multiple-true","score":0.61,"matcher":"coma"},{"candidate_id":"sc-multiple-alt","score":0.60,"matcher":"cupid"}],"slices":["multiple_target","matcher_disagreement"]}
+  ],
+  "entity_records": [
+    {"record_ref":"crm-r1","source_id":"crm","tokens":{"name":"n_a","email":"e_a","phone":"p_a"},"scenario_group_id":"er-basic"},
+    {"record_ref":"erp-r1","source_id":"erp","tokens":{"name":"n_a_variant","email":"e_a","phone":"p_a"},"scenario_group_id":"er-basic"},
+    {"record_ref":"crm-r4","source_id":"crm","tokens":{"name":"n_common","email":"e_d1","phone":"p_d1"},"scenario_group_id":"er-hard-negative"},
+    {"record_ref":"erp-r4","source_id":"erp","tokens":{"name":"n_common","email":"e_d2","phone":"p_d2"},"scenario_group_id":"er-hard-negative"},
+    {"record_ref":"crm-r5","source_id":"crm","tokens":{"name":"n_placeholder_a","email":"e_missing","phone":"p_placeholder"},"scenario_group_id":"er-hard-negative"},
+    {"record_ref":"erp-r5","source_id":"erp","tokens":{"name":"n_placeholder_b","email":"e_missing","phone":"p_placeholder"},"scenario_group_id":"er-hard-negative"},
+    {"record_ref":"crm-r8","source_id":"crm","tokens":{"name":"unicode_fa_a","email":"e_fa","phone":"p_fa"},"scenario_group_id":"er-unicode"},
+    {"record_ref":"erp-r8","source_id":"erp","tokens":{"name":"unicode_fa_a_variant","email":"e_fa","phone":"p_fa"},"scenario_group_id":"er-unicode"},
+    {"record_ref":"crm-r11","source_id":"crm","tokens":{"name":"n_bridge_a","email":"e_bridge_a","phone":"p_bridge"},"scenario_group_id":"er-transitive"},
+    {"record_ref":"erp-r11","source_id":"erp","tokens":{"name":"n_bridge_b","email":"e_bridge_b","phone":"p_bridge"},"scenario_group_id":"er-transitive"},
+    {"record_ref":"crm-r12","source_id":"crm","tokens":{"name":"n_bridge_c","email":"e_bridge_c","phone":"p_bridge"},"scenario_group_id":"er-transitive"}
+  ]
+}

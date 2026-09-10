@@ -1,0 +1,13 @@
+{
+  "schema_version":"1",
+  "truth_id":"step18-schema-truth-v1",
+  "truth_kind":"SCHEMA_MAPPING",
+  "provenance":"benchmarks/schema_matching/step13_labeled_fixture.json and domain-reviewed ambiguity catalogue",
+  "labels":[
+    {"query_id":"sq-renamed","scenario_group_id":"schema-renamed","true_candidate_ids":["sc-renamed-true"]},
+    {"query_id":"sq-hard-negative","scenario_group_id":"schema-hard-negative","true_candidate_ids":["sc-hard-negative-true"]},
+    {"query_id":"sq-multilingual","scenario_group_id":"schema-multilingual","true_candidate_ids":["sc-multilingual-true"]},
+    {"query_id":"sq-no-match","scenario_group_id":"schema-no-match","true_candidate_ids":[]},
+    {"query_id":"sq-multiple-target","scenario_group_id":"schema-multiple-target","true_candidate_ids":["sc-multiple-true"]}
+  ]
+}

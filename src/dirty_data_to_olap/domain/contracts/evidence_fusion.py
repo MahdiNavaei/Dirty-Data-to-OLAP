@@ -182,6 +182,12 @@ class NormalizedEvidenceSignal(_SourceModel):
     score_bearing: bool = False
     contribution: float | None = None
 
+    @property
+    def metric_name(self) -> str:
+        """Compatibility view for callers that consume normalized signals."""
+
+        return self.raw_metric_name
+
     @model_validator(mode="after")
     def missing_is_not_zero(self) -> "NormalizedEvidenceSignal":
         if self.presence is not EvidencePresenceState.OBSERVED and self.normalized_value is not None:

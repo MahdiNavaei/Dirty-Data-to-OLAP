@@ -476,13 +476,40 @@ class EvidenceFusionService:
                     output.append(FusionEvidenceItem(evidence_id=f"quality:{issue.issue_id}:{stable_digest(subject)[:12]}", subject_id=subject, producer_id="quality", family=EvidenceFamily.QUALITY, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="quality_issue:" + issue.issue_type, metric_value=issue.affected_ratio, metric_semantics=issue.measurement_semantics.value, direction=EvidenceDirection.CONTRADICTS if issue.status.value in {"OPEN", "INCONCLUSIVE"} else EvidenceDirection.CONTEXT, scope_id=issue.issue_id, observation_scope=EvidenceReliabilityState.FULL if issue.observation_scope.completeness.value == "FULLY_OBSERVED" else EvidenceReliabilityState.BOUNDED, source_ids=(issue.source_id,), snapshot_ids=(issue.snapshot_id,), snapshot_by_source={issue.source_id: issue.snapshot_id}, correlation_group=issue.issue_id, score_bearing=False, derived_from_refs=(issue.issue_id,) + issue_refs + issue.repair_proposal_refs, qualitative_text=json.dumps({"issue_id": issue.issue_id, "dimension": issue.quality_dimension.value, "severity": issue.severity.value, "affected_ratio": issue.affected_ratio, "repair_refs": issue.repair_proposal_refs}, sort_keys=True)))
             for proposal in result.repair_proposals:
                 for subject, endpoints in topologies.items():
-                    if not any(endpoint.get("table_id") == proposal.table_id and (not proposal.column_ids or set(proposal.column_ids).issubset(set(endpoint.get("column_ids", ())))) for endpoint in endpoints):
+                    if not any(result.source_id == endpoint.get("source_id") and result.snapshot_id == endpoint.get("snapshot_id") and endpoint.get("table_id") == proposal.table_id and (not proposal.column_ids or set(proposal.column_ids).issubset(set(endpoint.get("column_ids", ())))) for endpoint in endpoints):
                         continue
                     repairs.add(proposal.proposal_id)
             for subject, endpoints in topologies.items():
-                if not any(self._quality_matches(issue, endpoint) for issue in result.issues for endpoint in endpoints):
-                    output.append(self._not_observed_marker("quality", subject, EvidenceFamily.QUALITY, endpoints, "quality result has no exact selected endpoint issue"))
+                matching_endpoints = tuple(endpoint for endpoint in endpoints if endpoint.get("source_id") == result.source_id and endpoint.get("snapshot_id") == result.snapshot_id)
+                if not matching_endpoints:
+                    continue
+                output.append(self._quality_coverage_item(result, subject, matching_endpoints))
         return output, repairs
+
+    @staticmethod
+    def _quality_coverage_item(result: QualityResult, subject: str, endpoints: tuple[Mapping[str, Any], ...]) -> FusionEvidenceItem:
+        evaluations = tuple(result.rule_evaluations)
+        summaries = tuple(result.dimension_summaries)
+        applicability = {item.applicability.value for item in evaluations}
+        semantics = {item.measurement_semantics.value for item in evaluations} | {item.measurement_semantics.value for item in summaries}
+        if "INCONCLUSIVE" in applicability or "INCONCLUSIVE" in {item.status.value for item in summaries} or "INCONCLUSIVE" in semantics:
+            state = "INCONCLUSIVE"
+            presence = EvidencePresenceState.OBSERVED
+        elif "INSUFFICIENT_EVIDENCE" in applicability:
+            state = "INSUFFICIENT_EVIDENCE"
+            presence = EvidencePresenceState.OBSERVED
+        elif "NOT_APPLICABLE" in applicability:
+            state = "NOT_APPLICABLE"
+            presence = EvidencePresenceState.OBSERVED
+        elif "APPLICABLE" in applicability or any(item.status.value == "MEASURED" for item in summaries):
+            state = "EVALUATED_CLEAN"
+            presence = EvidencePresenceState.OBSERVED
+        else:
+            state = "NOT_EVALUATED"
+            presence = EvidencePresenceState.OBSERVED
+        source_map = {str(item["source_id"]): str(item["snapshot_id"]) for item in endpoints if item.get("source_id") and item.get("snapshot_id")}
+        detail = {"quality_run_id": result.quality_run_id, "coverage_state": state, "applicability": sorted(applicability), "measurement_semantics": sorted(semantics), "rule_evaluations": len(evaluations), "dimension_summaries": len(summaries)}
+        return FusionEvidenceItem(evidence_id=f"quality:coverage:{result.quality_run_id}:{stable_digest(subject)[:12]}", subject_id=subject, producer_id="quality", family=EvidenceFamily.QUALITY, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="quality_coverage:" + state.lower(), metric_value=None, metric_semantics="quality coverage state is explicit and is not inferred from issue absence", direction=EvidenceDirection.CONTEXT, presence=presence, scope_id=result.quality_run_id, observation_scope=EvidenceReliabilityState.FULL if any(item.measurement_semantics.value.startswith("EXACT_ON_FULL") for item in summaries) else EvidenceReliabilityState.BOUNDED, source_ids=tuple(source_map), snapshot_ids=tuple(source_map.values()), snapshot_by_source=source_map, correlation_group=result.quality_run_id, score_bearing=False, qualitative_text=json.dumps(detail, sort_keys=True))
 
     def _ml_items(self, result: AppliedMLResult, subjects: Mapping[str, str], failures: list[FusionFailure]) -> list[FusionEvidenceItem]:
         output = []

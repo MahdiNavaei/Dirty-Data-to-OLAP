@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "dataset_id": "step18-inference-quality-v1",
+  "generator_version": "step18-scenarios-v1",
+  "seed": 20260911,
+  "groups": [
+    {"group_id": "rel-clean", "split": "DEVELOPMENT"},
+    {"group_id": "rel-orphan-005", "split": "DEVELOPMENT"},
+    {"group_id": "rel-orphan-02", "split": "DEVELOPMENT"},
+    {"group_id": "rel-orphan-10", "split": "CALIBRATION"},
+    {"group_id": "rel-duplicate-target", "split": "CALIBRATION"},
+    {"group_id": "rel-low-cardinality", "split": "TEST"},
+    {"group_id": "rel-type-trap", "split": "TEST"},
+    {"group_id": "rel-composite", "split": "DEVELOPMENT"},
+    {"group_id": "rel-multiple-target", "split": "CALIBRATION"},
+    {"group_id": "rel-missing-candidate", "split": "TEST"},
+    {"group_id": "schema-renamed", "split": "DEVELOPMENT"},
+    {"group_id": "schema-hard-negative", "split": "DEVELOPMENT"},
+    {"group_id": "schema-multilingual", "split": "CALIBRATION"},
+    {"group_id": "schema-no-match", "split": "TEST"},
+    {"group_id": "schema-multiple-target", "split": "TEST"},
+    {"group_id": "er-basic", "split": "DEVELOPMENT"},
+    {"group_id": "er-hard-negative", "split": "CALIBRATION"},
+    {"group_id": "er-unicode", "split": "TEST"},
+    {"group_id": "er-transitive", "split": "TEST"}
+  ]
+}

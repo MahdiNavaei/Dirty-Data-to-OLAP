@@ -240,6 +240,10 @@ def test_actual_profile_quality_and_repair_contracts_are_consumed_and_forwarded(
     isolated_ids = {item.evidence_id for item in isolated.bundles[0].signals}
     assert not any(item.startswith("profile:profile-orders") or item.startswith("quality:quality-issue") for item in isolated_ids)
     assert isolated.forwarded_repair_proposal_refs == ()
+    same_topology_other_source = quality.model_copy(update={"quality_run_id": "quality-other-source", "source_id": "other-src", "snapshot_id": "other-snap"})
+    source_bound = EvidenceFusionService().fuse(_request(), inputs, quality_results=(quality, same_topology_other_source))
+    assert source_bound.forwarded_repair_proposal_refs == ("proposal-1",)
+    assert any(item.metric_name.startswith("quality_coverage:") for item in source_bound.bundles[0].signals)
 
 
 def test_actual_schema_match_snapshot_mapping_is_source_specific():
