@@ -36,7 +36,7 @@ def main() -> int:
     check("missing is not zero", decision.score.value is not None and not any(signal.presence is not EvidencePresenceState.OBSERVED and signal.normalized_value == 0 for signal in result.signals))
     check("score is not probability", decision.score.confidence_kind is ConfidenceKind.UNCALIBRATED_SCORE and "PROBABILITY" not in decision.score.score_semantics)
     check("candidate remains review-only", all(item.decision_state is DecisionState.REVIEW_REQUIRED for item in result.relationships))
-    check("derived evidence is non-score-bearing", not EvidenceFusionService()._ml_items if False else True)
+    check("derived evidence is non-score-bearing", "score_bearing=False" in source and "derived_from_refs" in source)
     collision = item.model_copy(update={"metric_value": .1})
     bad = EvidenceFusionService().fuse(EvidenceFusionRequest(request_id="collision", execution_context_id="collision", relationship_candidate_ids=("validator-rel",), policy=policy), EvidenceFusionInputs(producer_statuses=statuses, relationship_candidates=(candidate,), evidence_items=(item, collision)))
     check("evidence ID collision fails", any(item.kind is FusionFailureKind.EVIDENCE_ID_COLLISION for item in bad.failures))

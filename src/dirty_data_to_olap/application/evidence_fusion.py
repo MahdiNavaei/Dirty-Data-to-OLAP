@@ -86,6 +86,8 @@ def _subject_mapping(item: Mapping[str, Any]) -> str:
 
 def _producer_state(value: Any) -> ProducerResultState:
     raw = getattr(value, "status", None)
+    if raw is None:
+        raw = getattr(value, "completeness", None)
     name = getattr(raw, "value", str(raw)).upper()
     if name in {"COMPLETE", "EXECUTED_EXPERIMENTAL"}:
         return ProducerResultState.COMPLETE
@@ -200,6 +202,9 @@ class EvidenceFusionService:
                 continue
             subject = _subject_relationship(candidate)
             signals = tuple(by_subject.get(subject, ()))[: request.max_evidence_per_subject]
+            scope_failure = self._candidate_scope_failure(candidate, subject, signals)
+            if scope_failure:
+                failures.append(scope_failure)
             conflicts = self._conflicts_for_relationship(candidate, subject, signals, relationships, tuple(supplied.declared_constraints) + catalog_constraints)
             all_conflicts.extend(conflicts[: request.max_conflicts_per_subject])
             bundles.append(self._bundle(subject, FusionSubjectKind.RELATIONSHIP, f"{candidate['from_table']} -> {candidate['to_table']}", signals, conflicts))
@@ -212,6 +217,9 @@ class EvidenceFusionService:
                 continue
             subject = _subject_mapping(candidate)
             signals = tuple(by_subject.get(subject, ()))[: request.max_evidence_per_subject]
+            scope_failure = self._candidate_scope_failure(candidate, subject, signals)
+            if scope_failure:
+                failures.append(scope_failure)
             conflicts = self._conflicts_for_mapping(candidate, subject, signals, mappings)
             all_conflicts.extend(conflicts[: request.max_conflicts_per_subject])
             bundles.append(self._bundle(subject, FusionSubjectKind.MAPPING, f"{candidate['source_column_id']} <-> {candidate['target_column_id']}", signals, conflicts))
@@ -312,6 +320,27 @@ class EvidenceFusionService:
                     snapshots.setdefault(source_id, set()).update(signal.snapshot_ids)
             if any(len(values) > 1 for values in snapshots.values()):
                 failures.append(FusionFailure(failure_id="fusion-scope-" + stable_digest(subject)[:24], kind=FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH, detail="one subject combines incompatible snapshots for a source", subject_id=subject, evidence_refs=tuple(item.evidence_id for item in signals)))
+
+    @staticmethod
+    def _candidate_scope_failure(candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...]) -> FusionFailure | None:
+        expected_source = candidate.get("source_id")
+        expected_snapshot = candidate.get("snapshot_id")
+        if not expected_source or not expected_snapshot:
+            return None
+        mismatched = tuple(
+            item.evidence_id
+            for item in signals
+            if expected_source in item.source_ids and item.snapshot_ids and expected_snapshot not in item.snapshot_ids
+        )
+        if not mismatched:
+            return None
+        return FusionFailure(
+            failure_id="fusion-candidate-scope-" + stable_digest(subject)[:24],
+            kind=FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH,
+            detail="candidate snapshot does not match the snapshot carried by its evidence",
+            subject_id=subject,
+            evidence_refs=mismatched,
+        )
 
     def _signals(self, items: list[FusionEvidenceItem], request: EvidenceFusionRequest, failures: list[FusionFailure]) -> dict[str, list[NormalizedEvidenceSignal]]:
         output: dict[str, list[NormalizedEvidenceSignal]] = {}
@@ -451,7 +480,10 @@ class EvidenceFusionService:
         score = self._score(signals)
         required = {EvidenceFamily.SCHEMA_MATCHING} if request.cross_source_mapping_scope else set()
         missing = tuple("producer:" + family.value.lower() for family in sorted(required - {item.family for item in statuses}, key=lambda value: value.value)) + tuple("producer:" + item.producer_id for item in statuses if item.state not in {ProducerResultState.COMPLETE})
-        state = DecisionState.INCOMPLETE_REQUIRED_EVIDENCE if any(item.family is EvidenceFamily.SCHEMA_MATCHING and item.state is not ProducerResultState.COMPLETE for item in statuses) else DecisionState.REVIEW_REQUIRED
+        # Mapping decisions have no separate incomplete state in the contract;
+        # missing schema evidence is represented by the result failure and the
+        # decision's missing_evidence_refs while the decision remains review-only.
+        state = DecisionState.REVIEW_REQUIRED
         fingerprint = fusion_input_fingerprint(subject, signals, request.policy)
         return SemanticMappingDecision(decision_id=fusion_decision_id(subject, fingerprint, request.policy), candidate_id=str(candidate["candidate_id"]), subject_id=subject, source_id=str(candidate["source_id"]), source_column_id=str(candidate["source_column_id"]), target_source_id=str(candidate["target_source_id"]), target_column_id=str(candidate["target_column_id"]), score=score, confidence_band=self._band(score, conflicts), decision_state=state, policy=request.policy, supporting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=missing, unavailable_evidence_refs=tuple("producer:" + item.producer_id for item in statuses if item.state in {ProducerResultState.UNAVAILABLE, ProducerResultState.SKIPPED}), conflict_refs=tuple(item.conflict_id for item in conflicts), explanation=self._explanation(signals, conflicts, missing, score), input_evidence_fingerprint=fingerprint, provenance="application.evidence_fusion:evidence-fusion-v1")
 
@@ -504,6 +536,8 @@ class EvidenceFusionService:
         except ValueError:
             raise ValueError("fusion artifact root must remain under the project root") from None
         root.mkdir(parents=True, exist_ok=True)
+        for directory in ("relationships", "mappings", "conflicts", "bundles", "explanations", "failures", "manifests"):
+            (root / "evidence_fusion" / directory).mkdir(parents=True, exist_ok=True)
         payload = result.model_dump(mode="json", exclude={"artifacts"})
         serialized = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         target = root / "evidence_fusion" / "manifests" / f"{result.request.execution_context_id}.json"
