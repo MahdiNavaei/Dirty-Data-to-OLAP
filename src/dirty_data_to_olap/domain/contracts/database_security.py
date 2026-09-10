@@ -62,6 +62,25 @@ class DatabaseSecurityFailureKind(str, Enum):
     SECURITY_CONFIGURATION_INVALID = "SECURITY_CONFIGURATION_INVALID"
     SECURITY_ENFORCEMENT_FAILED = "SECURITY_ENFORCEMENT_FAILED"
     UNSAFE_CALLBACK = "UNSAFE_CALLBACK"
+    VERIFIER_UNAVAILABLE = "VERIFIER_UNAVAILABLE"
+    VERIFIER_FAILED = "VERIFIER_FAILED"
+    VERIFICATION_INCOMPLETE = "VERIFICATION_INCOMPLETE"
+
+
+class PrivilegeFindingStatus(str, Enum):
+    PRESENT_REQUIRED = "PRESENT_REQUIRED"
+    ABSENT_FORBIDDEN = "ABSENT_FORBIDDEN"
+    FORBIDDEN_PRESENT = "FORBIDDEN_PRESENT"
+    REQUIRED_MISSING = "REQUIRED_MISSING"
+    UNKNOWN = "UNKNOWN"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class ProviderVerificationStatus(str, Enum):
+    TECHNICALLY_VERIFIED = "TECHNICALLY_VERIFIED"
+    OPERATOR_ATTESTED = "OPERATOR_ATTESTED"
+    UNVERIFIED = "UNVERIFIED"
+    FAILED = "FAILED"
 
 
 class DatabasePrincipalReference(_ContractModel):
@@ -96,9 +115,43 @@ class SourcePrivilegeRequirement(_ContractModel):
 
 class PrivilegeFinding(_ContractModel):
     privilege: str = Field(min_length=1)
-    status: str = Field(min_length=1)
+    status: PrivilegeFindingStatus
     reason: str = Field(min_length=1)
     safe_reference: str | None = None
+
+    @field_validator("privilege", "reason", "safe_reference")
+    @classmethod
+    def safe_text(cls, value: str | None, info: Any) -> str | None:
+        return _reject_secret_material(value, info.field_name)
+
+
+class ProviderSecurityVerification(_ContractModel):
+    """Independent technical evidence returned by a provider verifier.
+
+    This contract deliberately contains no runtime secret.  The verifier may
+    inspect a runtime connection internally, but only its normalized evidence
+    crosses into the application security boundary.
+    """
+
+    verification_id: str = Field(min_length=1)
+    engine: DatabaseEngine
+    source_id: str = Field(min_length=1)
+    profile_id: str = Field(min_length=1)
+    credential_reference: str = Field(min_length=1)
+    credential_version: str = Field(min_length=1)
+    selection_fingerprint: str = Field(min_length=1)
+    policy_id: str = Field(min_length=1)
+    policy_version: str = Field(min_length=1)
+    driver_reference: str = Field(min_length=1)
+    status: ProviderVerificationStatus
+    findings: tuple[PrivilegeFinding, ...] = ()
+    evidence_fingerprint: str = Field(min_length=1)
+    failure_code: str | None = None
+
+    @field_validator("source_id", "profile_id", "credential_reference", "credential_version", "selection_fingerprint", "policy_id", "policy_version", "driver_reference", "evidence_fingerprint", "failure_code")
+    @classmethod
+    def safe_reference(cls, value: str | None, info: Any) -> str | None:
+        return _reject_secret_material(value, info.field_name)
 
 
 class DatabaseSecurityPolicy(_ContractModel):
@@ -138,6 +191,7 @@ class DatabaseSecurityAssurance(_ContractModel):
     policy_id: str = Field(min_length=1)
     policy_version: str = Field(min_length=1)
     driver_reference: str = Field(min_length=1)
+    verification_evidence_fingerprint: str = Field(min_length=1)
     status: SecurityAssuranceStatus
     enforcement_methods: tuple[ReadOnlyEnforcementMethod, ...] = ()
     findings: tuple[PrivilegeFinding, ...] = ()

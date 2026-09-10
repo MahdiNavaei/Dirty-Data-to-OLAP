@@ -903,3 +903,10 @@ handoff_to:
 - limitations: no live non-SQL provider, Oracle, deployment IAM, encryption, legal compliance or physical acceptance claim
 - handoff_to: `Step12 - Dependency Discovery Engineer`
 - next_state: `last_completed_step=11`, `current_step=12`, `current_role=dependency_discovery_engineer`, `G3_SOURCE_SAFETY=PASS`, `G4-G15=PENDING`, `blocked=false`; Step12 implementation not started
+
+## Post-Step11 Independent G3 Integrity Closure
+
+- scope: surgical closure of the existing Step11 G3 evidence; no new specialist step and no Step12 implementation
+- repaired: stale G3 gate/README contradiction; resolver self-asserted provider safety; duplicate credential resolution; incomplete privilege coverage; weak finding vocabulary; validator and project-temp boundary gaps
+- evidence: security `23 passed`; full suite `96 passed, 41 warnings`; required validators, compileall and diff check PASS
+- final_state: Step11 PASS; G3/G3A/G3B PASS; last_completed_step=11; current_step=12; current_role=dependency_discovery_engineer; G4-G15=PENDING; blocked=false

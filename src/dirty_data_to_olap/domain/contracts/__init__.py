@@ -137,6 +137,9 @@ from .database_security import (
     DatabaseSecurityFailure,
     DatabaseSecurityAuditEvent,
     DriverSecurityPolicy,
+    PrivilegeFindingStatus,
+    ProviderVerificationStatus,
+    ProviderSecurityVerification,
 )
 
 __all__ = [

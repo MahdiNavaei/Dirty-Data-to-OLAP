@@ -33,6 +33,7 @@ data/generated/
 *.sqlite3
 *.log
 workspace/tests/
+workspace/test-temp/
 .venv*/
 
 # Research clones are disposable and must never be runtime dependencies.

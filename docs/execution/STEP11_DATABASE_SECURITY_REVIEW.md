@@ -119,8 +119,9 @@ acceptance, deployment IAM, encryption or legal compliance.
 
 Security artifacts contain safe references/fingerprints and no raw SQL or
 secret values. SQLite catalogs, bounded extraction and Parquet staging remain
-project-owned. The bounded dlt resource lifecycle was exercised by the full
-suite without a post-test cursor-finalizer diagnostic; provider live status
+project-owned. The managed dlt resource cleanup bridge was exercised; the
+full suite exits successfully, although a combined run can still emit one
+third-party cursor-finalizer traceback after pytest exit. Provider live status
 remains honest.
 
 ## FILES CHANGED
@@ -147,4 +148,34 @@ Metadata records `last_completed_step: 11`, `current_step: 12`,
 No live non-SQL provider was exercised. Provider effective grants, RLS,
 security-definer behavior, deployment identity and Oracle remain outside this
 executed pass. The 41 non-failing suite warnings remain attributable to
-installed third-party dependencies.
+installed third-party dependencies. dlt 1.30.0 may emit a non-failing
+cursor-finalizer diagnostic after a combined pytest process exits; the
+targeted source tests and full suite still return exit code 0.
+
+## Post-Step11 Independent G3 Integrity Closure
+
+This surgical closure repaired defects found after the original Step11
+receipt; it is not a new specialist step and does not begin Step12.
+
+- Corrected the stale canonical G3 gate and README status, and synchronized
+  the execution state, gate, receipt, privacy handoff and execution log.
+- Removed resolver-provided provider verification and privilege findings from
+  `RuntimeSqlCredentials`; provider evidence now crosses an explicit,
+  project-owned verifier port.
+- Removed the credential-resolution TOCTOU split: one protected operation
+  resolves once and passes the same runtime credential and assurance context
+  through engine creation to dlt.
+- Closed privilege finding states and required complete technical coverage:
+  required privileges must be present, forbidden privileges explicitly absent,
+  and missing, unknown, failed, incomplete or operator-attested evidence
+  blocks.
+- Added behavior tests and validator checks for self-assertion, incomplete
+  coverage, forbidden/unknown findings, verifier failure, dlt reachability,
+  single resolution and assurance identity binding.
+- Replaced validator OS-temporary scratch usage with repository-owned
+  `workspace/test-temp/`, cleaned after use, and preserved
+  `tests/quality_unit_artifacts/`.
+- Closure evidence: security `23 passed`; full suite `96 passed, 41 warnings`;
+  required validators, compileall and diff check passed. Final G3 decision:
+  `PASS` within the documented V1 boundary. A non-failing dlt/SQLAlchemy
+  cursor-finalizer diagnostic may remain after combined test-process exit.

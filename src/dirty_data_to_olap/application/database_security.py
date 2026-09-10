@@ -6,7 +6,7 @@ import hashlib
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 from dirty_data_to_olap.domain.contracts.database import DatabaseEngine
 from dirty_data_to_olap.domain.contracts.database_security import (
@@ -19,6 +19,9 @@ from dirty_data_to_olap.domain.contracts.database_security import (
     DatabaseSecurityPolicy,
     DriverSecurityPolicy,
     PrivilegeFinding,
+    PrivilegeFindingStatus,
+    ProviderSecurityVerification,
+    ProviderVerificationStatus,
     QueryClass,
     QueryGuardDecision,
     ReadOnlyEnforcementMethod,
@@ -31,6 +34,57 @@ class DatabaseSecurityOperationError(ValueError):
     def __init__(self, failure: DatabaseSecurityFailure) -> None:
         self.failure = failure
         super().__init__(failure.detail)
+
+
+class DatabaseSecurityVerifier(Protocol):
+    """Port for engine-specific technical privilege verification."""
+
+    def verify(
+        self,
+        *,
+        profile: Any,
+        credentials: Any,
+        source_id: str,
+        profile_id: str,
+        selection_fingerprint: str,
+        policy: DatabaseSecurityPolicy,
+    ) -> ProviderSecurityVerification:
+        ...
+
+
+class UnavailableDatabaseSecurityVerifier:
+    """Fail-closed default until a real provider verifier is implemented."""
+
+    def verify(
+        self,
+        *,
+        profile: Any,
+        credentials: Any,
+        source_id: str,
+        profile_id: str,
+        selection_fingerprint: str,
+        policy: DatabaseSecurityPolicy,
+    ) -> ProviderSecurityVerification:
+        credential_reference = str(getattr(credentials, "credential_reference", "runtime-only"))
+        credential_version = str(getattr(credentials, "credential_version", "unknown"))
+        driver_reference = f"{getattr(profile, 'database_engine', 'unknown').value if getattr(profile, 'database_engine', None) else 'unknown'}-verifier-unavailable"
+        evidence = _digest(("unavailable", source_id, profile_id, credential_reference, credential_version, selection_fingerprint, policy.policy_id, policy.version))
+        return ProviderSecurityVerification(
+            verification_id="verification-unavailable-" + evidence[:24],
+            engine=profile.database_engine,
+            source_id=source_id,
+            profile_id=profile_id,
+            credential_reference=credential_reference,
+            credential_version=credential_version,
+            selection_fingerprint=selection_fingerprint,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            driver_reference=driver_reference,
+            status=ProviderVerificationStatus.UNVERIFIED,
+            findings=(),
+            evidence_fingerprint="sha256:" + evidence,
+            failure_code="VERIFIER_UNAVAILABLE",
+        )
 
 
 def _digest(value: Any) -> str:
@@ -115,21 +169,130 @@ class DatabaseSecurityService:
         credential_version: str,
         selection_fingerprint: str,
         driver_reference: str,
-        provider_verified: bool,
-        privilege_findings: Sequence[PrivilegeFinding] = (),
+        technical_verification: ProviderSecurityVerification | None = None,
         enforcement_methods: Sequence[ReadOnlyEnforcementMethod] = (),
     ) -> DatabaseSecurityAssessment:
-        findings = tuple(privilege_findings)
+        findings = tuple(technical_verification.findings) if technical_verification is not None else ()
         status = SecurityAssuranceStatus.PASS
+        failure_kind: DatabaseSecurityFailureKind | None = None
         if credential_purpose is not CredentialPurpose.SOURCE_READ_ONLY:
             status = SecurityAssuranceStatus.BLOCKED
-        elif engine is not DatabaseEngine.SQLITE and not provider_verified:
+            failure_kind = DatabaseSecurityFailureKind.CREDENTIAL_PURPOSE_MISMATCH
+        elif engine is DatabaseEngine.SQLITE:
+            required_methods = {
+                ReadOnlyEnforcementMethod.SQLITE_URI_MODE_RO,
+                ReadOnlyEnforcementMethod.SQLITE_QUERY_ONLY,
+                ReadOnlyEnforcementMethod.SQLITE_AUTHORIZE_DENY,
+            }
+            if not required_methods.issubset(set(enforcement_methods)):
+                status = SecurityAssuranceStatus.BLOCKED
+                failure_kind = DatabaseSecurityFailureKind.SECURITY_ENFORCEMENT_FAILED
+        elif technical_verification is None:
             status = SecurityAssuranceStatus.BLOCKED
-        elif any(item.status.upper() in {"FORBIDDEN", "MISSING", "UNKNOWN", "BLOCKED"} for item in findings):
+            failure_kind = DatabaseSecurityFailureKind.VERIFIER_UNAVAILABLE
+        elif not self._verification_matches(
+            technical_verification,
+            engine=engine,
+            source_id=source_id,
+            profile_id=profile_id,
+            credential_reference=credential_reference,
+            credential_version=credential_version,
+            selection_fingerprint=selection_fingerprint,
+            driver_reference=driver_reference,
+        ):
             status = SecurityAssuranceStatus.BLOCKED
-        assurance = DatabaseSecurityAssurance(assurance_id="assurance-" + _digest((source_id, profile_id, selection_fingerprint, self.policy.version))[:24], source_id=source_id, profile_id=profile_id, credential_reference=credential_reference, credential_purpose=credential_purpose, credential_version=credential_version, engine=engine, selection_fingerprint=selection_fingerprint, policy_id=self.policy.policy_id, policy_version=self.policy.version, driver_reference=driver_reference, status=status, enforcement_methods=tuple(enforcement_methods), findings=findings, created_at=datetime.now(timezone.utc))
-        failures: tuple[DatabaseSecurityFailure, ...] = () if status is SecurityAssuranceStatus.PASS else (DatabaseSecurityFailure(failure_id="database-security-assurance", kind=DatabaseSecurityFailureKind.CREDENTIAL_PURPOSE_MISMATCH if credential_purpose is not CredentialPurpose.SOURCE_READ_ONLY else DatabaseSecurityFailureKind.UNVERIFIED_PROVIDER if engine is not DatabaseEngine.SQLITE and not provider_verified else DatabaseSecurityFailureKind.UNSAFE_PRIVILEGE, operation="assess_source", detail="source security assurance did not pass", source_id=source_id, profile_id=profile_id),)
-        return DatabaseSecurityAssessment(assessment_id="assessment-" + _digest((source_id, profile_id, self.policy.version))[:24], source_id=source_id, profile_id=profile_id, engine=engine, policy_id=self.policy.policy_id, status=status, assurance=assurance, privilege_findings=findings, failures=failures)
+            failure_kind = DatabaseSecurityFailureKind.VERIFICATION_INCOMPLETE
+        elif technical_verification.status is not ProviderVerificationStatus.TECHNICALLY_VERIFIED:
+            status = SecurityAssuranceStatus.BLOCKED
+            failure_kind = DatabaseSecurityFailureKind.VERIFIER_FAILED if technical_verification.status is ProviderVerificationStatus.FAILED else DatabaseSecurityFailureKind.UNVERIFIED_PROVIDER
+        else:
+            coverage_failure = self._privilege_coverage_failure(engine, findings)
+            if coverage_failure is not None:
+                status = SecurityAssuranceStatus.BLOCKED
+                failure_kind = coverage_failure
+        evidence_fingerprint = technical_verification.evidence_fingerprint if technical_verification is not None else "reference:sqlite-controls-v1"
+        assurance_id = "assurance-" + _digest((
+            source_id,
+            profile_id,
+            credential_reference,
+            credential_version,
+            engine.value,
+            selection_fingerprint,
+            self.policy.policy_id,
+            self.policy.version,
+            driver_reference,
+            evidence_fingerprint,
+        ))[:24]
+        assurance = DatabaseSecurityAssurance(assurance_id=assurance_id, source_id=source_id, profile_id=profile_id, credential_reference=credential_reference, credential_purpose=credential_purpose, credential_version=credential_version, engine=engine, selection_fingerprint=selection_fingerprint, policy_id=self.policy.policy_id, policy_version=self.policy.version, driver_reference=driver_reference, verification_evidence_fingerprint=evidence_fingerprint, status=status, enforcement_methods=tuple(enforcement_methods), findings=findings, created_at=datetime.now(timezone.utc))
+        if status is SecurityAssuranceStatus.PASS:
+            failures: tuple[DatabaseSecurityFailure, ...] = ()
+        else:
+            failures = (DatabaseSecurityFailure(
+                failure_id="database-security-assurance",
+                kind=failure_kind or DatabaseSecurityFailureKind.SECURITY_ENFORCEMENT_FAILED,
+                operation="assess_source",
+                detail="source security assurance did not pass",
+                source_id=source_id,
+                profile_id=profile_id,
+            ),)
+        return DatabaseSecurityAssessment(assessment_id="assessment-" + _digest((source_id, profile_id, self.policy.version, evidence_fingerprint))[:24], source_id=source_id, profile_id=profile_id, engine=engine, policy_id=self.policy.policy_id, status=status, assurance=assurance, privilege_findings=findings, failures=failures)
+
+    def _verification_matches(
+        self,
+        verification: ProviderSecurityVerification,
+        *,
+        engine: DatabaseEngine,
+        source_id: str,
+        profile_id: str,
+        credential_reference: str,
+        credential_version: str,
+        selection_fingerprint: str,
+        driver_reference: str,
+    ) -> bool:
+        return (
+            verification.engine is engine
+            and verification.source_id == source_id
+            and verification.profile_id == profile_id
+            and verification.credential_reference == credential_reference
+            and verification.credential_version == credential_version
+            and verification.selection_fingerprint == selection_fingerprint
+            and verification.policy_id == self.policy.policy_id
+            and verification.policy_version == self.policy.version
+            and verification.driver_reference == driver_reference
+            and bool(verification.evidence_fingerprint)
+        )
+
+    def _privilege_coverage_failure(
+        self,
+        engine: DatabaseEngine,
+        findings: Sequence[PrivilegeFinding],
+    ) -> DatabaseSecurityFailureKind | None:
+        requirement = next((item for item in self.policy.requirements if item.engine is engine), None)
+        if requirement is None:
+            return DatabaseSecurityFailureKind.VERIFICATION_INCOMPLETE
+        expected = {
+            str(value).casefold()
+            for value in (*requirement.required, *requirement.allowed_optional, *requirement.forbidden)
+        }
+        finding_map: dict[str, PrivilegeFinding] = {}
+        for finding in findings:
+            key = finding.privilege.casefold()
+            if key not in expected or key in finding_map:
+                return DatabaseSecurityFailureKind.UNKNOWN_PRIVILEGE
+            finding_map[key] = finding
+            if finding.status is PrivilegeFindingStatus.UNKNOWN:
+                return DatabaseSecurityFailureKind.UNKNOWN_PRIVILEGE
+            if finding.status is PrivilegeFindingStatus.FORBIDDEN_PRESENT:
+                return DatabaseSecurityFailureKind.UNSAFE_PRIVILEGE
+        for privilege in requirement.required:
+            finding = finding_map.get(privilege.casefold())
+            if finding is None or finding.status is not PrivilegeFindingStatus.PRESENT_REQUIRED:
+                return DatabaseSecurityFailureKind.MISSING_REQUIRED_PRIVILEGE
+        for privilege in requirement.forbidden:
+            finding = finding_map.get(privilege.casefold())
+            if finding is None or finding.status is not PrivilegeFindingStatus.ABSENT_FORBIDDEN:
+                return DatabaseSecurityFailureKind.UNSAFE_PRIVILEGE if finding is not None else DatabaseSecurityFailureKind.MISSING_REQUIRED_PRIVILEGE
+        return None
 
     def require_pass(self, assessment: DatabaseSecurityAssessment) -> DatabaseSecurityAssurance:
         if assessment.status is not SecurityAssuranceStatus.PASS:
