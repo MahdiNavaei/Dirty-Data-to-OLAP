@@ -39,7 +39,7 @@ def main() -> int:
         "step12 immutable digest": "self.image_digest" in (ROOT / "src/dirty_data_to_olap/adapters/dependencies/desbordante.py").read_text(encoding="utf-8") and "provider_rows_by_table" in (ROOT / "src/dirty_data_to_olap/domain/contracts/dependency.py").read_text(encoding="utf-8"),
         "step12 project scratch test": "workspace" in test and "test-temp" in test and "tmp_path" not in test,
         "no research clone": not (ROOT / "research/oss/valentine").exists(),
-        "step14 not started": not (ROOT / "src/dirty_data_to_olap/adapters/entity_resolution").exists() and "current_step: 13" in state and "G4_BOUNDED_INTELLIGENCE: \"PENDING\"" in state,
+        "step14 handoff without implementation": not (ROOT / "src/dirty_data_to_olap/adapters/entity_resolution").exists() and "current_step: 14" in state and "last_completed_step: 13" in state and "G4_BOUNDED_INTELLIGENCE: \"PENDING\"" in state,
         "service owns authorization": "authorize_schema_matching_analysis" in service and "self.adapter.discover" in service,
     }
     for name, condition in checks.items():

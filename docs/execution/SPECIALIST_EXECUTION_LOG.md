@@ -926,3 +926,20 @@ handoff_to:
 - limitations: no confirmed PK/FK/business truth, no source writes/reconnect, no Step13 schema matching implementation, no G4/G4A decision, disposable build used a Boost 1.83 compatibility substitution because the pinned source requests Boost 1.85
 - handoff_to: `Step13 - Schema Matching Engineer`
 - next_state: `last_completed_step=12`, `current_step=13`, `current_role=schema_matching_engineer`, `G3/G3A/G3B=PASS`, `G4/G4A-G15=PENDING`, `blocked=false`
+
+## Specialist Step13 - Schema Matching Engineer
+
+- execution_step: `13`
+- role_id: `schema_matching_engineer`
+- status: `PASS` for bounded local implementation and executed evidence; no G4/G4A decision
+- starting_head: `d629319ee990f25b5a31aafc7eea44fee30644bc`
+- content_commit_sha: `8296cbb60e5a2baa006562352e5c4ccbc2489931`
+- inputs_reviewed: current Git/state, Step13 and Step14 playbooks, governance sequence, product/domain/data/architecture/engineering contracts and reports, Step12 receipt/implementation, source/snapshot/staging/profiling/privacy contracts and actual tests/validators
+- implementation: multi-source pinned-snapshot schema matching contracts; exact instance privacy authorization; complete hash-bound staged reader; deterministic bounded sampling; official Valentine adapter; COMA schema and DistributionBased instance configurations; conservative type pruning; signal families; symmetric candidate IDs; native-score semantics; top-k/output/runtime bounds; atomic aggregate-only artifacts; labeled Recall@k/MRR evaluator and hard-negative fixture
+- step12_hardening: immutable inspected Desbordante image identity; staged/provider/null-excluded dependency scope accounting; project-owned deterministic real-provider scratch root with cleanup; corrected stale state commit note
+- oss_research: official `delftdata/valentine` v1.0.0 tag `f0f738927455063841a4ebdda2f1420abc26922b`; Apache-2.0; package/source/tests/license inspected; requested pasted SHA `5d5163f04da304985bd51a476ccf7653de3973c9` unavailable while official master exposes `5d5163f04da304985bd51a476ccf7653de3979c3`; clone and runtime removed before handoff
+- tests_run: Step12 focused `12 passed`; official Valentine integration `3 passed, 1 warning`; full regression `114 passed, 42 warnings`; schema validator `17`; engineering post-gate `73` with `23/23` negatives; database-security `22`; dependency `21`; remaining domain/data/solution/source/profiling/quality validators PASS; compileall and diff check PASS
+- evaluation: COMA schema Recall@1/3/5 `0.5/0.5/0.5`, MRR `0.5`; DistributionBased instance Recall@1/3/5 `1.0/1.0/1.0`, MRR `1.0`; scores are ranking observations, not probability/confidence
+- limitations: no semantic acceptance, accepted mapping, key/FK truth, entity resolution, canonical identity, live/production-scale/release evidence; official requested source SHA discrepancy remains documented
+- handoff_to: `Step14 - Entity Resolution Engineer`
+- next_state: `last_completed_step=13`, `current_step=14`, `current_role=entity_resolution_engineer`, `G3/G3A/G3B=PASS`, `G4/G4A-G15=PENDING`, `blocked=false`; Step14 implementation not started

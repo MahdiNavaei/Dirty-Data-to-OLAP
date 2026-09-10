@@ -768,6 +768,11 @@ def check_state() -> None:
         require(execution.get("current_role") == "schema_matching_engineer", "post-Step 12 state must hand off to Step13")
         require("Schema Matching" in str(execution.get("current_specialist")), "current specialist must be Step13")
         require("Schema Matching" in str(execution.get("next_step")), "next step must be Step13")
+    elif execution.get("current_step") == 14:
+        require(execution.get("last_completed_step") == 13, "post-Step 13 state must record completed Step 13")
+        require(execution.get("current_role") == "entity_resolution_engineer", "post-Step 13 state must hand off to Step14")
+        require("Entity Resolution" in str(execution.get("current_specialist")), "current specialist must be Step14")
+        require("Entity Resolution" in str(execution.get("next_step")), "next step must be Step14")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")

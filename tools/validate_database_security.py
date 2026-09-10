@@ -162,7 +162,7 @@ def main() -> int:
     g3 = state.get("gates", {}).get("G3_SOURCE_SAFETY")
     gate_text = (ROOT / "docs" / "execution" / "gates" / "G3_SOURCE_SAFETY.md").read_text(encoding="utf-8")
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
-    checks.append(("execution is at completed Step12 / Step13 handoff", execution.get("last_completed_step") == 12 and execution.get("current_step") == 13 and execution.get("current_role") == "schema_matching_engineer"))
+    checks.append(("execution is at completed Step13 / Step14 handoff", execution.get("last_completed_step") == 13 and execution.get("current_step") == 14 and execution.get("current_role") == "entity_resolution_engineer"))
     checks.append(("G3 state and canonical gate agree", g3 == "PASS" and "Status: `PASS`" in gate_text))
     checks.append(("README agrees with G3 and Step14 handoff", "Steps 01-13 complete" in readme_text and "G0/G1/G2/G3 PASS" in readme_text and "Step14 - Entity Resolution Engineer" in readme_text and "formal G3" not in readme_text.lower()))
     checks.append(("Step13 schema matching implementation is present", execution.get("last_completed_step") in {12, 13} and (ROOT / "src" / "dirty_data_to_olap" / "application" / "dependency_discovery.py").exists() and (ROOT / "src" / "dirty_data_to_olap" / "application" / "schema_matching.py").exists()))

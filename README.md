@@ -4,9 +4,9 @@ Dirty Data to OLAP turns fragmented, dirty tabular data into an evidence-backed,
 
 The Step 05 architecture and engineering baseline is complete.
 
-Current status: Steps 01-12 complete; G0/G1/G2/G3 PASS; G3A/G3B PASS. Step12 dependency evidence is implemented within the documented bounded local-analysis limits. G4/G4A and later gates remain PENDING.
+Current status: Steps 01-13 complete; G0/G1/G2/G3 PASS; G3A/G3B PASS. Step12 dependency evidence and Step13 bounded cross-source schema-matching candidates are implemented within their documented local-evidence limits. G4/G4A and later gates remain PENDING.
 
-Next: Step13 - Schema Matching Engineer.
+Next: Step14 - Entity Resolution Engineer.
 
 - Project documentation: [docs/00_README.md](docs/00_README.md)
 - Execution state: [docs/execution/MASTER_EXECUTION_STATE.yml](docs/execution/MASTER_EXECUTION_STATE.yml)
