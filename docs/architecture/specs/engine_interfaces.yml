@@ -48,18 +48,18 @@ interfaces:
     adapter_component: adapters.quality
     forbidden_behavior: [source reconnect, source writes, raw-value artifact persistence]
   - interface_id: DependencyDiscoveryAdapter
-    purpose: Key, FD and IND evidence generation.
-    input_contracts: [SourceCatalog, Profiles, DependencyRequest]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
-    side_effects: [write_artifacts]
+    purpose: Bounded UCC, FD, AFD, IND and approximate-IND evidence generation over immutable staged rows.
+    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, Profiles, DependencyRequest, DependencyPrivacyContext]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
+    side_effects: [read_staged_artifacts, write_artifacts, project_local_ephemeral_engine_input]
     idempotency: pinned inputs/configuration/adapter version
     optional: false
     capability_required_for_v1: true
     runtime_stage_conditional: false
     capability_id: dependencies.adapter
-    failure_mode: stage FAILED or NEEDS_REVIEW; no guessed relationship
+    failure_mode: capability/input/engine failure is recorded; incomplete output is non-consumable and no guessed relationship is emitted
     adapter_component: adapters.dependencies
-    forbidden_behavior: [native Desbordante objects, confirmed FK without project decision]
+    forbidden_behavior: [source reconnect, source writes, native Desbordante objects in project contracts, raw values in artifacts/logs, unbounded combinations, confirmed FK without project decision]
   - interface_id: SchemaMatchingAdapter
     purpose: Ranked cross-source mapping candidates.
     input_contracts: [SourceCatalog, Profiles, SchemaMatchRequest]

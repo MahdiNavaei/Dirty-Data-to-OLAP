@@ -34,7 +34,7 @@ components:
   - {component_id: application.source_snapshot, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "adapter contract and bounded-read tests"}
   - {component_id: application.discovery, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source discovery contract tests"}
   - {component_id: application.profiling, primary_specialist: "Step08 Data Profiling Specialist", implementation_step: 8, test_strategy: "profiling fixtures and scope tests"}
-  - {component_id: application.dependency_discovery, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, test_strategy: "key, FD, IND and trap evaluation"}
+  - {component_id: application.dependency_discovery, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, implementation_status: IMPLEMENTED, test_strategy: "key, FD, IND and trap evaluation"}
   - {component_id: application.schema_matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, test_strategy: "labeled matching evaluation"}
   - {component_id: application.quality, primary_specialist: "Step09 Data Quality Engineer", implementation_step: 9, test_strategy: "quality taxonomy fixtures and negatives"}
   - {component_id: application.privacy_policy, primary_specialist: "Step10 Data Security / Privacy Engineer", implementation_step: 10, implementation_status: IMPLEMENTED, test_strategy: "privacy contract, canary, exposure and retention tests"}
@@ -52,7 +52,7 @@ components:
   - {component_id: adapters.database_security, primary_specialist: "Step11 Database Security Specialist", implementation_step: 11, test_strategy: "SQLite authorizer and SQLAlchemy/dlt hook tests"}
   - {component_id: adapters.profiling, primary_specialist: "Step08 Data Profiling Specialist", implementation_step: 8, test_strategy: "DataProfiler adapter contract tests"}
   - {component_id: adapters.quality, primary_specialist: "Step09 Data Quality Engineer", implementation_step: 9, test_strategy: "staged reader integrity and privacy tests"}
-  - {component_id: adapters.dependencies, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, test_strategy: "Desbordante adapter contract tests"}
+  - {component_id: adapters.dependencies, primary_specialist: "Step12 Dependency Discovery Engineer", implementation_step: 12, implementation_status: IMPLEMENTED, test_strategy: "Desbordante adapter contract tests"}
   - {component_id: adapters.matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, test_strategy: "Valentine adapter contract tests"}
   - {component_id: adapters.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "Splink normalized-output contract tests"}
   - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "provider provenance and unavailable-path tests"}

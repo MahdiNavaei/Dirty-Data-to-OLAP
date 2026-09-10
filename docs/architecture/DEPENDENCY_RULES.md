@@ -29,6 +29,9 @@ The composition root is an outer wiring boundary and may reference concrete impl
 - Core/application -> concrete adapters or third-party native types.
 - Entrypoints -> Splink, Valentine, dlt, DataProfiler, Desbordante or DuckDB engine APIs directly.
 - Cross-stage contracts containing native engine objects.
+- Dependency discovery may read only a complete, hash-bound `SourceSnapshotResult` through its staged reader; it may not reconnect to the source.
+- Dependency artifacts contain structural metrics, stable references and provenance only; raw cell values and engine temporary files do not cross the privacy boundary.
+- Dependency discovery emits relationship candidates only. It cannot publish accepted PK/FK/business truth.
 - Pickle transport for external objects.
 - Runtime imports from research/oss.
 - Materializer -> source-cleaning implementation or semantic redefinition.

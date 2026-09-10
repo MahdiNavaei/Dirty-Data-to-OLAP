@@ -23,6 +23,18 @@
 
 ## Other libraries
 
+## Desbordante (Step12 research)
+
+- Repository: https://github.com/desbordante/desbordante-core
+- Reviewed revision: `b211961f3f272ed8815ef1ffbda90573b11e1116`; package version `2.4.1`.
+- License: `AGPL-3.0-only`, verified in the pinned source `pyproject.toml` and `COPYING`.
+- Source inspected: UCC, FD/HyFD, AFD/Tane, IND/Spider and AIND/Mind algorithms; Python binding result accessors; binding tests; build metadata and wheel/platform classifiers.
+- Decision: no source copied and no direct host dependency added. Use only through the project-owned `DependencyDiscoveryAdapter` when an approved compatible runtime is available; otherwise publish an explicit unavailable capability/failure.
+- Boundary: native results are consumed inside `DesbordantePythonEngine` and normalized to project-owned evidence. Only complete hash-bound staged input is read; raw engine CSVs are project-local ephemeral inputs and are deleted after the attempt.
+- Platform evidence: the current Windows Python 3.10 host has no importable `desbordante` module and no matching wheel. A disposable Linux Docker build executed the pinned provider successfully. The build used a local Boost 1.83 compatibility substitution because Debian stable exposed 1.83 while the pinned source requests 1.85; this is recorded as research evidence, not a distribution claim.
+- Obligations: AGPL obligations must be reassessed before any distribution that links or ships the provider. The repository currently ships neither Desbordante source nor a runtime dependency.
+- Research clone deletion: required before final regression; no `research/oss/desbordante-core` remains in the final repository state.
+
 ## Great Expectations (Step09 research)
 
 - Repository: https://github.com/great-expectations/great_expectations

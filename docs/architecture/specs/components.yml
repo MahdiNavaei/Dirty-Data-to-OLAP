@@ -138,14 +138,15 @@ components:
     name: Dependency Discovery Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [candidate keys, FDs, INDs and relationship hypotheses]
-    input_contracts: [SourceCatalog, ColumnProfile]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
+    responsibilities: [bounded candidate keys, FDs, AFDs, INDs, approximate INDs, search statistics and relationship hypotheses]
+    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext]
+    optional_input_contracts: [ColumnProfile, TableProfile]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
     depends_on: [application.discovery, domain.contracts]
     ports_used: [DependencyDiscoveryAdapter, ArtifactStorePort]
     implementation_owner: Step12 Dependency Discovery Engineer
     implementation_step: 12
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -445,20 +446,21 @@ components:
     name: Dependency Adapter Family
     layer: adapters
     ownership: adapter implementation
-    responsibilities: [normalize dependency engine evidence]
-    input_contracts: [DependencyRequest]
-    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
+    responsibilities: [read complete staged rows, apply bounded search policy, normalize Desbordante evidence and publish aggregate artifacts]
+    input_contracts: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext]
+    optional_input_contracts: [ColumnProfile, TableProfile]
+    output_contracts: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
     depends_on: [domain.contracts]
     extension_port: DependencyDiscoveryAdapter
     implementation_owner: Step12 Dependency Discovery Engineer
     implementation_step: 12
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     capability_required_for_v1: true
     runtime_stage_conditional: false
-    side_effect_class: artifact_write
+    side_effect_class: staged_read_and_project_local_ephemeral_input
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: explicit stage failure
+    failure_behavior: explicit capability/input/engine failure; no synthetic fallback
   - component_id: adapters.matching
     name: Schema Matching Adapter Family
     layer: adapters

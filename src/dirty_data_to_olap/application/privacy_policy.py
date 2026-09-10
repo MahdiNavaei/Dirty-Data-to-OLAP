@@ -99,9 +99,25 @@ class PrivacyPolicyService:
             return ArtifactSensitivity(artifact_id=artifact_id, artifact_type=artifact_type, sensitivity=SensitivityLevel.RESTRICTED, classification_state=ClassificationState.POTENTIALLY_SENSITIVE, raw_value_allowed=self.policy.raw_staging_allowed, log_allowed=False, debug_allowed=False, export_allowed=False, external_processing_allowed=False, retention_class="restricted_staging", evidence_refs=tuple(evidence_refs))
         if normalized in {"record_reference", "source_record_reference"}:
             return ArtifactSensitivity(artifact_id=artifact_id, artifact_type=artifact_type, sensitivity=SensitivityLevel.SENSITIVE, classification_state=ClassificationState.POTENTIALLY_SENSITIVE, raw_value_allowed=False, log_allowed=False, debug_allowed=False, export_allowed=False, external_processing_allowed=False, retention_class="linkable_metadata", evidence_refs=tuple(evidence_refs))
-        if normalized in {"profile", "quality", "profile_artifact", "quality_artifact"}:
+        if normalized in {"profile", "quality", "profile_artifact", "quality_artifact", "dependency", "dependency_evidence", "dependency_artifact"}:
             return ArtifactSensitivity(artifact_id=artifact_id, artifact_type=artifact_type, sensitivity=SensitivityLevel.SENSITIVE, classification_state=ClassificationState.POTENTIALLY_SENSITIVE, raw_value_allowed=False, log_allowed=False, debug_allowed=False, export_allowed=False, external_processing_allowed=False, retention_class="derived_sensitive", evidence_refs=tuple(evidence_refs))
         return ArtifactSensitivity(artifact_id=artifact_id, artifact_type=artifact_type, sensitivity=SensitivityLevel.INTERNAL, classification_state=ClassificationState.UNKNOWN, raw_value_allowed=False, log_allowed=False, debug_allowed=False, export_allowed=False, external_processing_allowed=False, retention_class="controlled_metadata", evidence_refs=tuple(evidence_refs))
+
+    def authorize_dependency_analysis(self, context) -> PrivacyDecision:
+        """Authorize the bounded local structural-analysis boundary only."""
+        from dirty_data_to_olap.domain.contracts.dependency import DependencyPrivacyContext
+
+        try:
+            validated = DependencyPrivacyContext.model_validate(context)
+        except Exception:
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="dependency context failed the local-only privacy contract", classification_id="dependency-local-analysis", failure_ref="privacy-dependency-context-invalid")
+        if self.project_root is not None:
+            temp_root = (self.project_root / validated.project_temp_root).resolve()
+            try:
+                temp_root.relative_to(self.project_root)
+            except ValueError:
+                return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="dependency ephemeral input root escapes the project", classification_id="dependency-local-analysis", failure_ref="privacy-dependency-temp-root-invalid")
+        return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="dependency analysis is authorized for local ephemeral staging only", classification_id="dependency-local-analysis", required_transformation="aggregate_project_owned_evidence")
 
     def decide_exposure(self, classification: PrivacyClassification, request: ExposureRequest) -> PrivacyDecision:
         if request.context is ExposureContext.RAW_STAGING and self.policy.raw_staging_allowed and request.requested_mode == "raw":

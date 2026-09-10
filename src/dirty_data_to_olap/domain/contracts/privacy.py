@@ -59,6 +59,7 @@ class ExposureContext(str, Enum):
     EXPORT = "EXPORT"
     EXTERNAL_PROCESSING = "EXTERNAL_PROCESSING"
     UI_PREVIEW = "UI_PREVIEW"
+    DEPENDENCY_LOCAL_ANALYSIS = "DEPENDENCY_LOCAL_ANALYSIS"
 
 
 class PrivacyAction(str, Enum):

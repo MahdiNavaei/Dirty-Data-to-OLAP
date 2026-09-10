@@ -19,6 +19,7 @@ The component model is a set of small project-owned services connected through p
 - Source Discovery consumes source selection/registry metadata, uses the discovery operation of `SourceAdapter`, and produces `SourceCatalog` without requiring a snapshot.
 - Source Snapshot Coordinator consumes `SourceCatalog` plus `SamplingPolicy`, uses the bounded-snapshot operation of `SourceAdapter`, and stages immutable `SourceSnapshot`, `BatchReference` and `SourceRecordReference` artifacts.
 - Stage services own one semantic responsibility: discovery, profiling, dependency discovery, schema matching, quality analysis, optional semantic evidence, evidence fusion, canonical hypotheses, linkage-evidence-only entity resolution, canonical finalization, analytical planning, compilation, materialization and validation/reconciliation.
+- Dependency Discovery consumes only complete hash-bound staged snapshot artifacts and an explicit local-only privacy context. It measures UCC/key, FD/AFD, IND/approximate-IND and search-bound evidence, retains orphan/type/uniqueness/cardinality signals, and emits relationship candidates only; it never accepts a PK/FK or reconnects to a source.
 - Entity Resolution owns `EntityMatchEdge` and `EntityCluster` linkage evidence only. Canonical Finalization owns accepted canonical identity and `SourceRecordCanonicalMap` after policy, review, conflict and provenance checks.
 
 ### Ports and infrastructure

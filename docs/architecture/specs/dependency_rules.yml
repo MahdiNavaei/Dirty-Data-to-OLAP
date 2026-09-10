@@ -70,3 +70,6 @@ rules:
   compiler_executes_source_cleaning: false
   materializer_redefines_model_semantics: false
   validation_mutates_sources: false
+  dependency_reads_only_complete_hash_bound_staging: true
+  dependency_raw_values_in_published_artifacts: false
+  dependency_emits_confirmed_relationships: false

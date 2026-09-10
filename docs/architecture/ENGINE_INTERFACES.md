@@ -55,14 +55,14 @@ directly.
 
 ## DependencyDiscoveryAdapter
 
-- Purpose: produce key, functional-dependency and inclusion-dependency evidence.
-- Input: project-owned catalog/profile/sample contracts.
-- Output: KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate.
-- Side effects: no source writes.
-- Idempotency: safe for pinned inputs/configuration.
-- Optionality: required for plans that request structural discovery.
-- Failure: stage FAILED or NEEDS_REVIEW; no confirmed FK or synthetic fallback.
-- Forbidden: native Desbordante results or direct business-truth acceptance.
+- Purpose: produce bounded UCC, FD, AFD, IND and approximate-IND evidence over immutable staged rows.
+- Input: project-owned catalog, complete SourceSnapshotResult/batch references, optional profiles, DependencyRequest and explicit local-only privacy context.
+- Output: KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, candidate-only RelationshipCandidate, capability/failure/search statistics and artifact references.
+- Side effects: read staged artifacts and create short-lived project-local engine input; no source writes or reconnect.
+- Idempotency: pinned snapshot hashes, request/configuration and adapter version define the attempt.
+- Optionality: required for plans that request structural discovery; unavailable capability is an explicit failure.
+- Failure: FAILED or INCOMPLETE with retained failure/capability evidence; downstream must not consume incomplete output.
+- Forbidden: native Desbordante objects, raw values in results/logs/artifacts, unbounded combinations, confirmed FK or business-truth acceptance.
 
 ## SchemaMatchingAdapter
 

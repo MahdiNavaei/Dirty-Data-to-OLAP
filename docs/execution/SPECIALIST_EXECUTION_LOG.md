@@ -911,3 +911,18 @@ handoff_to:
 - evidence: security `23 passed`; full suite `96 passed, 41 warnings`; required validators, compileall and diff check PASS
 - closure_content_commit: `b659b6fdd29046e8132d8a4bbbe0ed514af88114`
 - final_state: Step11 PASS; G3/G3A/G3B PASS; last_completed_step=11; current_step=12; current_role=dependency_discovery_engineer; G4-G15=PENDING; blocked=false
+
+## Specialist Step12 - Dependency Discovery Engineer
+
+- execution_step: `12`
+- role_id: `dependency_discovery_engineer`
+- status: `PASS` for the bounded local implementation/evidence scope
+- starting_head: `2208ca957ca1bbfb3798cc1e4498d9fe287a2c3c`
+- content_commit_sha: `PENDING_STEP12_CONTENT_COMMIT`
+- inputs_reviewed: current Git/state, Step12 and Step13 playbooks, product/domain/data/software/engineering contracts, Step11 review/handoff, source/staging/profiling/privacy implementations, Desbordante pinned source metadata/bindings/tests/license and current host capability
+- implementation: project-owned dependency contracts; complete staged-only reader; replaceable Desbordante UCC/FD/AFD/IND boundary; bounded column/pair/determinant/output search policy; physical-null policy; aggregate-only hashed artifacts; privacy authorization; low-cardinality relationship trap rejection; Step12 validator and tests
+- provider_evidence: pinned Desbordante source built in disposable Linux Docker; real provider returned UCC, FD and exact IND results over the two-table fixture. Host Windows import is unavailable and is recorded as an explicit capability state.
+- tests_run: Step12 unit `4 passed`; dependency validator `11 checks PASS`; database-security regression validator `22 checks PASS`; compileall PASS; full regression `100 passed, 41 warnings`; architecture/engineering validator sweep PASS
+- limitations: no confirmed PK/FK/business truth, no source writes/reconnect, no Step13 schema matching implementation, no G4/G4A decision, disposable build used a Boost 1.83 compatibility substitution because the pinned source requests Boost 1.85
+- handoff_to: `Step13 - Schema Matching Engineer`
+- next_state: `last_completed_step=12`, `current_step=13`, `current_role=schema_matching_engineer`, `G3/G3A/G3B=PASS`, `G4/G4A-G15=PENDING`, `blocked=false`

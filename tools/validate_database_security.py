@@ -162,10 +162,10 @@ def main() -> int:
     g3 = state.get("gates", {}).get("G3_SOURCE_SAFETY")
     gate_text = (ROOT / "docs" / "execution" / "gates" / "G3_SOURCE_SAFETY.md").read_text(encoding="utf-8")
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
-    checks.append(("execution is at completed Step11 / Step12 handoff", execution.get("last_completed_step") == 11 and execution.get("current_step") == 12 and execution.get("current_role") == "dependency_discovery_engineer"))
+    checks.append(("execution is at completed Step12 / Step13 handoff", execution.get("last_completed_step") == 12 and execution.get("current_step") == 13 and execution.get("current_role") == "schema_matching_engineer"))
     checks.append(("G3 state and canonical gate agree", g3 == "PASS" and "Status: `PASS`" in gate_text))
-    checks.append(("README agrees with G3 and Step12 handoff", "Steps 01-11 complete" in readme_text and "G0/G1/G2/G3 PASS" in readme_text and "Step12 - Dependency Discovery Engineer" in readme_text and "formal G3" not in readme_text.lower()))
-    checks.append(("Step12 implementation has not begun", not (ROOT / "src" / "dirty_data_to_olap" / "application" / "dependency_discovery.py").exists()))
+    checks.append(("README agrees with G3 and Step13 handoff", "Steps 01-12 complete" in readme_text and "G0/G1/G2/G3 PASS" in readme_text and "Step13 - Schema Matching Engineer" in readme_text and "formal G3" not in readme_text.lower()))
+    checks.append(("Step13 remains unimplemented after the Step12 handoff", execution.get("last_completed_step") == 12 and (ROOT / "src" / "dirty_data_to_olap" / "application" / "dependency_discovery.py").exists() and not (ROOT / "src" / "dirty_data_to_olap" / "application" / "schema_matching.py").exists()))
     failed = [name for name, passed in checks if not passed]
     if failed:
         print("FAIL")

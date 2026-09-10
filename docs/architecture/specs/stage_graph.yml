@@ -39,9 +39,10 @@ stages:
     conditional: false
     dependencies: [SOURCE_SNAPSHOT_STAGE]
     optional_dependencies: [PROFILING]
-    input_artifact_types: [SourceCatalog, SourceSnapshot, ColumnProfile]
-    output_artifact_types: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate]
-    failure_consequence: FAILED; no guessed relationships
+    input_artifact_types: [SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, DependencyRequest, DependencyPrivacyContext]
+    optional_input_artifact_types: [ColumnProfile, TableProfile]
+    output_artifact_types: [KeyCandidate, FunctionalDependencyEvidence, InclusionDependencyEvidence, RelationshipCandidate, DependencyFailure, DependencyCapability, DependencySearchStats, DependencyArtifactReference]
+    failure_consequence: FAILED or INCOMPLETE; no guessed relationships and no downstream consumption of incomplete evidence
     cacheable: true
     idempotency: pinned inputs/configuration/adapter
     review_boundary: candidate evidence
