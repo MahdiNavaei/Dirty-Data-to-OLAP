@@ -943,3 +943,14 @@ handoff_to:
 - limitations: no semantic acceptance, accepted mapping, key/FK truth, entity resolution, canonical identity, live/production-scale/release evidence; official requested source SHA discrepancy remains documented
 - handoff_to: `Step14 - Entity Resolution Engineer`
 - next_state: `last_completed_step=13`, `current_step=14`, `current_role=entity_resolution_engineer`, `G3/G3A/G3B=PASS`, `G4/G4A-G15=PENDING`, `blocked=false`; Step14 implementation not started
+
+## Post-Step13 Independent Integrity Closure
+
+- scope: surgical Step13 repair only; no Step14 implementation, contracts, Splink installation or entity-resolution work
+- starting_head: `16c38420c9004b2fefddf4c744c82f604ebba922`
+- closure_content_commit: `9e4d3e0`
+- repaired: schema-only reader/privacy violation; matcher/mode compatibility; real per-table-pair and projected-column provider bounds; unknown/cross-source scope validation; truncation status; per-matcher provider/coverage accounting; matcher-neutral candidate retention; actual labeled hard-negative evaluation; abbreviation/table-context signals; instance sample provenance; cross-spec contract consistency; cooperative runtime-budget wording
+- fixture_evidence: actual `benchmarks/schema_matching/step13_labeled_fixture.json` loaded and executed with `crm_orders.status`, `erp_customers.status_code`, and `crm_customers.شناسه_مشتری`; type-incompatible and multilingual cases remain evidence candidates only
+- oss_research: exact official Valentine commit `5d5163f04da304985bd51a476ccf7653de3979c3` cloned/detached/reviewed for source, tests and Apache-2.0 license, then removed; official `valentine==1.0.0` runtime executed from project-local scratch and removed after regression
+- tests_run: focused Step13 integration `6 passed, 9 warnings`; schema contracts `3 passed`; warnings are official PuLP deprecations during native Valentine execution
+- state: Step13 remains complete; `last_completed_step=13`, `current_step=14`, `current_role=entity_resolution_engineer`, `G0-G3/G3A/G3B=PASS`, `G4/G4A/G5-G15=PENDING`, `blocked=false`; Step14 implementation not started

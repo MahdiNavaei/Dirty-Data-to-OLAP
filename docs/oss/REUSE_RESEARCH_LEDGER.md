@@ -23,6 +23,18 @@
 
 ## Other libraries
 
+## Valentine (Step13)
+
+- Repository: https://github.com/delftdata/valentine
+- Reviewed revision: `5d5163f04da304985bd51a476ccf7653de3979c3` (exact requested commit; prior closure text contained a Codex transcription error).
+- License: Apache License 2.0, verified in `LICENSE`.
+- Installed/tested version: official `valentine==1.0.0` runtime in the project-local disposable test directory.
+- Source/tests inspected: `valentine/__init__.py`, matcher implementations including Coma, Cupid and DistributionBased, and the official `tests/` tree.
+- Decision: use the official runtime only behind `ValentineSchemaMatchingAdapter`; native DataFrames, matcher objects and native result containers never enter project contracts or artifacts. No source was copied.
+- Boundary: schema-only mode uses catalog-derived zero-row inputs; instance-aware mode uses exact policy authorization, hash-bound staged samples and bounded per-table-pair calls. Output is candidate evidence only, never an accepted mapping.
+- Obligations: retain Apache attribution and license obligations for any distributed runtime installation.
+- Research clone deletion: exact-pin clone removed after source, tests and license inspection; final repository state contains no `research/oss/valentine`.
+
 ## Desbordante (Step12 research)
 
 - Repository: https://github.com/desbordante/desbordante-core
