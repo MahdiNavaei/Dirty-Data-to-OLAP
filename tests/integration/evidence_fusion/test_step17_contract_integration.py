@@ -40,3 +40,15 @@ def test_actual_dependency_contract_fuses_and_publishes_byte_hashed_result():
         assert target.parent.name == "manifests"
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_actual_catalog_metadata_is_not_a_fake_snapshot_and_conflict_is_explicit():
+    from dirty_data_to_olap.domain.contracts.source import DeclaredConstraint, SourceCatalog
+
+    dependency = _dependency_result()
+    declared = DeclaredConstraint.model_construct(constraint_type="FOREIGN_KEY", source_id="sales", table_id="orders", columns=("customer_id",), referenced_table_id="customers", referenced_table_name="customers", referenced_columns=("id",), declared=True, provenance=None)
+    catalog = SourceCatalog.model_construct(source=None, tables=(), columns=(), declared_constraints=(declared,))
+    result = EvidenceFusionService().fuse(EvidenceFusionRequest(request_id="catalog", execution_context_id="catalog", relationship_candidate_ids=("rel-actual",), policy=EvidenceFusionService.load_policy()), EvidenceFusionInputs(producer_statuses=_statuses()), dependency_result=dependency, source_catalogs=(catalog,))
+    assert any(item.family is EvidenceFamily.DECLARED_CONSTRAINT and item.snapshot_binding is FusionSnapshotBinding.NOT_APPLICABLE_SCHEMA_METADATA for item in result.signals)
+    assert not any(item.kind is FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH for item in result.failures)
+    assert any(item.conflict_type is ConflictType.DECLARED_DATA_CONFLICT for item in result.conflicts)

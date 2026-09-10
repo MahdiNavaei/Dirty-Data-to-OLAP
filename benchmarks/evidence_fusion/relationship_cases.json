@@ -1,6 +1,8 @@
 {
   "fixture_id": "step17-evidence-fusion-cases-v1",
-  "scope": "contract-and-conflict-controls-without-runtime-truth-labels",
+  "scope": "executable-contract-and-conflict-controls-without-runtime-truth-labels",
+  "runtime_input": "runtime_input.json",
+  "expected_control": "expected_control.json",
   "cases": [
     {"case_id":"A","kind":"relationship","description":"clean structural MANY_TO_ONE candidate"},
     {"case_id":"B","kind":"relationship","description":"declared FK with observed orphan contradiction"},

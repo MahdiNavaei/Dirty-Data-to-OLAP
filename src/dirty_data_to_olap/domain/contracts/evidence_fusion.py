@@ -67,6 +67,11 @@ class EvidenceReliabilityState(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class FusionSnapshotBinding(str, Enum):
+    OBSERVATION = "OBSERVATION"
+    NOT_APPLICABLE_SCHEMA_METADATA = "NOT_APPLICABLE_SCHEMA_METADATA"
+
+
 class ProducerResultState(str, Enum):
     COMPLETE = "COMPLETE"
     INCOMPLETE = "INCOMPLETE"
@@ -120,6 +125,7 @@ class FusionFailureKind(str, Enum):
     UNSUPPORTED_SCORE_SEMANTICS = "UNSUPPORTED_SCORE_SEMANTICS"
     INCONSISTENT_LINEAGE = "INCONSISTENT_LINEAGE"
     ARTIFACT_PUBLICATION_FAILED = "ARTIFACT_PUBLICATION_FAILED"
+    BOUNDED_INPUT_DISCARDED = "BOUNDED_INPUT_DISCARDED"
 
 
 class EvidenceFusionCompleteness(str, Enum):
@@ -134,10 +140,18 @@ class EvidenceLineageReference(_SourceModel):
     family: EvidenceFamily
     source_ids: tuple[str, ...] = ()
     snapshot_ids: tuple[str, ...] = ()
+    snapshot_by_source: Mapping[str, str] = {}
+    snapshot_binding: FusionSnapshotBinding = FusionSnapshotBinding.OBSERVATION
     scope_id: str = Field(min_length=1)
     observation_scope: str = Field(min_length=1)
     correlation_group: str = Field(min_length=1)
     derived_from_refs: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def source_snapshot_alignment(self) -> "EvidenceLineageReference":
+        if self.snapshot_binding is FusionSnapshotBinding.OBSERVATION and self.snapshot_by_source and not set(self.snapshot_by_source).issubset(set(self.source_ids)):
+            raise ValueError("lineage snapshot_by_source keys must be selected source IDs")
+        return self
 
 
 class NormalizedEvidenceSignal(_SourceModel):
@@ -159,8 +173,12 @@ class NormalizedEvidenceSignal(_SourceModel):
     scope_id: str = Field(min_length=1)
     source_ids: tuple[str, ...] = ()
     snapshot_ids: tuple[str, ...] = ()
+    snapshot_by_source: Mapping[str, str] = {}
+    snapshot_binding: FusionSnapshotBinding = FusionSnapshotBinding.OBSERVATION
     derived_from_refs: tuple[str, ...] = ()
     correlation_group: str = Field(min_length=1)
+    dependency_group: str | None = None
+    score_dimension_id: str | None = None
     score_bearing: bool = False
     contribution: float | None = None
 
@@ -170,6 +188,8 @@ class NormalizedEvidenceSignal(_SourceModel):
             raise ValueError("non-observed evidence cannot carry a numeric normalized value")
         if not self.score_bearing and self.contribution is not None:
             raise ValueError("non-score-bearing evidence cannot carry a score contribution")
+        if self.snapshot_binding is FusionSnapshotBinding.OBSERVATION and self.snapshot_by_source and not set(self.snapshot_by_source).issubset(set(self.source_ids)):
+            raise ValueError("signal snapshot_by_source keys must be selected source IDs")
         return self
 
 
@@ -186,6 +206,42 @@ class EvidenceBundle(_SourceModel):
     unavailable_evidence_refs: tuple[str, ...] = ()
 
 
+class FusionNormalizationRule(_SourceModel):
+    rule_id: str = Field(min_length=1)
+    metric_names: tuple[str, ...] = Field(min_length=1)
+    method: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+
+
+class FusionScoringDimension(_SourceModel):
+    dimension_id: str = Field(min_length=1)
+    metric_names: tuple[str, ...] = Field(min_length=1)
+    weight: float = Field(ge=0)
+    normalization_rule_id: str = Field(min_length=1)
+    dependency_group: str = Field(min_length=1)
+    required: bool = False
+
+
+class FusionBandPolicy(_SourceModel):
+    band: ConfidenceBand
+    minimum: float | None = Field(default=None, ge=-1, le=1)
+    maximum: float | None = Field(default=None, ge=-1, le=1)
+
+
+class FusionConflictRule(_SourceModel):
+    rule_id: str = Field(min_length=1)
+    conflict_type: ConflictType
+    threshold: float | None = Field(default=None, ge=0, le=1)
+    semantics: str = Field(min_length=1)
+
+
+class FusionAutomationPolicy(_SourceModel):
+    enabled: bool = False
+    auto_accept: bool = False
+    auto_reject: bool = False
+    requires_g5: bool = True
+
+
 class FusionPolicyReference(_SourceModel):
     policy_id: str = Field(min_length=1)
     version: str = Field(min_length=1)
@@ -195,15 +251,35 @@ class FusionPolicyReference(_SourceModel):
     auto_accept_enabled: bool = False
     auto_reject_enabled: bool = False
     requires_g5_for_automation: bool = True
+    automation: FusionAutomationPolicy = Field(default_factory=FusionAutomationPolicy)
     content_hash: str = Field(min_length=1)
+    subject_kind: FusionSubjectKind | None = None
+    normalization_rules: tuple[FusionNormalizationRule, ...] = ()
+    scoring_dimensions: tuple[FusionScoringDimension, ...] = ()
+    band_policy: tuple[FusionBandPolicy, ...] = ()
+    conflict_rules: tuple[FusionConflictRule, ...] = ()
+    required_producer_families: tuple[EvidenceFamily, ...] = ()
+    cross_source_mapping_requires_schema_matching: bool = True
 
     @model_validator(mode="after")
     def enforce_g5_boundary(self) -> "FusionPolicyReference":
-        if self.status is FusionPolicyStatus.UNCALIBRATED and (self.automation_enabled or self.auto_accept_enabled or self.auto_reject_enabled):
+        if self.status is not FusionPolicyStatus.UNCALIBRATED:
+            raise ValueError("Step17 policies must remain UNCALIBRATED until a future evaluated gate")
+        if self.automation_enabled or self.auto_accept_enabled or self.auto_reject_enabled or self.automation.enabled or self.automation.auto_accept or self.automation.auto_reject:
             raise ValueError("uncalibrated fusion policy cannot enable automation")
-        if self.status is FusionPolicyStatus.UNCALIBRATED and self.score_semantics not in {"UNCALIBRATED_DECISION_SCORE", "UNCALIBRATED_RANKING_SCORE"}:
+        if self.score_semantics not in {"UNCALIBRATED_DECISION_SCORE", "UNCALIBRATED_RANKING_SCORE"}:
             raise ValueError("uncalibrated policy requires explicit uncalibrated score semantics")
+        dimensions = [item.dimension_id for item in self.scoring_dimensions]
+        if len(dimensions) != len(set(dimensions)):
+            raise ValueError("fusion scoring dimensions must be unique")
+        rule_ids = {item.rule_id for item in self.normalization_rules}
+        if any(item.normalization_rule_id not in rule_ids for item in self.scoring_dimensions):
+            raise ValueError("every scoring dimension must reference a declared normalization rule")
         return self
+
+
+# Compatibility name for callers that consume the policy as a typed contract.
+FusionPolicy = FusionPolicyReference
 
 
 class FusionScore(_SourceModel):
@@ -303,18 +379,21 @@ class ProducerEvidenceStatus(_SourceModel):
     result_id: str = Field(min_length=1)
     detail: str = ""
     input_fingerprint: str | None = None
+    source_ids: tuple[str, ...] = ()
+    snapshot_by_source: Mapping[str, str] = {}
 
 
 class DeclaredConstraintInput(_SourceModel):
     constraint_id: str = Field(min_length=1)
     constraint_type: str = Field(min_length=1)
     source_id: str = Field(min_length=1)
-    snapshot_id: str = Field(min_length=1)
+    snapshot_id: str | None = None
     from_table: str = Field(min_length=1)
     from_columns: tuple[str, ...] = Field(min_length=1)
     to_table: str = Field(min_length=1)
     to_columns: tuple[str, ...] = Field(min_length=1)
     scope_id: str = Field(min_length=1)
+    snapshot_binding: FusionSnapshotBinding = FusionSnapshotBinding.NOT_APPLICABLE_SCHEMA_METADATA
 
 
 class DomainAssertion(_SourceModel):
@@ -326,6 +405,14 @@ class DomainAssertion(_SourceModel):
     snapshot_ids: tuple[str, ...] = ()
     scope_id: str = Field(min_length=1)
     asserted_by: str = Field(min_length=1)
+    evidence_refs: tuple[str, ...] = ()
+
+
+class FusionSubjectBinding(_SourceModel):
+    upstream_subject_ref: str = Field(min_length=1)
+    candidate_id: str = Field(min_length=1)
+    fusion_subject_id: str = Field(min_length=1)
+    binding_basis: str = Field(min_length=1)
     evidence_refs: tuple[str, ...] = ()
 
 
@@ -346,11 +433,14 @@ class FusionEvidenceItem(_SourceModel):
     observation_scope: EvidenceReliabilityState = EvidenceReliabilityState.UNKNOWN
     source_ids: tuple[str, ...] = ()
     snapshot_ids: tuple[str, ...] = ()
+    snapshot_by_source: Mapping[str, str] = {}
+    snapshot_binding: FusionSnapshotBinding = FusionSnapshotBinding.OBSERVATION
     derived_from_refs: tuple[str, ...] = ()
     correlation_group: str = Field(min_length=1)
+    dependency_group: str | None = None
+    score_dimension_id: str | None = None
     score_bearing: bool = True
     qualitative_text: str | None = None
-
 
 class EvidenceFusionRequest(_SourceModel):
     request_id: str = Field(min_length=1)
@@ -358,6 +448,8 @@ class EvidenceFusionRequest(_SourceModel):
     cross_source_mapping_scope: bool = False
     relationship_candidate_ids: tuple[str, ...] = ()
     mapping_candidate_ids: tuple[str, ...] = ()
+    subject_kind: FusionSubjectKind | None = None
+    fusion_contract_version: str = "step17-fusion-v2"
     policy: FusionPolicyReference
     expected_producer_result_ids: Mapping[str, str] = Field(default_factory=dict)
     max_relationship_candidates: int = Field(default=2_000, ge=1, le=100_000)
@@ -366,6 +458,17 @@ class EvidenceFusionRequest(_SourceModel):
     max_conflicts_per_subject: int = Field(default=32, ge=1, le=1_000)
     max_total_decisions: int = Field(default=4_000, ge=1, le=200_000)
 
+    @model_validator(mode="after")
+    def one_subject_kind(self) -> "EvidenceFusionRequest":
+        if self.relationship_candidate_ids and self.mapping_candidate_ids:
+            raise ValueError("one EvidenceFusionRequest cannot mix relationship and mapping subjects")
+        inferred = FusionSubjectKind.MAPPING if self.mapping_candidate_ids else FusionSubjectKind.RELATIONSHIP
+        if self.subject_kind is not None and (self.relationship_candidate_ids or self.mapping_candidate_ids) and self.subject_kind is not inferred:
+            raise ValueError("request subject_kind does not match candidate IDs")
+        if self.cross_source_mapping_scope and self.relationship_candidate_ids:
+            raise ValueError("cross-source mapping scope cannot carry relationship candidate IDs")
+        return self
+
 
 class EvidenceFusionInputs(_SourceModel):
     producer_statuses: tuple[ProducerEvidenceStatus, ...] = ()
@@ -373,7 +476,15 @@ class EvidenceFusionInputs(_SourceModel):
     relationship_candidates: tuple[Any, ...] = ()
     mapping_candidates: tuple[Any, ...] = ()
     declared_constraints: tuple[Any, ...] = ()
+    source_catalogs: tuple[Any, ...] = ()
     domain_assertions: tuple[DomainAssertion, ...] = ()
+    profile_results: tuple[Any, ...] = ()
+    quality_results: tuple[Any, ...] = ()
+    dependency_results: tuple[Any, ...] = ()
+    schema_match_results: tuple[Any, ...] = ()
+    applied_ml_results: tuple[Any, ...] = ()
+    semantic_results: tuple[Any, ...] = ()
+    subject_bindings: tuple[Any, ...] = ()
 
 
 class FusionFailure(_SourceModel):
@@ -406,12 +517,12 @@ class EvidenceFusionResult(_SourceModel):
     artifacts: tuple[FusionArtifactReference, ...] = ()
 
 
-def fusion_input_fingerprint(subject_id: str, signals: tuple[NormalizedEvidenceSignal, ...], policy: FusionPolicyReference) -> str:
-    return stable_digest({"subject_id": subject_id, "signals": [item.model_dump(mode="json") for item in signals], "policy": policy.model_dump(mode="json")})
+def fusion_input_fingerprint(subject_id: str, signals: tuple[NormalizedEvidenceSignal, ...], policy: FusionPolicyReference, material_inputs: Any = None) -> str:
+    return stable_digest({"subject_id": subject_id, "signals": [item.model_dump(mode="json") for item in sorted(signals, key=lambda item: item.signal_id)], "policy": policy.model_dump(mode="json"), "material_inputs": material_inputs})
 
 
 def fusion_decision_id(subject_id: str, input_fingerprint: str, policy: FusionPolicyReference) -> str:
-    return "fusion_decision_" + stable_digest({"subject_id": subject_id, "input": input_fingerprint, "policy": policy.policy_id, "version": policy.version})[:32]
+    return "fusion_decision_" + stable_digest({"subject_id": subject_id, "input": input_fingerprint, "policy": policy.policy_id, "version": policy.version, "content_hash": policy.content_hash})[:32]
 
 
 def fusion_signal_id(evidence_id: str, subject_id: str, metric_name: str) -> str:

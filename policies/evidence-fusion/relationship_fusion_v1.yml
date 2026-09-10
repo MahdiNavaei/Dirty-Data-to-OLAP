@@ -1,5 +1,6 @@
 policy_id: relationship-fusion-v1
 version: "1.0"
+subject_kind: RELATIONSHIP
 status: UNCALIBRATED
 automation_enabled: false
 auto_accept_enabled: false
@@ -12,6 +13,15 @@ normalization:
   matcher_rank: ordinal_presence_v1
   learned: auxiliary_derived_only_v1
   semantic: qualitative_only_v1
+normalization_rules:
+  - {rule_id: bounded-01, metric_names: [inclusion_coverage, orphan_ratio, target_uniqueness, type_compatibility, quality_ratio], method: identity_v1, version: "1"}
+  - {rule_id: matcher-rank, metric_names: [matcher_rank], method: ordinal_presence_v1, version: "1"}
+  - {rule_id: qualitative-only, metric_names: [semantic_hypothesis, domain_assertion, low_cardinality_risk], method: qualitative_only_v1, version: "1"}
+scoring_dimensions:
+  - {dimension_id: inclusion, metric_names: [inclusion_coverage, orphan_ratio], weight: 1.0, normalization_rule_id: bounded-01, dependency_group: inclusion, required: true}
+  - {dimension_id: target_uniqueness, metric_names: [target_uniqueness], weight: 1.0, normalization_rule_id: bounded-01, dependency_group: target_uniqueness, required: true}
+  - {dimension_id: type_compatibility, metric_names: [type_compatibility], weight: 0.75, normalization_rule_id: bounded-01, dependency_group: type_compatibility, required: true}
+  - {dimension_id: declared_constraint, metric_names: [declared_foreign_key], weight: 1.0, normalization_rule_id: bounded-01, dependency_group: declared_constraint, required: false}
 weights:
   declared_constraint: 1.0
   inclusion_coverage: 1.0
@@ -28,3 +38,9 @@ conflicts:
   - TYPE_SEMANTIC_CONFLICT
   - SAMPLE_FULLSCAN_CONFLICT
   - MULTIPLE_TARGET_AMBIGUITY
+conflict_rules:
+  - {rule_id: semantic-structural, conflict_type: SEMANTIC_STRUCTURAL_CONFLICT}
+  - {rule_id: declared-data, conflict_type: DECLARED_DATA_CONFLICT}
+  - {rule_id: type-semantic, conflict_type: TYPE_SEMANTIC_CONFLICT}
+  - {rule_id: sample-full, conflict_type: SAMPLE_FULLSCAN_CONFLICT, threshold: 0.5}
+  - {rule_id: multiple-target, conflict_type: MULTIPLE_TARGET_AMBIGUITY}

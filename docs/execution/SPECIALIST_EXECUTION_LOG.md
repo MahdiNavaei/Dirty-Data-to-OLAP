@@ -1014,3 +1014,13 @@ handoff_to:
 - limitations: no calibration, acceptance, canonical model, ER runtime dependency, repair execution, production capacity or release claim
 - handoff_to: `Step18 - ML Evaluation Engineer`
 - next_state: `last_completed_step=17`, `current_step=18`, `current_role=ml_evaluation_engineer`, `G0-G4=PASS`, `G5-G15=PENDING`, `blocked=false`; do not begin Step18 in this execution
+
+## Post-Step17 Evidence Fusion Integrity Closure
+
+- execution_step: `17` surgical integrity closure; Step18 implementation not started
+- starting_head: `2baebc37a2060bc2e2dfcb96b9679d46eab24ae4`
+- repaired: runtime-authoritative typed policies; explicit score dimensions and relationship/mapping separation; actual producer-result integration; ML/semantic subject binding; profile/quality/repair forwarding; multiple producer identity and stale replay checks; source-local snapshot scope; declared metadata binding; non-observed and bundle missingness; policy/material replay identity; bounded failures; distinct conflict semantics; validator behavior and A-O/M1-M8 executable benchmark
+- evidence_artifacts: `policies/evidence-fusion/*.json`, `benchmarks/evidence_fusion/runtime_input.json`, `benchmarks/evidence_fusion/expected_control.json`, `benchmarks/evidence_fusion/relationship_cases.json`
+- verification: focused fusion unit/contract/integration `20 passed`; full regression `169 passed, 2 optional skips, 41 warnings`; unit `97`, contract `7`, integration `32 passed/2 skipped`, architecture `9`, security `24`; compileall and diff-check PASS; all `validate_*.py` validators PASS, including engineering post-gate `73` checks and fusion validator `15` checks
+- state_boundary: G4/G4A remain PASS; G5 remains PENDING; all decisions remain REVIEW_REQUIRED or INCOMPLETE_REQUIRED_EVIDENCE; no ReviewDecision, canonical identity, calibration or repair execution
+- handoff: remains `Step18 - ML Evaluation Engineer`; Step18 must not be started by this closure

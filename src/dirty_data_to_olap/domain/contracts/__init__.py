@@ -308,10 +308,16 @@ from .evidence_fusion import (
     EvidenceRole,
     EvidenceFusionResult,
     FusionArtifactReference,
+    FusionAutomationPolicy,
+    FusionBandPolicy,
     FusionEvidenceItem,
     FusionFailure,
     FusionFailureKind,
+    FusionNormalizationRule,
     FusionPolicyReference,
+    FusionPolicy,
+    FusionScoringDimension,
+    FusionSnapshotBinding,
     FusionPolicyStatus,
     FusionScore,
     FusionSubjectKind,
@@ -320,6 +326,7 @@ from .evidence_fusion import (
     ProducerResultState,
     RelationshipDecision,
     SemanticMappingDecision,
+    FusionSubjectBinding,
 )
 
 __all__ = [

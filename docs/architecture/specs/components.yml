@@ -238,7 +238,7 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [combine evidence, preserve conflicts, emit decisions and hypotheses]
-    input_contracts: [ProfileResult, DependencyResult, SchemaMatchResult when cross_source_mapping_scope, QualityResult, DeclaredConstraint, DomainAssertion, LLMEvidence, AppliedMLResult]
+    input_contracts: ["ProfileResult[]", "QualityResult[]", "DependencyResult[]", "SchemaMatchResult[] when cross_source_mapping_scope", DeclaredConstraint, SourceCatalog, DomainAssertion, "LLMEvidence[]", "AppliedMLResult[]", FusionSubjectBinding, ProducerEvidenceStatus]
     output_contracts: [EvidenceFusionResult, RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
     depends_on: [application.profiling, application.dependency_discovery, application.quality, domain.contracts]
     conditional_dependencies:
@@ -253,7 +253,7 @@ components:
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
-    failure_behavior: conflict remains REVIEW_REQUIRED; no score-as-truth
+    failure_behavior: conflict remains REVIEW_REQUIRED; missing or stale evidence is explicit; no score-as-truth
   - component_id: application.canonical_hypotheses
     name: Canonical Hypothesis Service
     layer: application

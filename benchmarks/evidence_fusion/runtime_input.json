@@ -1,0 +1,25 @@
+{
+  "fixture_id": "step17-evidence-fusion-runtime-input-v1",
+  "note": "Only safe structured runtime inputs. No truth labels, expected decisions, or expected conflicts are present.",
+  "defaults": {
+    "producer_statuses": [
+      {"producer_id": "profile", "family": "PROFILE", "state": "COMPLETE", "result_id": "profile-result"},
+      {"producer_id": "dependency", "family": "DEPENDENCY", "state": "COMPLETE", "result_id": "dependency-result"},
+      {"producer_id": "quality", "family": "QUALITY", "state": "COMPLETE", "result_id": "quality-result"}
+    ],
+    "relationship_candidate": {"candidate_id": "case-candidate", "source_id": "src", "snapshot_id": "snapshot", "from_table": "orders", "from_columns": ["customer_id"], "to_table": "customers", "to_columns": ["id"], "proposed_cardinality": "MANY_TO_ONE"},
+    "relationship_evidence": [
+      {"evidence_id": "coverage", "metric_name": "inclusion_coverage", "metric_value": 0.8, "direction": "SUPPORTS", "family": "DEPENDENCY", "score_dimension_id": "inclusion"},
+      {"evidence_id": "orphan", "metric_name": "orphan_ratio", "metric_value": 0.2, "direction": "CONTRADICTS", "family": "DEPENDENCY", "score_dimension_id": "inclusion"},
+      {"evidence_id": "unique", "metric_name": "target_uniqueness", "metric_value": 0.9, "direction": "SUPPORTS", "family": "DEPENDENCY", "score_dimension_id": "target_uniqueness"},
+      {"evidence_id": "type", "metric_name": "type_compatibility", "metric_value": 1.0, "direction": "SUPPORTS", "family": "DEPENDENCY", "score_dimension_id": "type_compatibility"}
+    ]
+  },
+  "cases": {
+    "A": {}, "B": {"declared_fk": true, "relationship_evidence": [{"evidence_id": "orphan", "metric_name": "orphan_ratio", "metric_value": 0.8, "direction": "CONTRADICTS", "family": "DEPENDENCY", "score_dimension_id": "inclusion"}]},
+    "C": {"semantic_support": true}, "D": {"kind": "mapping", "type_conflict": true, "semantic_support": true}, "E": {"low_cardinality": true},
+    "F": {"sample_full": true}, "G": {"competing_target": true}, "H": {"semantic_unavailable": true}, "I": {"ml_unavailable": true}, "J": {"ml_disagreement": true},
+    "K": {"dependency_state": "INCOMPLETE"}, "L": {"wrong_snapshot": true}, "M": {"collision": true}, "N": {"domain_assertion": true}, "O": {"semantic_support": true, "structural_contradiction": true},
+    "M1": {"kind": "mapping"}, "M2": {"kind": "mapping", "semantic_support": true}, "M3": {"kind": "mapping", "matcher_disagreement": true}, "M4": {"kind": "mapping"}, "M5": {"kind": "mapping", "type_conflict": true}, "M6": {"kind": "mapping", "competing_target": true}, "M7": {"kind": "mapping", "domain_assertion": true}, "M8": {"kind": "mapping", "semantic_support": true}
+  }
+}

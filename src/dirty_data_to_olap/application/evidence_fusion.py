@@ -1,4 +1,4 @@
-"""Deterministic, review-only fusion of project-owned evidence."""
+"""Deterministic, policy-driven, review-only evidence fusion."""
 
 from __future__ import annotations
 
@@ -10,60 +10,24 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from dirty_data_to_olap.domain.contracts.applied_ml import AppliedMLResult
-from dirty_data_to_olap.domain.contracts.dependency import DependencyResult, RelationshipCandidate
+from dirty_data_to_olap.domain.contracts.dependency import DependencyResult
 from dirty_data_to_olap.domain.contracts.evidence_fusion import (
-    Conflict,
-    ConflictType,
-    DecisionExplanation,
-    DecisionState,
-    DeclaredConstraintInput,
-    DomainAssertion,
-    EvidenceBundle,
-    EvidenceDirection,
-    EvidenceFamily,
-    EvidenceFusionCompleteness,
-    EvidenceFusionInputs,
-    EvidenceFusionRequest,
-    EvidenceLineageReference,
-    EvidencePresenceState,
-    EvidenceReliabilityState,
-    EvidenceRole,
-    FusionArtifactReference,
-    FusionEvidenceItem,
-    FusionFailure,
-    FusionFailureKind,
-    FusionScore,
-    FusionSubjectKind,
-    NormalizedEvidenceSignal,
-    ProducerEvidenceStatus,
-    ProducerResultState,
-    RelationshipDecision,
-    SemanticMappingDecision,
-    fusion_conflict_id,
-    fusion_decision_id,
-    fusion_input_fingerprint,
-    fusion_signal_id,
+    Conflict, ConflictType, DecisionExplanation, DecisionState, DeclaredConstraintInput,
+    DomainAssertion, EvidenceBundle, EvidenceDirection, EvidenceFamily,
+    EvidenceFusionCompleteness, EvidenceFusionInputs, EvidenceFusionRequest,
+    EvidenceLineageReference, EvidencePresenceState, EvidenceReliabilityState,
+    EvidenceRole, FusionArtifactReference, FusionEvidenceItem, FusionFailure,
+    FusionFailureKind, FusionPolicyReference, FusionScoringDimension,
+    FusionSnapshotBinding, FusionSubjectBinding, FusionScore, FusionSubjectKind,
+    NormalizedEvidenceSignal, ProducerEvidenceStatus, ProducerResultState,
+    RelationshipDecision, SemanticMappingDecision, fusion_conflict_id,
+    fusion_decision_id, fusion_input_fingerprint, fusion_signal_id,
 )
 from dirty_data_to_olap.domain.contracts.profiling import ProfileResult
 from dirty_data_to_olap.domain.contracts.quality import QualityResult
 from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchResult
-from dirty_data_to_olap.domain.contracts.semantic_ai import (
-    LLMEvidence,
-    SemanticEvidenceResult,
-    SemanticSupportState,
-)
-from dirty_data_to_olap.domain.contracts.source import stable_digest
-from dirty_data_to_olap.domain.contracts.source import SourceCatalog, DeclaredConstraint
-
-
-_WEIGHTS = {
-    "declared": 1.0,
-    "coverage": 1.0,
-    "uniqueness": 1.0,
-    "type": 0.75,
-    "rank": 0.5,
-    "quality": 0.5,
-}
+from dirty_data_to_olap.domain.contracts.semantic_ai import LLMEvidence, SemanticEvidenceResult, SemanticSupportState
+from dirty_data_to_olap.domain.contracts.source import DeclaredConstraint, SourceCatalog, stable_digest
 
 
 def _dump(value: Any) -> dict[str, Any]:
@@ -74,13 +38,13 @@ def _dump(value: Any) -> dict[str, Any]:
     raise TypeError("fusion input must be a project-owned contract or mapping")
 
 
-def _subject_relationship(item: Mapping[str, Any]) -> str:
-    return "rel:" + item["from_table"] + ":" + ",".join(item["from_columns"]) + "->" + item["to_table"] + ":" + ",".join(item["to_columns"])
+def _relationship_subject(item: Mapping[str, Any]) -> str:
+    return "rel:" + str(item["from_table"]) + ":" + ",".join(item["from_columns"]) + "->" + str(item["to_table"]) + ":" + ",".join(item["to_columns"])
 
 
-def _subject_mapping(item: Mapping[str, Any]) -> str:
-    left = (item["source_id"], item["source_column_id"])
-    right = (item["target_source_id"], item["target_column_id"])
+def _mapping_subject(item: Mapping[str, Any]) -> str:
+    left = (str(item["source_id"]), str(item["source_column_id"]))
+    right = (str(item["target_source_id"]), str(item["target_column_id"]))
     return "map:" + "<->".join(":".join(part) for part in sorted((left, right)))
 
 
@@ -93,30 +57,41 @@ def _producer_state(value: Any) -> ProducerResultState:
         return ProducerResultState.COMPLETE
     if name in {"INCOMPLETE", "INSUFFICIENT_DATA"}:
         return ProducerResultState.INCOMPLETE
-    if name in {"FAILED"}:
+    if name == "FAILED":
         return ProducerResultState.FAILED
     if name in {"SKIPPED", "SKIPPED_NOT_CONFIGURED"}:
         return ProducerResultState.SKIPPED
-    if name in {"UNAVAILABLE"}:
-        return ProducerResultState.UNAVAILABLE
+    if name in {"UNAVAILABLE", "PRIVACY_BLOCKED", "NOT_CONFIGURED"}:
+        return ProducerResultState.UNAVAILABLE if name == "UNAVAILABLE" else ProducerResultState.PRIVACY_BLOCKED
     return ProducerResultState.INCOMPLETE
 
 
 class EvidenceFusionService:
-    """Fuse aggregate evidence without owning source access or acceptance."""
+    """Fuse project-owned aggregate evidence without source access or acceptance."""
 
-    def __init__(self, *, artifact_root: Path | None = None) -> None:
+    def __init__(self, *, artifact_root: Path | None = None, policy_root: Path = Path("policies/evidence-fusion")) -> None:
         self.artifact_root = artifact_root
+        self.policy_root = policy_root
 
     @staticmethod
-    def load_policy(kind: str = "relationship", *, policy_root: Path = Path("policies/evidence-fusion")):
-        """Load the committed policy identity without requiring a YAML runtime dependency."""
-        from dirty_data_to_olap.domain.contracts.evidence_fusion import FusionPolicyReference, FusionPolicyStatus
-        filename = "mapping_fusion_v1.yml" if kind == "mapping" else "relationship_fusion_v1.yml"
+    def load_policy(kind: str = "relationship", *, policy_root: Path = Path("policies/evidence-fusion")) -> FusionPolicyReference:
+        """Load the stdlib-JSON authoritative policy and bind its exact bytes."""
+        filename = "mapping_fusion_v1.json" if kind == "mapping" else "relationship_fusion_v1.json"
         path = policy_root / filename
         content = path.read_bytes()
-        policy_id = "mapping-fusion-v1" if kind == "mapping" else "relationship-fusion-v1"
-        return FusionPolicyReference(policy_id=policy_id, version="1.0", status=FusionPolicyStatus.UNCALIBRATED, content_hash=hashlib.sha256(content).hexdigest())
+        data = json.loads(content.decode("utf-8"))
+        automation = data.get("automation", {})
+        return FusionPolicyReference(
+            policy_id=data["policy_id"], version=str(data["version"]), status=data["status"],
+            score_semantics=data["score_semantics"], automation_enabled=bool(automation.get("enabled", False)),
+            auto_accept_enabled=bool(automation.get("auto_accept", False)), auto_reject_enabled=bool(automation.get("auto_reject", False)),
+            requires_g5_for_automation=bool(automation.get("requires_g5", True)), automation=automation,
+            content_hash=hashlib.sha256(content).hexdigest(),
+            subject_kind=data.get("subject_kind"), normalization_rules=tuple(data.get("normalization_rules", ())),
+            scoring_dimensions=tuple(data.get("scoring_dimensions", ())), band_policy=tuple(data.get("band_policy", ())),
+            conflict_rules=tuple(data.get("conflict_rules", ())), required_producer_families=tuple(data.get("required_producer_families", ())),
+            cross_source_mapping_requires_schema_matching=bool(data.get("cross_source_mapping_requires_schema_matching", True)),
+        )
 
     def fuse(
         self,
@@ -130,136 +105,237 @@ class EvidenceFusionService:
         applied_ml_result: AppliedMLResult | None = None,
         semantic_results: Iterable[SemanticEvidenceResult | LLMEvidence] = (),
         source_catalogs: Iterable[SourceCatalog] = (),
+        profile_results: Iterable[ProfileResult] = (),
+        quality_results: Iterable[QualityResult] = (),
+        dependency_results: Iterable[DependencyResult] = (),
+        schema_match_results: Iterable[SchemaMatchResult] = (),
+        applied_ml_results: Iterable[AppliedMLResult] = (),
     ) -> Any:
-        """Return an EvidenceFusionResult and optionally publish deterministic JSON.
-
-        The explicit result arguments are the integration boundary for Steps
-        08--16.  ``FusionEvidenceInputs`` is used for aggregate observations
-        that have already been normalized by an upstream project-owned stage.
-        """
         from dirty_data_to_olap.domain.contracts.evidence_fusion import EvidenceFusionResult
 
         supplied = inputs or EvidenceFusionInputs()
+        failures: list[FusionFailure] = []
+        profiles = list(supplied.profile_results) + list(profile_results) + ([profile_result] if profile_result else [])
+        qualities = list(supplied.quality_results) + list(quality_results) + ([quality_result] if quality_result else [])
+        dependencies = list(supplied.dependency_results) + list(dependency_results) + ([dependency_result] if dependency_result else [])
+        schemas = list(supplied.schema_match_results) + list(schema_match_results) + ([schema_match_result] if schema_match_result else [])
+        mls = list(supplied.applied_ml_results) + list(applied_ml_results) + ([applied_ml_result] if applied_ml_result else [])
+        semantics = list(supplied.semantic_results) + list(semantic_results)
+        catalogs = list(supplied.source_catalogs) + list(source_catalogs)
         statuses = list(supplied.producer_statuses)
         items = list(supplied.evidence_items)
         relationships = [_dump(item) for item in supplied.relationship_candidates]
         mappings = [_dump(item) for item in supplied.mapping_candidates]
-        failures: list[FusionFailure] = []
 
-        if profile_result is not None:
-            statuses.append(self._status("profiling", EvidenceFamily.PROFILE, profile_result))
-        if quality_result is not None:
-            statuses.append(self._status("quality", EvidenceFamily.QUALITY, quality_result))
-        if dependency_result is not None:
-            statuses.append(self._status("dependency", EvidenceFamily.DEPENDENCY, dependency_result))
-            relationships.extend(_dump(item) for item in dependency_result.relationship_candidates)
-            items.extend(self._dependency_items(dependency_result))
-        items.extend(self._declared_items(supplied.declared_constraints))
-        catalog_constraints = tuple(constraint for catalog in source_catalogs for constraint in catalog.declared_constraints)
-        items.extend(self._declared_items(catalog_constraints))
-        items.extend(self._assertion_items(supplied.domain_assertions))
-        if schema_match_result is not None:
-            statuses.append(self._status("schema-matching", EvidenceFamily.SCHEMA_MATCHING, schema_match_result))
-            mappings.extend(_dump(item) for item in schema_match_result.candidates)
-            items.extend(self._schema_items(schema_match_result))
-        if applied_ml_result is not None:
-            statuses.append(self._status("applied-ml", EvidenceFamily.APPLIED_ML, applied_ml_result))
-            items.extend(self._ml_items(applied_ml_result))
-        for result in semantic_results:
+        for result in profiles:
+            statuses.append(self._status("profiling", EvidenceFamily.PROFILE, result))
+        for result in qualities:
+            statuses.append(self._status("quality", EvidenceFamily.QUALITY, result))
+        for result in dependencies:
+            statuses.append(self._status("dependency", EvidenceFamily.DEPENDENCY, result))
+            relationships.extend(_dump(item) for item in result.relationship_candidates)
+            items.extend(self._dependency_items(result))
+        for result in schemas:
+            statuses.append(self._status("schema-matching", EvidenceFamily.SCHEMA_MATCHING, result))
+            mappings.extend(_dump(item) for item in result.candidates)
+            items.extend(self._schema_items(result))
+        for result in mls:
+            statuses.append(self._status("applied-ml", EvidenceFamily.APPLIED_ML, result))
+        for result in semantics:
             if isinstance(result, SemanticEvidenceResult):
                 statuses.append(self._semantic_status(result))
-                if result.evidence is not None:
-                    items.extend(self._semantic_items(result.evidence))
-            else:
-                items.extend(self._semantic_items(result))
+            elif isinstance(result, LLMEvidence):
+                statuses.append(ProducerEvidenceStatus(producer_id="semantic-ai", family=EvidenceFamily.SEMANTIC_AI, state=ProducerResultState.COMPLETE, result_id=result.evidence_id, detail="direct semantic evidence"))
 
-        statuses = self._unique_statuses(statuses)
+        items.extend(self._declared_items(supplied.declared_constraints))
+        items.extend(self._declared_items(tuple(c for catalog in catalogs for c in catalog.declared_constraints)))
+        items.extend(self._assertion_items(supplied.domain_assertions))
+        statuses = self._unique_statuses(statuses, failures)
+        policy_ok = self._policy_valid(request.policy)
+        if not policy_ok:
+            failures.append(FusionFailure(failure_id="fusion-policy-invalid", kind=FusionFailureKind.POLICY_INVALID, detail="Step17 requires a typed uncalibrated policy with declared dimensions and automation disabled"))
+
+        relationships = self._bounded(relationships, request.max_relationship_candidates, "relationship", failures)
+        mappings = self._bounded(mappings, request.max_mapping_candidates, "mapping", failures)
+        if len(relationships) + len(mappings) > request.max_total_decisions:
+            failures.append(FusionFailure(failure_id="fusion-total-decision-bound", kind=FusionFailureKind.BOUNDED_INPUT_DISCARDED, detail="max_total_decisions discarded material candidates"))
+            keep = request.max_total_decisions
+            relationships, mappings = relationships[:keep], mappings[: max(0, keep - len(relationships))]
+        selected_subjects = self._candidate_subjects(relationships, mappings)
+        selected_kind = FusionSubjectKind.MAPPING if mappings and not relationships else FusionSubjectKind.RELATIONSHIP
+        if relationships and mappings:
+            failures.append(FusionFailure(failure_id="fusion-mixed-subject-request", kind=FusionFailureKind.POLICY_INVALID, detail="one fusion request cannot contain both relationship and mapping candidates"))
+        if request.policy.subject_kind is not None and ((relationships and request.policy.subject_kind is not FusionSubjectKind.RELATIONSHIP) or (mappings and request.policy.subject_kind is not FusionSubjectKind.MAPPING)):
+            failures.append(FusionFailure(failure_id="fusion-policy-subject-kind", kind=FusionFailureKind.POLICY_INVALID, detail="request candidates and policy subject kind do not match"))
+        bound_items = self._bind_items(items, selected_subjects, failures)
+        bound_items.extend(self._candidate_items(relationships, mappings))
+        bound_items.extend(self._profile_items(profiles, selected_subjects))
+        quality_items, repair_refs = self._quality_items(qualities, selected_subjects)
+        bound_items.extend(quality_items)
+        for result in mls:
+            bound_items.extend(self._ml_items(result, selected_subjects, failures))
+        for result in semantics:
+            bound_items.extend(self._semantic_result_items(result, selected_subjects, supplied.subject_bindings, failures))
+
         if request.cross_source_mapping_scope and not any(item.family is EvidenceFamily.SCHEMA_MATCHING and item.state is ProducerResultState.COMPLETE for item in statuses):
-            failures.append(FusionFailure(failure_id="fusion-required-schema-matching", kind=FusionFailureKind.REQUIRED_PRODUCER_FAILED, detail="cross-source mapping requires a COMPLETE schema-matching result", subject_id=None))
-        for family in (EvidenceFamily.PROFILE, EvidenceFamily.DEPENDENCY, EvidenceFamily.QUALITY):
+            failures.append(FusionFailure(failure_id="fusion-required-schema-matching", kind=FusionFailureKind.REQUIRED_PRODUCER_FAILED, detail="cross-source mapping requires a COMPLETE schema-matching result"))
+        for family in request.policy.required_producer_families or (EvidenceFamily.PROFILE, EvidenceFamily.DEPENDENCY, EvidenceFamily.QUALITY):
             matching = [item for item in statuses if item.family is family]
             if not matching:
                 failures.append(FusionFailure(failure_id="fusion-missing-" + family.value.lower(), kind=FusionFailureKind.INPUT_INCOMPLETE, detail=f"required {family.value} producer result was not supplied"))
-            elif matching[0].state is not ProducerResultState.COMPLETE:
-                failures.append(FusionFailure(failure_id="fusion-required-" + family.value.lower(), kind=FusionFailureKind.REQUIRED_PRODUCER_FAILED, detail=f"required {family.value} producer is {matching[0].state.value}"))
-
-        collision = self._collision(items)
-        if collision:
-            failures.append(collision)
-        by_subject = self._signals(items, request, failures)
+            elif any(item.state is not ProducerResultState.COMPLETE for item in matching):
+                failures.append(FusionFailure(failure_id="fusion-required-" + family.value.lower(), kind=FusionFailureKind.REQUIRED_PRODUCER_FAILED, detail=f"required {family.value} producer is incomplete or failed"))
+        self._expected_results(request, statuses, failures)
+        by_subject = self._signals(bound_items, request, failures)
         self._scope_failures(by_subject, failures)
-        relationships = self._bounded(relationships, request.max_relationship_candidates)
-        mappings = self._bounded(mappings, request.max_mapping_candidates)
-        all_conflicts: list[Conflict] = []
+
+        conflicts: list[Conflict] = []
         bundles: list[EvidenceBundle] = []
         relationship_decisions: list[RelationshipDecision] = []
         mapping_decisions: list[SemanticMappingDecision] = []
-
-        for candidate in sorted(relationships, key=lambda item: str(item.get("candidate_id", ""))):
-            candidate_id = str(candidate.get("candidate_id", ""))
-            if not candidate_id:
-                failures.append(FusionFailure(failure_id="fusion-invalid-relationship", kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="relationship candidate has no stable candidate_id"))
-                continue
-            subject = _subject_relationship(candidate)
-            signals = tuple(by_subject.get(subject, ()))[: request.max_evidence_per_subject]
-            scope_failure = self._candidate_scope_failure(candidate, subject, signals)
+        for candidate in relationships:
+            subject = _relationship_subject(candidate)
+            local = self._subject_signals(by_subject, subject, request, failures)
+            scope_failure = self._candidate_scope_failure(candidate, subject, local)
             if scope_failure:
                 failures.append(scope_failure)
-            conflicts = self._conflicts_for_relationship(candidate, subject, signals, relationships, tuple(supplied.declared_constraints) + catalog_constraints)
-            all_conflicts.extend(conflicts[: request.max_conflicts_per_subject])
-            bundles.append(self._bundle(subject, FusionSubjectKind.RELATIONSHIP, f"{candidate['from_table']} -> {candidate['to_table']}", signals, conflicts))
-            relationship_decisions.append(self._relationship_decision(candidate, subject, signals, conflicts, request, statuses))
-
-        for candidate in sorted(mappings, key=lambda item: str(item.get("candidate_id", ""))):
-            candidate_id = str(candidate.get("candidate_id", ""))
-            if not candidate_id:
-                failures.append(FusionFailure(failure_id="fusion-invalid-mapping", kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="mapping candidate has no stable candidate_id"))
-                continue
-            subject = _subject_mapping(candidate)
-            signals = tuple(by_subject.get(subject, ()))[: request.max_evidence_per_subject]
-            scope_failure = self._candidate_scope_failure(candidate, subject, signals)
+            local_conflicts = self._conflicts_for_relationship(candidate, subject, local, relationships, tuple(supplied.declared_constraints) + tuple(c for catalog in catalogs for c in catalog.declared_constraints), request.policy)
+            if len(local_conflicts) > request.max_conflicts_per_subject:
+                failures.append(FusionFailure(failure_id="fusion-conflict-bound-" + stable_digest(subject)[:20], kind=FusionFailureKind.BOUNDED_INPUT_DISCARDED, detail="max_conflicts_per_subject discarded material conflicts", subject_id=subject))
+            local_conflicts = local_conflicts[:request.max_conflicts_per_subject]
+            conflicts.extend(local_conflicts)
+            missing, unavailable = self._subject_missing(subject, local, statuses, request.policy)
+            bundles.append(self._bundle(subject, FusionSubjectKind.RELATIONSHIP, f"{candidate['from_table']} -> {candidate['to_table']}", local, local_conflicts, missing, unavailable))
+            relationship_decisions.append(self._relationship_decision(candidate, subject, local, local_conflicts, request, statuses, relationships, missing, policy_ok))
+        for candidate in mappings:
+            subject = _mapping_subject(candidate)
+            local = self._subject_signals(by_subject, subject, request, failures)
+            scope_failure = self._candidate_scope_failure(candidate, subject, local)
             if scope_failure:
                 failures.append(scope_failure)
-            conflicts = self._conflicts_for_mapping(candidate, subject, signals, mappings)
-            all_conflicts.extend(conflicts[: request.max_conflicts_per_subject])
-            bundles.append(self._bundle(subject, FusionSubjectKind.MAPPING, f"{candidate['source_column_id']} <-> {candidate['target_column_id']}", signals, conflicts))
-            mapping_decisions.append(self._mapping_decision(candidate, subject, signals, conflicts, request, statuses))
-
-        all_conflicts = self._unique_conflicts(all_conflicts)
-        for decision in relationship_decisions:
-            related = tuple(item.conflict_id for item in all_conflicts if item.subject_id == decision.subject_id)
-            if related:
-                relationship_decisions[relationship_decisions.index(decision)] = decision.model_copy(update={"conflict_refs": related})
-        for decision in mapping_decisions:
-            related = tuple(item.conflict_id for item in all_conflicts if item.subject_id == decision.subject_id)
-            if related:
-                mapping_decisions[mapping_decisions.index(decision)] = decision.model_copy(update={"conflict_refs": related})
-        if len(relationship_decisions) + len(mapping_decisions) > request.max_total_decisions:
-            failures.append(FusionFailure(failure_id="fusion-total-decision-bound", kind=FusionFailureKind.INPUT_INCOMPLETE, detail="fusion decision bound was exceeded"))
-        required_failed = bool(failures) and any(item.kind in {FusionFailureKind.INPUT_INCOMPLETE, FusionFailureKind.REQUIRED_PRODUCER_FAILED, FusionFailureKind.EVIDENCE_ID_COLLISION, FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH} for item in failures)
+            local_conflicts = self._conflicts_for_mapping(candidate, subject, local, mappings, request.policy)
+            if len(local_conflicts) > request.max_conflicts_per_subject:
+                failures.append(FusionFailure(failure_id="fusion-conflict-bound-" + stable_digest(subject)[:20], kind=FusionFailureKind.BOUNDED_INPUT_DISCARDED, detail="max_conflicts_per_subject discarded material conflicts", subject_id=subject))
+            local_conflicts = local_conflicts[:request.max_conflicts_per_subject]
+            conflicts.extend(local_conflicts)
+            missing, unavailable = self._subject_missing(subject, local, statuses, request.policy)
+            bundles.append(self._bundle(subject, FusionSubjectKind.MAPPING, f"{candidate['source_column_id']} <-> {candidate['target_column_id']}", local, local_conflicts, missing, unavailable))
+            mapping_decisions.append(self._mapping_decision(candidate, subject, local, local_conflicts, request, statuses, mappings, missing, policy_ok))
+        conflicts = self._unique_conflicts(conflicts)
+        conflict_by_subject = {item.subject_id: tuple(c.conflict_id for c in conflicts if c.subject_id == item.subject_id) for item in (*relationship_decisions, *mapping_decisions)}
+        relationship_decisions = [item.model_copy(update={"conflict_refs": conflict_by_subject.get(item.subject_id, ())}) for item in relationship_decisions]
+        mapping_decisions = [item.model_copy(update={"conflict_refs": conflict_by_subject.get(item.subject_id, ())}) for item in mapping_decisions]
+        subject_incomplete = any(item.decision_state is DecisionState.INCOMPLETE_REQUIRED_EVIDENCE for item in relationship_decisions) or any(any(ref.startswith("subject:dimension:") for ref in bundle.missing_evidence_refs) for bundle in bundles)
+        required_failed = subject_incomplete or any(item.kind in {FusionFailureKind.INPUT_INCOMPLETE, FusionFailureKind.REQUIRED_PRODUCER_FAILED, FusionFailureKind.EVIDENCE_ID_COLLISION, FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH, FusionFailureKind.STALE_EVIDENCE, FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, FusionFailureKind.BOUNDED_INPUT_DISCARDED} for item in failures)
         completeness = EvidenceFusionCompleteness.INCOMPLETE_REQUIRED_EVIDENCE if required_failed else EvidenceFusionCompleteness.COMPLETE_REVIEW_READY
-        if any(item.kind in {FusionFailureKind.EVIDENCE_ID_COLLISION, FusionFailureKind.POLICY_INVALID} for item in failures):
+        if any(item.kind in {FusionFailureKind.POLICY_INVALID, FusionFailureKind.EVIDENCE_ID_COLLISION} for item in failures):
             completeness = EvidenceFusionCompleteness.FAILED
-        result = EvidenceFusionResult(request=request, relationships=tuple(relationship_decisions), mappings=tuple(mapping_decisions), conflicts=tuple(all_conflicts), bundles=tuple(sorted(bundles, key=lambda item: item.bundle_id)), signals=tuple(sorted((signal for values in by_subject.values() for signal in values), key=lambda item: item.signal_id)), failures=tuple(failures), completeness=completeness, policy=request.policy, forwarded_repair_proposal_refs=())
+        result = EvidenceFusionResult(request=request, relationships=tuple(relationship_decisions), mappings=tuple(mapping_decisions), conflicts=tuple(conflicts), bundles=tuple(sorted(bundles, key=lambda item: item.bundle_id)), signals=tuple(sorted((s for values in by_subject.values() for s in values), key=lambda item: item.signal_id)), failures=tuple(failures), completeness=completeness, policy=request.policy, forwarded_repair_proposal_refs=tuple(sorted(repair_refs)))
         return self._publish(result)
 
-    def _status(self, producer_id: str, family: EvidenceFamily, result: Any) -> ProducerEvidenceStatus:
-        identity = getattr(result, "request", None) or getattr(result, "profile_request", None)
-        result_id = getattr(identity, "request_id", None) or getattr(identity, "quality_run_id", None) or producer_id + "-result"
-        return ProducerEvidenceStatus(producer_id=producer_id, family=family, state=_producer_state(result), result_id=str(result_id), detail="project-owned producer result")
+    @staticmethod
+    def _policy_valid(policy: FusionPolicyReference) -> bool:
+        return policy.status.value == "UNCALIBRATED" and not policy.automation_enabled and not policy.auto_accept_enabled and not policy.auto_reject_enabled and bool(policy.scoring_dimensions) and bool(policy.normalization_rules)
 
-    def _semantic_status(self, result: SemanticEvidenceResult) -> ProducerEvidenceStatus:
+    @staticmethod
+    def _status(producer_id: str, family: EvidenceFamily, result: Any) -> ProducerEvidenceStatus:
+        identity = getattr(result, "request", None) or getattr(result, "profile_request", None)
+        result_id = getattr(identity, "request_id", None) or getattr(identity, "profile_request_id", None) or getattr(result, "quality_run_id", None) or producer_id + "-result"
+        source_ids: tuple[str, ...] = ()
+        snapshot_map: dict[str, str] = {}
+        value = getattr(result, "source_id", None)
+        if value:
+            source_ids = (str(value),)
+        scope = getattr(result, "observation_scope", None)
+        if scope is not None:
+            source_ids = tuple(getattr(scope, "source_ids", source_ids))
+            snapshots = getattr(scope, "snapshot_ids", {})
+            if isinstance(snapshots, Mapping):
+                snapshot_map = {str(k): str(v) for k, v in snapshots.items()}
+            elif getattr(scope, "source_id", None) and getattr(scope, "snapshot_id", None):
+                source_ids = (str(scope.source_id),)
+                snapshot_map = {str(scope.source_id): str(scope.snapshot_id)}
+        if not snapshot_map and getattr(result, "snapshot_id", None):
+            snapshot_map = {source_ids[0] if source_ids else producer_id: str(result.snapshot_id)}
+        if not source_ids and identity is not None and getattr(identity, "source_id", None):
+            source_ids = (str(identity.source_id),)
+            if getattr(identity, "snapshot_id", None):
+                snapshot_map = {str(identity.source_id): str(identity.snapshot_id)}
+        return ProducerEvidenceStatus(producer_id=producer_id, family=family, state=_producer_state(result), result_id=str(result_id), detail="project-owned producer result", source_ids=source_ids, snapshot_by_source=snapshot_map, input_fingerprint=stable_digest(result))
+
+    @staticmethod
+    def _semantic_status(result: SemanticEvidenceResult) -> ProducerEvidenceStatus:
         state = {SemanticSupportState.CANDIDATE_ONLY: ProducerResultState.COMPLETE, SemanticSupportState.SKIPPED: ProducerResultState.SKIPPED, SemanticSupportState.UNAVAILABLE: ProducerResultState.UNAVAILABLE, SemanticSupportState.PRIVACY_BLOCKED: ProducerResultState.PRIVACY_BLOCKED, SemanticSupportState.FAILED: ProducerResultState.FAILED}[result.state]
         return ProducerEvidenceStatus(producer_id="semantic-ai", family=EvidenceFamily.SEMANTIC_AI, state=state, result_id=result.request_id, detail=result.failure.detail if result.failure else "semantic evidence state")
+
+    @staticmethod
+    def _unique_statuses(values: list[ProducerEvidenceStatus], failures: list[FusionFailure]) -> list[ProducerEvidenceStatus]:
+        output: dict[tuple[str, str, tuple[tuple[str, str], ...]], ProducerEvidenceStatus] = {}
+        for item in values:
+            key = (item.family.value, item.result_id, tuple(sorted(item.snapshot_by_source.items())))
+            prior = output.get(key)
+            if prior is not None and prior.state is not item.state:
+                failures.append(FusionFailure(failure_id="fusion-status-conflict-" + stable_digest(key)[:24], kind=FusionFailureKind.STALE_EVIDENCE, detail="conflicting duplicate producer-result identity", evidence_refs=(item.result_id,)))
+            else:
+                output.setdefault(key, item)
+        return [output[key] for key in sorted(output)]
+
+    @staticmethod
+    def _expected_results(request: EvidenceFusionRequest, statuses: list[ProducerEvidenceStatus], failures: list[FusionFailure]) -> None:
+        for family, expected in request.expected_producer_result_ids.items():
+            matches = [item for item in statuses if item.family.value == family.upper() or item.producer_id == family]
+            if not any(item.result_id == expected for item in matches):
+                failures.append(FusionFailure(failure_id="fusion-stale-" + stable_digest((family, expected))[:24], kind=FusionFailureKind.STALE_EVIDENCE, detail=f"expected producer result {family}={expected} was not supplied", evidence_refs=(expected,)))
+
+    @staticmethod
+    def _candidate_subjects(relationships: list[Mapping[str, Any]], mappings: list[Mapping[str, Any]]) -> dict[str, str]:
+        return {str(item["candidate_id"]): _relationship_subject(item) for item in relationships} | {str(item["candidate_id"]): _mapping_subject(item) for item in mappings}
+
+    @staticmethod
+    def _bounded(values: list[Mapping[str, Any]], limit: int, kind: str, failures: list[FusionFailure]) -> list[Mapping[str, Any]]:
+        ordered = sorted(values, key=lambda item: str(item.get("candidate_id", "")))
+        if len(ordered) > limit:
+            failures.append(FusionFailure(failure_id="fusion-" + kind + "-bound", kind=FusionFailureKind.BOUNDED_INPUT_DISCARDED, detail=f"max_{kind}_candidates discarded material candidates", evidence_refs=tuple(str(item.get("candidate_id", "")) for item in ordered[limit:])))
+        return ordered[:limit]
+
+    @staticmethod
+    def _bind_items(items: list[FusionEvidenceItem], subjects: Mapping[str, str], failures: list[FusionFailure]) -> list[FusionEvidenceItem]:
+        output = []
+        for item in items:
+            if item.subject_id in subjects:
+                output.append(item.model_copy(update={"subject_id": subjects[item.subject_id]}))
+            elif item.subject_id in subjects.values() or item.subject_id.startswith(("rel:", "map:")):
+                output.append(item)
+            else:
+                failures.append(FusionFailure(failure_id="fusion-item-binding-" + stable_digest(item.evidence_id)[:20], kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="evidence item subject is not one of the selected candidates", evidence_refs=(item.evidence_id,)))
+        return output
+
+    @staticmethod
+    def _candidate_items(relationships: list[Mapping[str, Any]], mappings: list[Mapping[str, Any]]) -> list[FusionEvidenceItem]:
+        output = []
+        for item in relationships:
+            source_id, snapshot_id = item.get("source_id"), item.get("snapshot_id")
+            output.append(FusionEvidenceItem(evidence_id="candidate:" + str(item["candidate_id"]), subject_id=_relationship_subject(item), producer_id="dependency", family=EvidenceFamily.CANDIDATE_CONTAINER, role=EvidenceRole.HYPOTHESIS_CONTAINER, metric_name="relationship_candidate", metric_value=None, metric_semantics="candidate wrapper; never independently scored", direction=EvidenceDirection.CONTEXT, scope_id=str(snapshot_id or "candidate"), observation_scope=EvidenceReliabilityState.BOUNDED, source_ids=(str(source_id),) if source_id else (), snapshot_ids=(str(snapshot_id),) if snapshot_id else (), snapshot_by_source={str(source_id): str(snapshot_id)} if source_id and snapshot_id else {}, correlation_group="candidate:" + str(item["candidate_id"]), score_bearing=False))
+        for item in mappings:
+            source_snapshot = item.get("source_snapshot_id") or item.get("snapshot_id")
+            target_snapshot = item.get("target_snapshot_id")
+            snapshot_map = {}
+            if source_snapshot:
+                snapshot_map[str(item["source_id"])] = str(source_snapshot)
+            if target_snapshot:
+                snapshot_map[str(item["target_source_id"])] = str(target_snapshot)
+            output.append(FusionEvidenceItem(evidence_id="candidate:" + str(item["candidate_id"]), subject_id=_mapping_subject(item), producer_id="schema-matching", family=EvidenceFamily.CANDIDATE_CONTAINER, role=EvidenceRole.HYPOTHESIS_CONTAINER, metric_name="mapping_candidate", metric_value=None, metric_semantics="candidate wrapper; never independently scored", direction=EvidenceDirection.CONTEXT, scope_id="candidate:" + str(item["candidate_id"]), observation_scope=EvidenceReliabilityState.BOUNDED, source_ids=(str(item["source_id"]), str(item["target_source_id"])), snapshot_ids=tuple(snapshot_map.values()), snapshot_by_source=snapshot_map, correlation_group="candidate:" + str(item["candidate_id"]), score_bearing=False))
+        return output
 
     def _dependency_items(self, result: DependencyResult) -> list[FusionEvidenceItem]:
         output: list[FusionEvidenceItem] = []
         for evidence in result.inclusion_dependencies:
             subject = "rel:" + evidence.left_table_id + ":" + ",".join(evidence.left_columns) + "->" + evidence.right_table_id + ":" + ",".join(evidence.right_columns)
-            base = dict(producer_id="dependency", family=EvidenceFamily.DEPENDENCY, role=EvidenceRole.DIRECT_OBSERVATION, scope_id=evidence.source_id + ":" + evidence.snapshot_id, observation_scope=EvidenceReliabilityState.FULL if all(evidence.observation_scope.complete_by_table.values()) else EvidenceReliabilityState.BOUNDED, source_ids=(evidence.source_id,), snapshot_ids=(evidence.snapshot_id,), correlation_group=evidence.evidence_id)
-            output.extend((FusionEvidenceItem(evidence_id=evidence.evidence_id + ":coverage", subject_id=subject, metric_name="inclusion_coverage", metric_value=evidence.coverage_ratio, metric_semantics="matched distinct non-null left values divided by eligible left values", direction=EvidenceDirection.SUPPORTS, score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":orphan", subject_id=subject, metric_name="orphan_ratio", metric_value=evidence.violation_ratio, metric_semantics="left values without a target match divided by eligible left values", direction=EvidenceDirection.CONTRADICTS, score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":uniqueness", subject_id=subject, metric_name="target_uniqueness", metric_value=evidence.target_uniqueness_ratio, metric_semantics="unique target values divided by observed target values", direction=EvidenceDirection.SUPPORTS, score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":type", subject_id=subject, metric_name="type_compatibility", metric_value=1.0 if evidence.type_compatible else 0.0, metric_semantics="project-owned physical/logical type compatibility boolean", direction=EvidenceDirection.SUPPORTS if evidence.type_compatible else EvidenceDirection.CONTRADICTS, score_bearing=True, **base)))
+            snapshot_map = {evidence.source_id: evidence.snapshot_id}
+            base = dict(producer_id="dependency", family=EvidenceFamily.DEPENDENCY, role=EvidenceRole.DIRECT_OBSERVATION, scope_id=evidence.source_id + ":" + evidence.snapshot_id, observation_scope=EvidenceReliabilityState.FULL if all(evidence.observation_scope.complete_by_table.values()) else EvidenceReliabilityState.BOUNDED, source_ids=(evidence.source_id,), snapshot_ids=(evidence.snapshot_id,), snapshot_by_source=snapshot_map, correlation_group=evidence.evidence_id)
+            output.extend((FusionEvidenceItem(evidence_id=evidence.evidence_id + ":coverage", subject_id=subject, metric_name="inclusion_coverage", metric_value=evidence.coverage_ratio, metric_semantics="matched distinct non-null left values divided by eligible left values", direction=EvidenceDirection.SUPPORTS, score_dimension_id="inclusion", dependency_group="inclusion", score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":orphan", subject_id=subject, metric_name="orphan_ratio", metric_value=evidence.violation_ratio, metric_semantics="left values without a target match divided by eligible left values", direction=EvidenceDirection.CONTRADICTS, score_dimension_id="inclusion", dependency_group="inclusion", score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":uniqueness", subject_id=subject, metric_name="target_uniqueness", metric_value=evidence.target_uniqueness_ratio, metric_semantics="unique target values divided by observed target values", direction=EvidenceDirection.SUPPORTS, score_dimension_id="target_uniqueness", dependency_group="target_uniqueness", score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":type", subject_id=subject, metric_name="type_compatibility", metric_value=1.0 if evidence.type_compatible else 0.0, metric_semantics="project-owned type compatibility boolean", direction=EvidenceDirection.SUPPORTS if evidence.type_compatible else EvidenceDirection.CONTRADICTS, score_dimension_id="type_compatibility", dependency_group="type_compatibility", score_bearing=True, **base)))
             if evidence.low_cardinality_risk:
-                output.append(FusionEvidenceItem(evidence_id=evidence.evidence_id + ":low-cardinality", subject_id=subject, metric_name="low_cardinality_risk", metric_value=None, metric_semantics="provider flagged a tiny domain trap", direction=EvidenceDirection.CONTRADICTS, score_bearing=False, **base))
+                output.append(FusionEvidenceItem(evidence_id=evidence.evidence_id + ":low-cardinality", subject_id=subject, producer_id="dependency", family=EvidenceFamily.DEPENDENCY, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="low_cardinality_risk", metric_value=None, metric_semantics="provider flagged a tiny domain trap", direction=EvidenceDirection.CONTRADICTS, scope_id=evidence.source_id + ":" + evidence.snapshot_id, observation_scope=EvidenceReliabilityState.FULL, source_ids=(evidence.source_id,), snapshot_ids=(evidence.snapshot_id,), snapshot_by_source=snapshot_map, correlation_group=evidence.evidence_id, score_bearing=False))
         return output
 
     def _schema_items(self, result: SchemaMatchResult) -> list[FusionEvidenceItem]:
@@ -267,90 +343,124 @@ class EvidenceFusionService:
         output: list[FusionEvidenceItem] = []
         for candidate in result.candidates:
             data = _dump(candidate)
-            subject = _subject_mapping(data)
+            subject = _mapping_subject(data)
+            scope_map = {str(k): str(v) for k, v in candidate.observation_scope.snapshot_ids.items()}
             for ref in sorted(data.get("score_refs", ())):
                 score = scores.get(ref)
                 if score is None:
                     continue
-                output.append(FusionEvidenceItem(evidence_id=score.score_id, subject_id=subject, producer_id="schema-matching:" + score.matcher.name.lower(), family=EvidenceFamily.SCHEMA_MATCHING, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="matcher_rank", metric_value=float(score.rank), metric_semantics="matcher-specific ordinal rank; native score is not averaged", direction=EvidenceDirection.SUPPORTS, scope_id=score.source_column_id + ":" + score.target_column_id, observation_scope=EvidenceReliabilityState.SAMPLED if score.observation_scope.reduced_scope else EvidenceReliabilityState.FULL, source_ids=tuple(score.observation_scope.source_ids), snapshot_ids=tuple(score.observation_scope.snapshot_ids), correlation_group=score.score_id, score_bearing=True))
-        return output
-
-    def _ml_items(self, result: AppliedMLResult) -> list[FusionEvidenceItem]:
-        return [FusionEvidenceItem(evidence_id=item.evidence_id, subject_id="candidate:" + item.candidate_id, producer_id="applied-ml", family=EvidenceFamily.APPLIED_ML, role=EvidenceRole.DERIVED_INTERPRETATION, metric_name="learned_ranking_score", metric_value=item.ranking_score, metric_semantics="uncalibrated learned ranking; derived from upstream aggregate features", direction=EvidenceDirection.CONTEXT, scope_id=item.model_id, observation_scope=EvidenceReliabilityState.BOUNDED, derived_from_refs=item.input_evidence_refs, correlation_group=item.model_id, score_bearing=False, qualitative_text="learned evidence is auxiliary and not independently scored") for item in result.learned_evidence]
-
-    def _semantic_items(self, evidence: LLMEvidence) -> list[FusionEvidenceItem]:
-        output: list[FusionEvidenceItem] = []
-        subject = evidence.subject_refs[0] if len(evidence.subject_refs) == 1 else "semantic:" + stable_digest(evidence.subject_refs)[:24]
-        for item in evidence.hypotheses:
-            direction = EvidenceDirection.SUPPORTS if item.kind.value == "SUPPORTS_HYPOTHESIS" else EvidenceDirection.CONTRADICTS if item.kind.value == "CONTRADICTS_HYPOTHESIS" else EvidenceDirection.CONTEXT
-            output.append(FusionEvidenceItem(evidence_id=item.hypothesis_id, subject_id=subject, producer_id="semantic-ai", family=EvidenceFamily.SEMANTIC_AI, role=EvidenceRole.DERIVED_INTERPRETATION, metric_name="semantic_hypothesis", metric_value=None, metric_semantics="qualitative provider hypothesis; no numeric conversion", direction=direction, scope_id=evidence.context_manifest.input_fingerprint, observation_scope=EvidenceReliabilityState.BOUNDED, source_ids=(), snapshot_ids=(), derived_from_refs=evidence.context_manifest.allowed_provider_evidence_refs, correlation_group=evidence.evidence_id, score_bearing=False, qualitative_text=item.statement))
+                output.append(FusionEvidenceItem(evidence_id=score.score_id, subject_id=subject, producer_id="schema-matching:" + score.matcher.name.lower(), family=EvidenceFamily.SCHEMA_MATCHING, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="matcher_rank", metric_value=float(score.rank), metric_semantics="matcher-specific ordinal rank; native score is not averaged", direction=EvidenceDirection.SUPPORTS, score_dimension_id="matcher_rank", dependency_group="matcher_rank", scope_id=score.source_column_id + ":" + score.target_column_id, observation_scope=EvidenceReliabilityState.SAMPLED if score.observation_scope.reduced_scope else EvidenceReliabilityState.FULL, source_ids=tuple(scope_map), snapshot_ids=tuple(scope_map.values()), snapshot_by_source=scope_map, correlation_group=score.score_id, score_bearing=True))
         return output
 
     @staticmethod
     def _declared_items(constraints: tuple[Any, ...]) -> list[FusionEvidenceItem]:
-        output: list[FusionEvidenceItem] = []
+        output = []
         for item in constraints:
             if isinstance(item, DeclaredConstraintInput):
                 data = item.model_dump(mode="json")
-                data["from_table"] = data.pop("from_table")
-                data["to_table"] = data.pop("to_table")
-                data["from_columns"] = tuple(data.pop("from_columns"))
-                data["to_columns"] = tuple(data.pop("to_columns"))
-                data["constraint_id"] = data["constraint_id"]
-            elif isinstance(item, DeclaredConstraint):
-                data = {"constraint_id": "declared:" + stable_digest(item.model_dump(mode="json"))[:24], "constraint_type": item.constraint_type, "source_id": item.source_id, "snapshot_id": "catalog", "from_table": item.table_id, "from_columns": item.columns, "to_table": item.referenced_table_id or item.referenced_table_name or "unknown", "to_columns": item.referenced_columns, "scope_id": "catalog:" + item.source_id}
-            else:
-                continue
-            if data["constraint_type"].upper() != "FOREIGN_KEY":
-                continue
-            subject = "rel:" + data["from_table"] + ":" + ",".join(data["from_columns"]) + "->" + data["to_table"] + ":" + ",".join(data["to_columns"])
-            output.append(FusionEvidenceItem(evidence_id=data["constraint_id"], subject_id=subject, producer_id="declared-metadata", family=EvidenceFamily.DECLARED_CONSTRAINT, role=EvidenceRole.DECLARED_METADATA, metric_name="declared_foreign_key", metric_value=1.0, metric_semantics="source-declared foreign-key metadata; not proof of snapshot validity", direction=EvidenceDirection.SUPPORTS, scope_id=data["scope_id"], observation_scope=EvidenceReliabilityState.FULL, source_ids=(data["source_id"],), snapshot_ids=(data["snapshot_id"],), correlation_group=data["constraint_id"], score_bearing=True))
+                if data["constraint_type"].upper() != "FOREIGN_KEY":
+                    continue
+                binding = item.snapshot_binding
+                source_id = data["source_id"]
+                snapshot_map = {} if binding is FusionSnapshotBinding.NOT_APPLICABLE_SCHEMA_METADATA else ({source_id: data["snapshot_id"]} if data.get("snapshot_id") else {})
+                subject = "rel:" + data["from_table"] + ":" + ",".join(data["from_columns"]) + "->" + data["to_table"] + ":" + ",".join(data["to_columns"])
+                output.append(FusionEvidenceItem(evidence_id=data["constraint_id"], subject_id=subject, producer_id="declared-metadata", family=EvidenceFamily.DECLARED_CONSTRAINT, role=EvidenceRole.DECLARED_METADATA, metric_name="declared_foreign_key", metric_value=1.0, metric_semantics="declared foreign-key metadata; not snapshot observation", direction=EvidenceDirection.SUPPORTS, scope_id=data["scope_id"], observation_scope=EvidenceReliabilityState.FULL, source_ids=(source_id,), snapshot_ids=tuple(snapshot_map.values()), snapshot_by_source=snapshot_map, snapshot_binding=binding, score_dimension_id="declared_constraint", dependency_group="declared_constraint", correlation_group=data["constraint_id"], score_bearing=True))
+            elif isinstance(item, DeclaredConstraint) and item.constraint_type.upper() == "FOREIGN_KEY":
+                data = item.model_dump(mode="json")
+                subject = "rel:" + item.table_id + ":" + ",".join(item.columns) + "->" + str(item.referenced_table_id or item.referenced_table_name) + ":" + ",".join(item.referenced_columns)
+                digest = stable_digest(data)[:24]
+                output.append(FusionEvidenceItem(evidence_id="declared:" + digest, subject_id=subject, producer_id="declared-metadata", family=EvidenceFamily.DECLARED_CONSTRAINT, role=EvidenceRole.DECLARED_METADATA, metric_name="declared_foreign_key", metric_value=1.0, metric_semantics="declared catalog foreign-key metadata; not snapshot observation", direction=EvidenceDirection.SUPPORTS, scope_id="catalog:" + item.source_id, observation_scope=EvidenceReliabilityState.FULL, source_ids=(item.source_id,), snapshot_ids=(), snapshot_by_source={}, snapshot_binding=FusionSnapshotBinding.NOT_APPLICABLE_SCHEMA_METADATA, score_dimension_id="declared_constraint", dependency_group="declared_constraint", correlation_group="declared:" + digest, score_bearing=True))
         return output
 
     @staticmethod
     def _assertion_items(assertions: tuple[DomainAssertion, ...]) -> list[FusionEvidenceItem]:
-        return [FusionEvidenceItem(evidence_id=item.assertion_id, subject_id=item.subject_id, producer_id="domain-assertion", family=EvidenceFamily.DOMAIN_ASSERTION, role=EvidenceRole.HUMAN_OR_DOMAIN_ASSERTION, metric_name="domain_assertion", metric_value=None, metric_semantics="explicit human/domain assertion; no fabricated probability", direction=EvidenceDirection.CONTEXT, scope_id=item.scope_id, observation_scope=EvidenceReliabilityState.FULL, source_ids=item.source_ids, snapshot_ids=item.snapshot_ids, derived_from_refs=item.evidence_refs, correlation_group=item.assertion_id, score_bearing=False, qualitative_text=item.statement) for item in assertions if item.status.upper() in {"PROPOSED", "ACCEPTED", "REVIEW_REQUIRED", "CONFLICTED"}]
+        return [FusionEvidenceItem(evidence_id=item.assertion_id, subject_id=item.subject_id, producer_id="domain-assertion", family=EvidenceFamily.DOMAIN_ASSERTION, role=EvidenceRole.HUMAN_OR_DOMAIN_ASSERTION, metric_name="domain_assertion", metric_value=None, metric_semantics="explicit qualitative domain assertion", direction=EvidenceDirection.CONTEXT, scope_id=item.scope_id, observation_scope=EvidenceReliabilityState.FULL, source_ids=item.source_ids, snapshot_ids=item.snapshot_ids, snapshot_by_source=dict(zip(item.source_ids, item.snapshot_ids)), correlation_group=item.assertion_id, score_bearing=False, qualitative_text=item.statement) for item in assertions]
+
+    def _profile_items(self, results: list[ProfileResult], subjects: Mapping[str, str]) -> list[FusionEvidenceItem]:
+        output = []
+        for result in results:
+            for profile in (*result.tables, *result.columns):
+                for subject in subjects.values():
+                    data = profile.model_dump(mode="json")
+                    if profile.table_id not in subject or (hasattr(profile, "column_id") and profile.column_id not in subject):
+                        continue
+                    status = getattr(profile.status, "value", str(profile.status))
+                    presence = EvidencePresenceState.OBSERVED if status == "COMPLETE" else EvidencePresenceState.INCOMPLETE
+                    scope = profile.observation_scope
+                    output.append(FusionEvidenceItem(evidence_id=f"profile:{profile.profile_id}:{stable_digest(subject)[:12]}", subject_id=subject, producer_id="profiling", family=EvidenceFamily.PROFILE, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="column_profile" if hasattr(profile, "column_id") else "table_profile", metric_value=None, metric_semantics="bounded profile context; no independent numeric vote", direction=EvidenceDirection.CONTEXT, presence=presence, scope_id=profile.profile_id, observation_scope=EvidenceReliabilityState.FULL if scope.profiling_mode.value == "FULL" else EvidenceReliabilityState.SAMPLED, source_ids=(profile.source_id,), snapshot_ids=(profile.snapshot_id,), snapshot_by_source={profile.source_id: profile.snapshot_id}, correlation_group=profile.profile_id, score_bearing=False, qualitative_text=json.dumps({"profile_id": profile.profile_id, "table_id": profile.table_id, "column_id": data.get("column_id"), "rows_profiled": profile.rows_profiled}, sort_keys=True)))
+        return output
+
+    def _quality_items(self, results: list[QualityResult], subjects: Mapping[str, str]) -> tuple[list[FusionEvidenceItem], set[str]]:
+        output, repairs = [], set()
+        for result in results:
+            for issue in result.issues:
+                for subject in subjects.values():
+                    if issue.table_id not in subject or (issue.column_ids and not any(column in subject for column in issue.column_ids)):
+                        continue
+                    issue_refs = tuple(ref.evidence_id for ref in issue.evidence_refs) + issue.declared_constraint_refs + issue.domain_assertion_refs
+                    repairs.update(issue.repair_proposal_refs)
+                    output.append(FusionEvidenceItem(evidence_id=f"quality:{issue.issue_id}:{stable_digest(subject)[:12]}", subject_id=subject, producer_id="quality", family=EvidenceFamily.QUALITY, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="quality_issue:" + issue.issue_type, metric_value=issue.affected_ratio, metric_semantics=issue.measurement_semantics.value, direction=EvidenceDirection.CONTRADICTS if issue.status.value in {"OPEN", "INCONCLUSIVE"} else EvidenceDirection.CONTEXT, scope_id=issue.issue_id, observation_scope=EvidenceReliabilityState.FULL if issue.observation_scope.completeness.value == "FULLY_OBSERVED" else EvidenceReliabilityState.BOUNDED, source_ids=(issue.source_id,), snapshot_ids=(issue.snapshot_id,), snapshot_by_source={issue.source_id: issue.snapshot_id}, correlation_group=issue.issue_id, score_bearing=False, derived_from_refs=(issue.issue_id,) + issue_refs + issue.repair_proposal_refs, qualitative_text=json.dumps({"issue_id": issue.issue_id, "dimension": issue.quality_dimension.value, "severity": issue.severity.value, "affected_ratio": issue.affected_ratio, "repair_refs": issue.repair_proposal_refs}, sort_keys=True)))
+            for proposal in result.repair_proposals:
+                for subject in subjects.values():
+                    if proposal.table_id not in subject or (proposal.column_ids and not any(column in subject for column in proposal.column_ids)):
+                        continue
+                    repairs.add(proposal.proposal_id)
+        return output, repairs
+
+    def _ml_items(self, result: AppliedMLResult, subjects: Mapping[str, str], failures: list[FusionFailure]) -> list[FusionEvidenceItem]:
+        output = []
+        for item in result.learned_evidence:
+            subject = subjects.get(item.candidate_id)
+            if subject is None:
+                failures.append(FusionFailure(failure_id="fusion-ml-binding-" + stable_digest(item.candidate_id)[:20], kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="learned evidence candidate_id is not in selected candidates", evidence_refs=(item.evidence_id,)))
+                continue
+            output.append(FusionEvidenceItem(evidence_id=item.evidence_id, subject_id=subject, producer_id="applied-ml", family=EvidenceFamily.APPLIED_ML, role=EvidenceRole.DERIVED_INTERPRETATION, metric_name="learned_ranking_score", metric_value=item.ranking_score, metric_semantics="uncalibrated learned ranking; auxiliary only", direction=EvidenceDirection.CONTEXT, scope_id=item.model_id, observation_scope=EvidenceReliabilityState.BOUNDED, derived_from_refs=item.input_evidence_refs, correlation_group=item.model_id, score_bearing=False, qualitative_text="derived ML evidence; not independently scored"))
+        return output
+
+    def _semantic_result_items(self, result: SemanticEvidenceResult | LLMEvidence, subjects: Mapping[str, str], bindings: tuple[Any, ...], failures: list[FusionFailure]) -> list[FusionEvidenceItem]:
+        evidence = result.evidence if isinstance(result, SemanticEvidenceResult) else result
+        if evidence is None:
+            return []
+        explicit = [_dump(item) for item in bindings if isinstance(item, FusionSubjectBinding)]
+        bound_subject = None
+        for upstream in evidence.subject_refs:
+            candidate = next((item for item in explicit if item["upstream_subject_ref"] == upstream), None)
+            if candidate is not None:
+                if candidate["candidate_id"] not in subjects or candidate["fusion_subject_id"] != subjects[candidate["candidate_id"]]:
+                    failures.append(FusionFailure(failure_id="fusion-semantic-binding-" + stable_digest(upstream)[:20], kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="semantic subject binding is unknown or inconsistent", evidence_refs=(evidence.evidence_id,)))
+                    return []
+                bound_subject = candidate["fusion_subject_id"]
+            elif upstream in subjects:
+                bound_subject = subjects[upstream]
+            elif upstream in subjects.values():
+                bound_subject = upstream
+            else:
+                failures.append(FusionFailure(failure_id="fusion-semantic-binding-" + stable_digest(upstream)[:20], kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="semantic evidence requires a known subject binding", evidence_refs=(evidence.evidence_id,)))
+                return []
+        if bound_subject is None:
+            failures.append(FusionFailure(failure_id="fusion-semantic-binding-empty", kind=FusionFailureKind.SUBJECT_BINDING_ERROR, detail="semantic evidence has no bindable subject", evidence_refs=(evidence.evidence_id,)))
+            return []
+        output = []
+        for hypothesis in evidence.hypotheses:
+            direction = EvidenceDirection.SUPPORTS if hypothesis.kind.value == "SUPPORTS_HYPOTHESIS" else EvidenceDirection.CONTRADICTS if hypothesis.kind.value == "CONTRADICTS_HYPOTHESIS" else EvidenceDirection.CONTEXT
+            output.append(FusionEvidenceItem(evidence_id=hypothesis.hypothesis_id, subject_id=bound_subject, producer_id="semantic-ai", family=EvidenceFamily.SEMANTIC_AI, role=EvidenceRole.DERIVED_INTERPRETATION, metric_name="semantic_hypothesis", metric_value=None, metric_semantics="qualitative provider hypothesis; no numeric conversion", direction=direction, scope_id=evidence.context_manifest.input_fingerprint, observation_scope=EvidenceReliabilityState.BOUNDED, derived_from_refs=evidence.context_manifest.allowed_provider_evidence_refs, correlation_group=evidence.evidence_id, score_bearing=False, qualitative_text=hypothesis.statement))
+        return output
 
     @staticmethod
-    def _scope_failures(by_subject: dict[str, list[NormalizedEvidenceSignal]], failures: list[FusionFailure]) -> None:
-        for subject, signals in sorted(by_subject.items()):
-            snapshots: dict[str, set[str]] = {}
-            for signal in signals:
-                for source_id in signal.source_ids:
-                    snapshots.setdefault(source_id, set()).update(signal.snapshot_ids)
-            if any(len(values) > 1 for values in snapshots.values()):
-                failures.append(FusionFailure(failure_id="fusion-scope-" + stable_digest(subject)[:24], kind=FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH, detail="one subject combines incompatible snapshots for a source", subject_id=subject, evidence_refs=tuple(item.evidence_id for item in signals)))
-
-    @staticmethod
-    def _candidate_scope_failure(candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...]) -> FusionFailure | None:
-        expected_source = candidate.get("source_id")
-        expected_snapshot = candidate.get("snapshot_id")
-        if not expected_source or not expected_snapshot:
-            return None
-        mismatched = tuple(
-            item.evidence_id
-            for item in signals
-            if expected_source in item.source_ids and item.snapshot_ids and expected_snapshot not in item.snapshot_ids
-        )
-        if not mismatched:
-            return None
-        return FusionFailure(
-            failure_id="fusion-candidate-scope-" + stable_digest(subject)[:24],
-            kind=FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH,
-            detail="candidate snapshot does not match the snapshot carried by its evidence",
-            subject_id=subject,
-            evidence_refs=mismatched,
-        )
+    def _subject_signals(by_subject: dict[str, list[NormalizedEvidenceSignal]], subject: str, request: EvidenceFusionRequest, failures: list[FusionFailure]) -> tuple[NormalizedEvidenceSignal, ...]:
+        values = by_subject.get(subject, [])
+        if len(values) > request.max_evidence_per_subject:
+            failures.append(FusionFailure(failure_id="fusion-evidence-bound-" + stable_digest(subject)[:20], kind=FusionFailureKind.BOUNDED_INPUT_DISCARDED, detail="max_evidence_per_subject discarded material evidence", subject_id=subject))
+        return tuple(values[:request.max_evidence_per_subject])
 
     def _signals(self, items: list[FusionEvidenceItem], request: EvidenceFusionRequest, failures: list[FusionFailure]) -> dict[str, list[NormalizedEvidenceSignal]]:
         output: dict[str, list[NormalizedEvidenceSignal]] = {}
         seen: dict[str, str] = {}
+        dimensions = {item.dimension_id: item for item in request.policy.scoring_dimensions}
+        metrics = {metric: item for item in request.policy.scoring_dimensions for metric in item.metric_names}
+        rules = {item.rule_id: item for item in request.policy.normalization_rules}
         for item in sorted(items, key=lambda value: (value.subject_id, value.evidence_id, value.metric_name)):
             if item.subject_id not in request.relationship_candidate_ids and item.subject_id not in request.mapping_candidate_ids and not item.subject_id.startswith(("rel:", "map:")):
-                # Candidate IDs are accepted for callers that index their own subjects;
-                # otherwise only canonical directional/symmetric IDs are eligible.
-                continue
-            if item.presence is not EvidencePresenceState.OBSERVED:
                 continue
             payload = json.dumps(item.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
             prior = seen.get(item.evidence_id)
@@ -358,173 +468,212 @@ class EvidenceFusionService:
                 failures.append(FusionFailure(failure_id="fusion-collision-" + stable_digest(item.evidence_id)[:24], kind=FusionFailureKind.EVIDENCE_ID_COLLISION, detail="one evidence_id claimed materially different payloads", evidence_refs=(item.evidence_id,)))
                 continue
             seen[item.evidence_id] = payload
-            normalized, method = self._normalize(item)
-            signal = NormalizedEvidenceSignal(signal_id=fusion_signal_id(item.evidence_id, item.subject_id, item.metric_name), subject_id=item.subject_id, evidence_id=item.evidence_id, producer_id=item.producer_id, family=item.family, role=item.role, raw_metric_name=item.metric_name, raw_metric_value=item.metric_value, raw_metric_semantics=item.metric_semantics, normalization_method=method, normalization_version="evidence-fusion-v1", normalized_value=normalized, direction=item.direction, presence=item.presence, reliability=item.observation_scope, scope_id=item.scope_id, source_ids=item.source_ids, snapshot_ids=item.snapshot_ids, derived_from_refs=item.derived_from_refs, correlation_group=item.correlation_group, score_bearing=item.score_bearing)
+            dimension = dimensions.get(item.score_dimension_id or "") or metrics.get(item.metric_name)
+            score_bearing = item.score_bearing and item.presence is EvidencePresenceState.OBSERVED
+            normalized: float | None = None
+            method = "qualitative_only_v1"
+            dimension_id = dimension.dimension_id if dimension else None
+            if score_bearing:
+                if dimension is None:
+                    failures.append(FusionFailure(failure_id="fusion-unsupported-" + stable_digest(item.metric_name)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail=f"score-bearing metric {item.metric_name} is not declared by policy", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
+                    score_bearing = False
+                else:
+                    rule = rules.get(dimension.normalization_rule_id)
+                    if rule is None or item.metric_name not in rule.metric_names:
+                        failures.append(FusionFailure(failure_id="fusion-unsupported-" + stable_digest(item.metric_name)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail=f"metric {item.metric_name} has no policy-authorized normalization", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
+                        score_bearing = False
+                    elif item.metric_value is None or not (-1 <= float(item.metric_value) <= 1):
+                        failures.append(FusionFailure(failure_id="fusion-unsupported-value-" + stable_digest(item.evidence_id)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail="score-bearing evidence value is outside policy bounds", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
+                        score_bearing = False
+                    elif rule.method.startswith("ordinal"):
+                        normalized, method = 1.0 / (1.0 + float(item.metric_value)), rule.method
+                    elif rule.method.startswith("identity"):
+                        normalized, method = float(item.metric_value), rule.method
+                    else:
+                        failures.append(FusionFailure(failure_id="fusion-unsupported-rule-" + stable_digest(rule.rule_id)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail=f"normalization rule {rule.rule_id} is not executable by Step17", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
+                        score_bearing = False
+            signal = NormalizedEvidenceSignal(signal_id=fusion_signal_id(item.evidence_id, item.subject_id, item.metric_name), subject_id=item.subject_id, evidence_id=item.evidence_id, producer_id=item.producer_id, family=item.family, role=item.role, raw_metric_name=item.metric_name, raw_metric_value=item.metric_value, raw_metric_semantics=item.metric_semantics, normalization_method=method, normalization_version="step17-fusion-v2", normalized_value=normalized, direction=item.direction, presence=item.presence, reliability=item.observation_scope, scope_id=item.scope_id, source_ids=item.source_ids, snapshot_ids=item.snapshot_ids, snapshot_by_source=item.snapshot_by_source, snapshot_binding=item.snapshot_binding, derived_from_refs=item.derived_from_refs, correlation_group=item.correlation_group, score_dimension_id=dimension_id, dependency_group=item.dependency_group or (dimension.dependency_group if dimension else None), score_bearing=score_bearing)
             output.setdefault(item.subject_id, []).append(signal)
         return output
 
     @staticmethod
-    def _normalize(item: FusionEvidenceItem) -> tuple[float | None, str]:
-        if not item.score_bearing or item.metric_value is None:
-            return None, "qualitative_only_v1"
-        if item.metric_name == "matcher_rank":
-            return 1.0 / (1.0 + item.metric_value), "ordinal_rank_presence_v1"
-        if item.metric_name in {"inclusion_coverage", "orphan_ratio", "target_uniqueness", "type_compatibility"}:
-            return float(item.metric_value), "bounded_01_identity_v1"
-        return float(item.metric_value), "declared_policy_bounded_01_v1"
-
-    def _conflicts_for_relationship(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], all_candidates: list[Mapping[str, Any]], declared: tuple[DeclaredConstraintInput, ...]) -> list[Conflict]:
-        conflicts = self._structural_conflicts(subject, signals)
-        matching_declared = []
-        for item in declared:
-            if isinstance(item, DeclaredConstraintInput):
-                matches = item.from_table == candidate.get("from_table") and item.to_table == candidate.get("to_table") and item.from_columns == tuple(candidate.get("from_columns", ())) and item.to_columns == tuple(candidate.get("to_columns", ()))
-                identifier = item.constraint_id
-            elif isinstance(item, DeclaredConstraint):
-                matches = item.table_id == candidate.get("from_table") and (item.referenced_table_id or item.referenced_table_name) == candidate.get("to_table") and item.columns == tuple(candidate.get("from_columns", ())) and item.referenced_columns == tuple(candidate.get("to_columns", ()))
-                identifier = "declared:" + stable_digest(item.model_dump(mode="json"))[:24]
-            else:
-                matches = False
-                identifier = ""
-            if matches:
-                matching_declared.append(identifier)
-        contradictions = tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS)
-        if matching_declared and contradictions:
-            conflicts.append(self._conflict(ConflictType.DECLARED_DATA_CONFLICT, subject, tuple(matching_declared), contradictions, "declared FK metadata is retained while observed data contradicts it", "declared_fk_vs_observed_data"))
-        targets = {(item.get("to_table"), tuple(item.get("to_columns", ()))) for item in all_candidates if item.get("from_table") == candidate.get("from_table") and tuple(item.get("from_columns", ())) == tuple(candidate.get("from_columns", ()))}
-        if len(targets) > 1:
-            conflicts.append(self._conflict(ConflictType.MULTIPLE_TARGET_AMBIGUITY, subject, (str(candidate.get("candidate_id")),), tuple(str(item.get("candidate_id")) for item in all_candidates), "more than one bounded target is plausible for this source endpoint", "multiple_target_requires_review"))
-        return conflicts
-
-    def _conflicts_for_mapping(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], all_candidates: list[Mapping[str, Any]]) -> list[Conflict]:
-        conflicts = self._structural_conflicts(subject, signals)
-        semantic = tuple(item.evidence_id for item in signals if item.family is EvidenceFamily.SEMANTIC_AI and item.direction is EvidenceDirection.SUPPORTS)
-        type_bad = tuple(item.evidence_id for item in signals if item.raw_metric_name == "type_compatibility" and item.direction is EvidenceDirection.CONTRADICTS)
-        if semantic and type_bad:
-            conflicts.append(self._conflict(ConflictType.TYPE_SEMANTIC_CONFLICT, subject, semantic, type_bad, "semantic evidence suggests equivalence but type evidence is incompatible", "semantic_vs_type"))
-        plausible = [item for item in all_candidates if item.get("source_id") == candidate.get("source_id") and item.get("source_column_id") == candidate.get("source_column_id")]
-        if len({(item.get("target_source_id"), item.get("target_column_id")) for item in plausible}) > 1:
-            conflicts.append(self._conflict(ConflictType.MULTIPLE_TARGET_AMBIGUITY, subject, (str(candidate.get("candidate_id")),), tuple(str(item.get("candidate_id")) for item in plausible), "one source column has multiple plausible mapping targets", "multiple_mapping_targets_require_review"))
-        return conflicts
-
-    def _structural_conflicts(self, subject: str, signals: tuple[NormalizedEvidenceSignal, ...]) -> list[Conflict]:
-        output: list[Conflict] = []
-        support = tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.SUPPORTS)
-        contradiction = tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS)
-        semantic = tuple(item.evidence_id for item in signals if item.family is EvidenceFamily.SEMANTIC_AI and item.direction is EvidenceDirection.SUPPORTS)
-        if semantic and contradiction:
-            output.append(self._conflict(ConflictType.SEMANTIC_STRUCTURAL_CONFLICT, subject, semantic, contradiction, "qualitative semantic support conflicts with structural evidence", "semantic_structural_disagreement"))
-        if any(item.raw_metric_name == "type_compatibility" and item.direction is EvidenceDirection.CONTRADICTS for item in signals) and (semantic or any(item.family is EvidenceFamily.SCHEMA_MATCHING for item in signals)):
-            output.append(self._conflict(ConflictType.TYPE_SEMANTIC_CONFLICT, subject, semantic or support, tuple(item.evidence_id for item in signals if item.raw_metric_name == "type_compatibility"), "semantic or matcher evidence does not erase incompatible type evidence", "type_semantic_compatibility"))
-        by_metric: dict[str, list[NormalizedEvidenceSignal]] = {}
-        for item in signals:
-            by_metric.setdefault(item.raw_metric_name, []).append(item)
-        for metric, values in by_metric.items():
-            sampled = [item for item in values if item.reliability is EvidenceReliabilityState.SAMPLED]
-            full = [item for item in values if item.reliability is EvidenceReliabilityState.FULL]
-            if sampled and full and any((a.normalized_value or 0) >= 0.8 and (b.normalized_value or 0) <= 0.5 for a in sampled for b in full):
-                output.append(self._conflict(ConflictType.SAMPLE_FULLSCAN_CONFLICT, subject, tuple(item.evidence_id for item in sampled), tuple(item.evidence_id for item in full), f"sampled and full observations disagree for {metric}; observations are retained", "sample_vs_full_observation"))
-        return output
+    def _normalize_dimension(signals: tuple[NormalizedEvidenceSignal, ...], dimension: FusionScoringDimension) -> float | None:
+        values = [item for item in signals if item.score_bearing and item.normalized_value is not None and item.score_dimension_id == dimension.dimension_id]
+        if not values:
+            return None
+        if dimension.dimension_id == "inclusion":
+            coverage = next((item for item in values if item.raw_metric_name == "inclusion_coverage"), None)
+            if coverage is not None:
+                return coverage.normalized_value
+            orphan = next((item for item in values if item.raw_metric_name == "orphan_ratio"), None)
+            return 1.0 - float(orphan.normalized_value) if orphan is not None else None
+        return values[0].normalized_value
 
     @staticmethod
-    def _conflict(kind: ConflictType, subject: str, supporting: tuple[str, ...], contradicting: tuple[str, ...], explanation: str, rule: str) -> Conflict:
-        refs = tuple(sorted(set(supporting + contradicting)))
-        return Conflict(conflict_id=fusion_conflict_id(subject, kind, refs), conflict_type=kind, subject_id=subject, supporting_evidence_refs=tuple(sorted(set(supporting))), contradicting_evidence_refs=tuple(sorted(set(contradicting))), explanation=explanation, policy_rule=rule, scope_id="subject:" + stable_digest(subject)[:20], provenance="application.evidence_fusion:evidence-fusion-v1")
-
-    def _score(self, signals: tuple[NormalizedEvidenceSignal, ...]) -> FusionScore:
-        grouped: dict[str, NormalizedEvidenceSignal] = {}
-        for signal in signals:
-            if signal.score_bearing and signal.normalized_value is not None:
-                grouped.setdefault(signal.correlation_group, signal)
+    def _score(signals: tuple[NormalizedEvidenceSignal, ...], policy: FusionPolicyReference) -> FusionScore:
         contributions: dict[str, float] = {}
-        for group, signal in sorted(grouped.items()):
-            weight = _WEIGHTS["coverage"] if signal.raw_metric_name in {"inclusion_coverage", "orphan_ratio"} else _WEIGHTS["uniqueness"] if signal.raw_metric_name == "target_uniqueness" else _WEIGHTS["type"] if signal.raw_metric_name == "type_compatibility" else _WEIGHTS["rank"] if signal.raw_metric_name == "matcher_rank" else _WEIGHTS["declared"] if signal.family is EvidenceFamily.DECLARED_CONSTRAINT else _WEIGHTS["quality"]
-            signed = signal.normalized_value if signal.direction is EvidenceDirection.SUPPORTS else -signal.normalized_value if signal.direction is EvidenceDirection.CONTRADICTS else 0.0
-            contributions[signal.signal_id] = round(weight * signed, 12)
-        observed = float(sum(self._weight_for(signal) for signal in grouped.values()))
-        expected_names = {"inclusion_coverage", "target_uniqueness", "type_compatibility"} if any(signal.raw_metric_name in {"inclusion_coverage", "target_uniqueness", "type_compatibility", "orphan_ratio"} for signal in signals) else {"matcher_rank", "type_compatibility"} if any(signal.raw_metric_name == "matcher_rank" for signal in signals) else set()
-        expected_weight = sum(self._weight_for_name(name) for name in expected_names)
-        eligible = float(max(observed, expected_weight))
+        observed = 0.0
+        eligible = sum(item.weight for item in policy.scoring_dimensions if item.required)
+        for dimension in policy.scoring_dimensions:
+            value = EvidenceFusionService._normalize_dimension(signals, dimension)
+            if value is None:
+                continue
+            signed = value
+            if dimension.dimension_id != "inclusion" and any(item.direction is EvidenceDirection.CONTRADICTS and item.score_dimension_id == dimension.dimension_id for item in signals):
+                signed = -abs(value)
+            contributions[dimension.dimension_id] = round(dimension.weight * signed, 12)
+            observed += dimension.weight
+        optional_observed = {item.score_dimension_id for item in signals if item.score_bearing and item.normalized_value is not None}
+        for dimension in policy.scoring_dimensions:
+            if not dimension.required and dimension.dimension_id in optional_observed and dimension.dimension_id not in contributions:
+                value = EvidenceFusionService._normalize_dimension(signals, dimension)
+                if value is not None:
+                    contributions[dimension.dimension_id] = round(dimension.weight * value, 12)
+                    observed += dimension.weight
+                    eligible += dimension.weight
         value = round(sum(contributions.values()) / eligible, 12) if contributions and eligible else None
-        return FusionScore(value=value, eligible_weight=eligible, observed_weight=observed, evidence_coverage=round(observed / eligible, 12) if eligible else 0.0, sufficient=bool(contributions), contributions=contributions)
+        return FusionScore(value=value, score_semantics=policy.score_semantics, eligible_weight=eligible, observed_weight=observed, evidence_coverage=round(observed / eligible, 12) if eligible else 0.0, sufficient=bool(contributions), contributions=contributions)
 
     @staticmethod
-    def _weight_for_name(name: str) -> float:
-        return _WEIGHTS["coverage"] if name in {"inclusion_coverage", "orphan_ratio"} else _WEIGHTS["uniqueness"] if name == "target_uniqueness" else _WEIGHTS["type"] if name == "type_compatibility" else _WEIGHTS["rank"]
-
-    def _weight_for(self, signal: NormalizedEvidenceSignal) -> float:
-        return _WEIGHTS["declared"] if signal.family is EvidenceFamily.DECLARED_CONSTRAINT else self._weight_for_name(signal.raw_metric_name)
-
-    def _band(self, score: FusionScore, conflicts: list[Conflict]) -> Any:
+    def _band(score: FusionScore, conflicts: list[Conflict], policy: FusionPolicyReference) -> Any:
         from dirty_data_to_olap.domain.contracts.evidence_fusion import ConfidenceBand
         if conflicts:
             return ConfidenceBand.CONFLICTED
         if not score.sufficient:
             return ConfidenceBand.INSUFFICIENT
-        if (score.value or 0) >= 0.75:
-            return ConfidenceBand.HIGH
-        if (score.value or 0) >= 0.4:
-            return ConfidenceBand.MEDIUM
+        bands = sorted(policy.band_policy, key=lambda item: item.minimum if item.minimum is not None else -2, reverse=True)
+        for band in bands:
+            if band.minimum is not None and (score.value or 0) >= band.minimum:
+                return band.band
+            if band.minimum is None and band.maximum is not None and (score.value or 0) < band.maximum:
+                return band.band
         return ConfidenceBand.LOW
 
-    def _relationship_decision(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict], request: EvidenceFusionRequest, statuses: list[ProducerEvidenceStatus]) -> RelationshipDecision:
-        score = self._score(signals)
-        required = {EvidenceFamily.PROFILE, EvidenceFamily.DEPENDENCY, EvidenceFamily.QUALITY}
-        missing = tuple("producer:" + family.value.lower() for family in sorted(required - {item.family for item in statuses}, key=lambda value: value.value)) + tuple("producer:" + item.producer_id for item in statuses if item.state not in {ProducerResultState.COMPLETE})
-        state = DecisionState.INCOMPLETE_REQUIRED_EVIDENCE if any(item.family in required and item.state is not ProducerResultState.COMPLETE for item in statuses) or not all(any(item.family is family for item in statuses) for family in required) else DecisionState.REVIEW_REQUIRED
-        explanation = self._explanation(signals, conflicts, missing, score)
-        fingerprint = fusion_input_fingerprint(subject, signals, request.policy)
-        return RelationshipDecision(decision_id=fusion_decision_id(subject, fingerprint, request.policy), candidate_id=str(candidate["candidate_id"]), subject_id=subject, from_table=str(candidate["from_table"]), from_columns=tuple(candidate["from_columns"]), to_table=str(candidate["to_table"]), to_columns=tuple(candidate["to_columns"]), proposed_cardinality=str(candidate.get("proposed_cardinality", "MANY_TO_ONE")), score=score, confidence_band=self._band(score, conflicts), decision_state=state, policy=request.policy, supporting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=missing, unavailable_evidence_refs=tuple("producer:" + item.producer_id for item in statuses if item.state in {ProducerResultState.UNAVAILABLE, ProducerResultState.SKIPPED}), conflict_refs=tuple(item.conflict_id for item in conflicts), explanation=explanation, input_evidence_fingerprint=fingerprint, provenance="application.evidence_fusion:evidence-fusion-v1")
+    @staticmethod
+    def _subject_missing(subject: str, signals: tuple[NormalizedEvidenceSignal, ...], statuses: list[ProducerEvidenceStatus], policy: FusionPolicyReference) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        missing = []
+        for dimension in policy.scoring_dimensions:
+            if dimension.required and not any(item.score_dimension_id == dimension.dimension_id and item.presence is EvidencePresenceState.OBSERVED and item.score_bearing for item in signals):
+                missing.append("subject:dimension:" + dimension.dimension_id)
+        required = set(policy.required_producer_families or (EvidenceFamily.PROFILE, EvidenceFamily.DEPENDENCY, EvidenceFamily.QUALITY))
+        for family in sorted(required, key=lambda item: item.value):
+            matching = [item for item in statuses if item.family is family]
+            if not matching:
+                missing.append("producer:" + family.value.lower())
+            else:
+                missing.extend("producer:" + item.result_id for item in matching if item.state is not ProducerResultState.COMPLETE)
+        unavailable = tuple("producer:" + item.result_id for item in statuses if item.state in {ProducerResultState.UNAVAILABLE, ProducerResultState.SKIPPED, ProducerResultState.PRIVACY_BLOCKED})
+        unavailable += tuple(item.evidence_id for item in signals if item.presence is not EvidencePresenceState.OBSERVED)
+        return tuple(sorted(set(missing))), tuple(sorted(set(unavailable)))
 
-    def _mapping_decision(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict], request: EvidenceFusionRequest, statuses: list[ProducerEvidenceStatus]) -> SemanticMappingDecision:
-        score = self._score(signals)
-        required = {EvidenceFamily.SCHEMA_MATCHING} if request.cross_source_mapping_scope else set()
-        missing = tuple("producer:" + family.value.lower() for family in sorted(required - {item.family for item in statuses}, key=lambda value: value.value)) + tuple("producer:" + item.producer_id for item in statuses if item.state not in {ProducerResultState.COMPLETE})
-        # Mapping decisions have no separate incomplete state in the contract;
-        # missing schema evidence is represented by the result failure and the
-        # decision's missing_evidence_refs while the decision remains review-only.
-        state = DecisionState.REVIEW_REQUIRED
-        fingerprint = fusion_input_fingerprint(subject, signals, request.policy)
-        return SemanticMappingDecision(decision_id=fusion_decision_id(subject, fingerprint, request.policy), candidate_id=str(candidate["candidate_id"]), subject_id=subject, source_id=str(candidate["source_id"]), source_column_id=str(candidate["source_column_id"]), target_source_id=str(candidate["target_source_id"]), target_column_id=str(candidate["target_column_id"]), score=score, confidence_band=self._band(score, conflicts), decision_state=state, policy=request.policy, supporting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=missing, unavailable_evidence_refs=tuple("producer:" + item.producer_id for item in statuses if item.state in {ProducerResultState.UNAVAILABLE, ProducerResultState.SKIPPED}), conflict_refs=tuple(item.conflict_id for item in conflicts), explanation=self._explanation(signals, conflicts, missing, score), input_evidence_fingerprint=fingerprint, provenance="application.evidence_fusion:evidence-fusion-v1")
+    def _relationship_decision(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict], request: EvidenceFusionRequest, statuses: list[ProducerEvidenceStatus], competitors: list[Mapping[str, Any]], missing: tuple[str, ...], policy_ok: bool) -> RelationshipDecision:
+        score = self._score(signals, request.policy)
+        state = DecisionState.INCOMPLETE_REQUIRED_EVIDENCE if missing or not policy_ok else DecisionState.REVIEW_REQUIRED
+        context = {"candidate": candidate, "subject_kind": "RELATIONSHIP", "competitors": [item.get("candidate_id") for item in competitors], "statuses": [item.model_dump(mode="json") for item in statuses], "missing": missing, "contract": request.fusion_contract_version}
+        fingerprint = fusion_input_fingerprint(subject, signals, request.policy, context)
+        return RelationshipDecision(decision_id=fusion_decision_id(subject, fingerprint, request.policy), candidate_id=str(candidate["candidate_id"]), subject_id=subject, from_table=str(candidate["from_table"]), from_columns=tuple(candidate["from_columns"]), to_table=str(candidate["to_table"]), to_columns=tuple(candidate["to_columns"]), proposed_cardinality=str(candidate.get("proposed_cardinality", "MANY_TO_ONE")), score=score, confidence_band=self._band(score, conflicts, request.policy), decision_state=state, policy=request.policy, supporting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=missing, unavailable_evidence_refs=tuple("producer:" + item.result_id for item in statuses if item.state in {ProducerResultState.UNAVAILABLE, ProducerResultState.SKIPPED}), conflict_refs=tuple(item.conflict_id for item in conflicts), explanation=self._explanation(signals, conflicts, missing, score), input_evidence_fingerprint=fingerprint, provenance="application.evidence_fusion:evidence-fusion-v2")
+
+    def _mapping_decision(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict], request: EvidenceFusionRequest, statuses: list[ProducerEvidenceStatus], competitors: list[Mapping[str, Any]], missing: tuple[str, ...], policy_ok: bool) -> SemanticMappingDecision:
+        score = self._score(signals, request.policy)
+        context = {"candidate": candidate, "subject_kind": "MAPPING", "competitors": [item.get("candidate_id") for item in competitors], "statuses": [item.model_dump(mode="json") for item in statuses], "missing": missing, "contract": request.fusion_contract_version}
+        fingerprint = fusion_input_fingerprint(subject, signals, request.policy, context)
+        return SemanticMappingDecision(decision_id=fusion_decision_id(subject, fingerprint, request.policy), candidate_id=str(candidate["candidate_id"]), subject_id=subject, source_id=str(candidate["source_id"]), source_column_id=str(candidate["source_column_id"]), target_source_id=str(candidate["target_source_id"]), target_column_id=str(candidate["target_column_id"]), score=score, confidence_band=self._band(score, conflicts, request.policy), decision_state=DecisionState.REVIEW_REQUIRED, policy=request.policy, supporting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_signal_refs=tuple(item.signal_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=missing, unavailable_evidence_refs=tuple("producer:" + item.result_id for item in statuses if item.state in {ProducerResultState.UNAVAILABLE, ProducerResultState.SKIPPED}), conflict_refs=tuple(item.conflict_id for item in conflicts), explanation=self._explanation(signals, conflicts, missing, score), input_evidence_fingerprint=fingerprint, provenance="application.evidence_fusion:evidence-fusion-v2")
 
     @staticmethod
     def _explanation(signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict], missing: tuple[str, ...], score: FusionScore) -> DecisionExplanation:
-        supports = tuple(f"{item.evidence_id}: {item.raw_metric_name}={item.raw_metric_value!r} ({item.raw_metric_semantics}); contribution={score.contributions.get(item.signal_id, 0)}" for item in signals if item.direction is EvidenceDirection.SUPPORTS)
-        contradicts = tuple(f"{item.evidence_id}: {item.raw_metric_name}={item.raw_metric_value!r} ({item.raw_metric_semantics}); contribution={score.contributions.get(item.signal_id, 0)}" for item in signals if item.direction is EvidenceDirection.CONTRADICTS)
-        limitations = tuple(missing) + tuple(f"conflict {item.conflict_id}: {item.explanation}" for item in conflicts) + tuple(f"{item.evidence_id}: qualitative/derived evidence is visible but not score-bearing" for item in signals if not item.score_bearing)
-        reconstruction = (f"score={score.value!r} semantics={score.score_semantics} eligible_weight={score.eligible_weight} observed_weight={score.observed_weight} coverage={score.evidence_coverage}", "decision remains REVIEW_REQUIRED until the later review checkpoint and G5 evaluation")
-        return DecisionExplanation(supports=supports, contradicts=contradicts, limitations=limitations, reconstruction=reconstruction)
+        supports = tuple(f"{item.evidence_id}: {item.raw_metric_name}={item.raw_metric_value!r}; dimension={item.score_dimension_id}; contribution={score.contributions.get(item.score_dimension_id or '', 0)}" for item in signals if item.direction is EvidenceDirection.SUPPORTS)
+        contradicts = tuple(f"{item.evidence_id}: {item.raw_metric_name}={item.raw_metric_value!r}; dimension={item.score_dimension_id}; contribution={score.contributions.get(item.score_dimension_id or '', 0)}" for item in signals if item.direction is EvidenceDirection.CONTRADICTS)
+        limitations = tuple(missing) + tuple(f"conflict {item.conflict_id}: {item.explanation}" for item in conflicts) + tuple(f"{item.evidence_id}: visible but non-score-bearing" for item in signals if not item.score_bearing)
+        return DecisionExplanation(supports=supports, contradicts=contradicts, limitations=limitations, reconstruction=(f"score={score.value!r} semantics={score.score_semantics} eligible_weight={score.eligible_weight} observed_weight={score.observed_weight} coverage={score.evidence_coverage}", "decision remains REVIEW_REQUIRED until G5"))
 
     @staticmethod
-    def _bundle(subject: str, kind: FusionSubjectKind, hypothesis: str, signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict]) -> EvidenceBundle:
-        lineage = tuple(EvidenceLineageReference(evidence_id=item.evidence_id, producer_id=item.producer_id, family=item.family, source_ids=item.source_ids, snapshot_ids=item.snapshot_ids, scope_id=item.scope_id, observation_scope=item.reliability.value, correlation_group=item.correlation_group, derived_from_refs=item.derived_from_refs) for item in signals)
-        return EvidenceBundle(bundle_id="fusion_bundle_" + stable_digest((subject, tuple(item.signal_id for item in signals)))[:32], subject_id=subject, subject_kind=kind, hypothesis=hypothesis, lineage=lineage, signals=signals, supporting_evidence_refs=tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_evidence_refs=tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=(), unavailable_evidence_refs=())
+    def _bundle(subject: str, kind: FusionSubjectKind, hypothesis: str, signals: tuple[NormalizedEvidenceSignal, ...], conflicts: list[Conflict], missing: tuple[str, ...], unavailable: tuple[str, ...]) -> EvidenceBundle:
+        lineage = tuple(EvidenceLineageReference(evidence_id=item.evidence_id, producer_id=item.producer_id, family=item.family, source_ids=item.source_ids, snapshot_ids=item.snapshot_ids, snapshot_by_source=item.snapshot_by_source, snapshot_binding=item.snapshot_binding, scope_id=item.scope_id, observation_scope=item.reliability.value, correlation_group=item.correlation_group, derived_from_refs=item.derived_from_refs) for item in signals)
+        return EvidenceBundle(bundle_id="fusion_bundle_" + stable_digest((subject, tuple(item.signal_id for item in signals), missing, unavailable))[:32], subject_id=subject, subject_kind=kind, hypothesis=hypothesis, lineage=lineage, signals=signals, supporting_evidence_refs=tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.SUPPORTS), contradicting_evidence_refs=tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS), missing_evidence_refs=missing, unavailable_evidence_refs=unavailable)
 
     @staticmethod
-    def _collision(items: list[FusionEvidenceItem]) -> FusionFailure | None:
-        seen: dict[str, str] = {}
-        for item in items:
-            payload = json.dumps(item.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-            if item.evidence_id in seen and seen[item.evidence_id] != payload:
-                return FusionFailure(failure_id="fusion-collision-" + stable_digest(item.evidence_id)[:24], kind=FusionFailureKind.EVIDENCE_ID_COLLISION, detail="one evidence_id claimed materially different evidence", evidence_refs=(item.evidence_id,))
-            seen[item.evidence_id] = payload
-        return None
+    def _candidate_scope_failure(candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...]) -> FusionFailure | None:
+        expected: dict[str, str] = {}
+        if candidate.get("source_id") and (candidate.get("snapshot_id") or candidate.get("source_snapshot_id")):
+            expected[str(candidate["source_id"])] = str(candidate.get("snapshot_id") or candidate.get("source_snapshot_id"))
+        if candidate.get("target_source_id") and candidate.get("target_snapshot_id"):
+            expected[str(candidate["target_source_id"])] = str(candidate["target_snapshot_id"])
+        if not expected:
+            return None
+        mismatched = tuple(item.evidence_id for item in signals if any(source in item.snapshot_by_source and item.snapshot_by_source[source] != snapshot for source, snapshot in expected.items()))
+        return FusionFailure(failure_id="fusion-candidate-scope-" + stable_digest(subject)[:24], kind=FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH, detail="candidate snapshot does not match evidence snapshot", subject_id=subject, evidence_refs=mismatched) if mismatched else None
 
     @staticmethod
-    def _unique_statuses(values: list[ProducerEvidenceStatus]) -> list[ProducerEvidenceStatus]:
-        output: dict[str, ProducerEvidenceStatus] = {}
-        for item in values:
-            output.setdefault(item.producer_id, item)
-        return [output[key] for key in sorted(output)]
+    def _scope_failures(by_subject: dict[str, list[NormalizedEvidenceSignal]], failures: list[FusionFailure]) -> None:
+        for subject, signals in sorted(by_subject.items()):
+            by_source: dict[str, set[str]] = {}
+            for signal in signals:
+                if signal.snapshot_binding is FusionSnapshotBinding.NOT_APPLICABLE_SCHEMA_METADATA:
+                    continue
+                for source_id, snapshot_id in signal.snapshot_by_source.items():
+                    by_source.setdefault(source_id, set()).add(snapshot_id)
+            if any(len(values) > 1 for values in by_source.values()):
+                failures.append(FusionFailure(failure_id="fusion-scope-" + stable_digest(subject)[:24], kind=FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH, detail="one subject combines incompatible snapshots for a source", subject_id=subject, evidence_refs=tuple(item.evidence_id for item in signals)))
+
+    def _conflicts_for_relationship(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], all_candidates: list[Mapping[str, Any]], declared: tuple[Any, ...], policy: FusionPolicyReference) -> list[Conflict]:
+        conflicts = self._structural_conflicts(subject, signals, policy)
+        declared_refs = []
+        for item in declared:
+            if isinstance(item, DeclaredConstraintInput) and item.from_table == candidate.get("from_table") and item.to_table == candidate.get("to_table") and item.from_columns == tuple(candidate.get("from_columns", ())) and item.to_columns == tuple(candidate.get("to_columns", ())):
+                declared_refs.append(item.constraint_id)
+            elif isinstance(item, DeclaredConstraint) and item.table_id == candidate.get("from_table") and (item.referenced_table_id or item.referenced_table_name) == candidate.get("to_table"):
+                declared_refs.append("declared:" + stable_digest(item.model_dump(mode="json"))[:24])
+        contradictions = tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS and item.family in {EvidenceFamily.DEPENDENCY, EvidenceFamily.QUALITY} and item.raw_metric_name != "low_cardinality_risk")
+        if declared_refs and contradictions:
+            conflicts.append(self._conflict(ConflictType.DECLARED_DATA_CONFLICT, subject, tuple(declared_refs), contradictions, "declared FK metadata is retained while observed data contradicts it", "declared_fk_vs_observed_data", policy))
+        targets = {(item.get("to_table"), tuple(item.get("to_columns", ()))) for item in all_candidates if item.get("from_table") == candidate.get("from_table") and tuple(item.get("from_columns", ())) == tuple(candidate.get("from_columns", ())) }
+        if len(targets) > 1:
+            conflicts.append(self._conflict(ConflictType.MULTIPLE_TARGET_AMBIGUITY, subject, (str(candidate.get("candidate_id")),), tuple(str(item.get("candidate_id")) for item in all_candidates), "more than one target is plausible for this source endpoint", "multiple_target_requires_review", policy))
+        return conflicts
+
+    def _conflicts_for_mapping(self, candidate: Mapping[str, Any], subject: str, signals: tuple[NormalizedEvidenceSignal, ...], all_candidates: list[Mapping[str, Any]], policy: FusionPolicyReference) -> list[Conflict]:
+        conflicts = self._structural_conflicts(subject, signals, policy)
+        semantic = tuple(item.evidence_id for item in signals if item.family is EvidenceFamily.SEMANTIC_AI and item.direction is EvidenceDirection.SUPPORTS)
+        type_bad = tuple(item.evidence_id for item in signals if item.raw_metric_name == "type_compatibility" and item.direction is EvidenceDirection.CONTRADICTS)
+        if semantic and type_bad:
+            conflicts.append(self._conflict(ConflictType.TYPE_SEMANTIC_CONFLICT, subject, semantic, type_bad, "semantic equivalence conflicts with incompatible type evidence", "semantic_vs_type", policy))
+        plausible = [item for item in all_candidates if item.get("source_id") == candidate.get("source_id") and item.get("source_column_id") == candidate.get("source_column_id")]
+        if len({(item.get("target_source_id"), item.get("target_column_id")) for item in plausible}) > 1:
+            conflicts.append(self._conflict(ConflictType.MULTIPLE_TARGET_AMBIGUITY, subject, (str(candidate.get("candidate_id")),), tuple(str(item.get("candidate_id")) for item in plausible), "one source column has multiple plausible mapping targets", "multiple_mapping_targets_require_review", policy))
+        return conflicts
+
+    def _structural_conflicts(self, subject: str, signals: tuple[NormalizedEvidenceSignal, ...], policy: FusionPolicyReference) -> list[Conflict]:
+        output = []
+        contradiction = tuple(item.evidence_id for item in signals if item.direction is EvidenceDirection.CONTRADICTS)
+        semantic = tuple(item.evidence_id for item in signals if item.family is EvidenceFamily.SEMANTIC_AI and item.direction is EvidenceDirection.SUPPORTS)
+        structural = tuple(item.evidence_id for item in signals if item.family in {EvidenceFamily.DEPENDENCY, EvidenceFamily.QUALITY, EvidenceFamily.SCHEMA_MATCHING} and item.direction is EvidenceDirection.CONTRADICTS)
+        if semantic and structural:
+            output.append(self._conflict(ConflictType.SEMANTIC_STRUCTURAL_CONFLICT, subject, semantic, structural, "qualitative semantic support conflicts with structural evidence", "semantic_structural_disagreement", policy))
+        type_bad = tuple(item.evidence_id for item in signals if item.raw_metric_name == "type_compatibility" and item.direction is EvidenceDirection.CONTRADICTS)
+        matcher_support = tuple(item.evidence_id for item in signals if item.raw_metric_name == "matcher_rank" and item.direction is EvidenceDirection.SUPPORTS)
+        if type_bad and (semantic or matcher_support):
+            output.append(self._conflict(ConflictType.TYPE_SEMANTIC_CONFLICT, subject, semantic or matcher_support, type_bad, "incompatible type evidence is retained beside semantic or matcher support", "type_semantic_compatibility", policy))
+        threshold = next((item.threshold for item in policy.conflict_rules if item.conflict_type is ConflictType.SAMPLE_FULLSCAN_CONFLICT), None)
+        if threshold is not None:
+            by_metric: dict[str, list[NormalizedEvidenceSignal]] = {}
+            for item in signals:
+                by_metric.setdefault(item.raw_metric_name, []).append(item)
+            for metric, values in by_metric.items():
+                sampled = [item for item in values if item.reliability is EvidenceReliabilityState.SAMPLED and item.normalized_value is not None]
+                full = [item for item in values if item.reliability is EvidenceReliabilityState.FULL and item.normalized_value is not None]
+                if any(set(a.snapshot_by_source) & set(b.snapshot_by_source) and abs(float(a.normalized_value) - float(b.normalized_value)) >= threshold for a in sampled for b in full):
+                    output.append(self._conflict(ConflictType.SAMPLE_FULLSCAN_CONFLICT, subject, tuple(item.evidence_id for item in sampled), tuple(item.evidence_id for item in full), f"sampled and full observations disagree for {metric}", "sample_vs_full_observation", policy))
+        return output
+
+    @staticmethod
+    def _conflict(kind: ConflictType, subject: str, supporting: tuple[str, ...], contradicting: tuple[str, ...], explanation: str, rule: str, policy: FusionPolicyReference) -> Conflict:
+        refs = tuple(sorted(set(supporting + contradicting)))
+        return Conflict(conflict_id=fusion_conflict_id(subject, kind, refs), conflict_type=kind, subject_id=subject, supporting_evidence_refs=tuple(sorted(set(supporting))), contradicting_evidence_refs=tuple(sorted(set(contradicting))), explanation=explanation, policy_rule=rule, scope_id="subject:" + stable_digest(subject)[:20], provenance="application.evidence_fusion:evidence-fusion-v2")
 
     @staticmethod
     def _unique_conflicts(values: list[Conflict]) -> list[Conflict]:
-        output = {item.conflict_id: item for item in values}
-        return [output[key] for key in sorted(output)]
-
-    @staticmethod
-    def _bounded(values: list[Mapping[str, Any]], limit: int) -> list[Mapping[str, Any]]:
-        return sorted(values, key=lambda item: str(item.get("candidate_id", "")))[:limit]
+        unique = {item.conflict_id: item for item in values}
+        return [unique[key] for key in sorted(unique)]
 
     def _publish(self, result: Any) -> Any:
         if self.artifact_root is None:
@@ -535,14 +684,12 @@ class EvidenceFusionService:
             root.relative_to(project_root)
         except ValueError:
             raise ValueError("fusion artifact root must remain under the project root") from None
-        root.mkdir(parents=True, exist_ok=True)
-        for directory in ("relationships", "mappings", "conflicts", "bundles", "explanations", "failures", "manifests"):
-            (root / "evidence_fusion" / directory).mkdir(parents=True, exist_ok=True)
+        target_dir = root / "evidence_fusion" / "manifests"
+        target_dir.mkdir(parents=True, exist_ok=True)
         payload = result.model_dump(mode="json", exclude={"artifacts"})
         serialized = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-        target = root / "evidence_fusion" / "manifests" / f"{result.request.execution_context_id}.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("wb", dir=target.parent, prefix=".fusion-", suffix=".tmp", delete=False) as handle:
+        target = target_dir / f"{result.request.execution_context_id}.json"
+        with tempfile.NamedTemporaryFile("wb", dir=target_dir, prefix=".fusion-", suffix=".tmp", delete=False) as handle:
             temporary = Path(handle.name)
             handle.write(serialized)
             handle.flush()

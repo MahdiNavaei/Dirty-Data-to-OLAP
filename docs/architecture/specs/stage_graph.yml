@@ -101,7 +101,7 @@ stages:
     required: true
     dependencies: [PROFILING, DEPENDENCY_DISCOVERY, QUALITY_ANALYSIS]
     optional_dependencies: [SCHEMA_MATCHING, OPTIONAL_SEMANTIC_EVIDENCE, LEARNED_EVIDENCE]
-    input_artifact_types: [ProfileResult, DependencyResult, SchemaMatchResult when cross_source_mapping_scope, QualityResult, DeclaredConstraint, DomainAssertion, LLMEvidence, AppliedMLResult]
+    input_artifact_types: ["ProfileResult[]", "QualityResult[]", "DependencyResult[]", "SchemaMatchResult[] when cross_source_mapping_scope", DeclaredConstraint, SourceCatalog, DomainAssertion, "LLMEvidence[]", "AppliedMLResult[]", FusionSubjectBinding, ProducerEvidenceStatus]
     output_artifact_types: [EvidenceFusionResult, RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
     failure_consequence: FAILED; conflicts remain REVIEW_REQUIRED
     cacheable: true

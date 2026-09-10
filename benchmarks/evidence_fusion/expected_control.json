@@ -1,0 +1,8 @@
+{
+  "fixture_id": "step17-evidence-fusion-controls-v1",
+  "note": "Controls are for tests/evaluator only; this file is never loaded by fusion runtime.",
+  "cases": {
+    "A": {"review_only": true}, "B": {"conflict": "DECLARED_DATA_CONFLICT"}, "C": {"review_only": true}, "D": {"conflict": "TYPE_SEMANTIC_CONFLICT"}, "E": {"qualitative_warning": "low_cardinality_risk"}, "F": {"conflict": "SAMPLE_FULLSCAN_CONFLICT"}, "G": {"conflict": "MULTIPLE_TARGET_AMBIGUITY"}, "H": {"optional_absence": true}, "I": {"optional_absence": true}, "J": {"review_only": true}, "K": {"incomplete": true}, "L": {"scope_failure": true}, "M": {"collision_failure": true}, "N": {"review_only": true}, "O": {"conflict": "SEMANTIC_STRUCTURAL_CONFLICT"},
+    "M1": {"review_only": true}, "M2": {"review_only": true}, "M3": {"review_only": true}, "M4": {"review_only": true}, "M5": {"conflict": "TYPE_SEMANTIC_CONFLICT"}, "M6": {"conflict": "MULTIPLE_TARGET_AMBIGUITY"}, "M7": {"review_only": true}, "M8": {"review_only": true}
+  }
+}
