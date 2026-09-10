@@ -307,6 +307,7 @@ from .evidence_fusion import (
     EvidenceReliabilityState,
     EvidenceRole,
     EvidenceFusionResult,
+    ExpectedProducerResult,
     FusionArtifactReference,
     FusionAutomationPolicy,
     FusionBandPolicy,

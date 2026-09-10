@@ -6,13 +6,15 @@
   "score_semantics": "UNCALIBRATED_DECISION_SCORE",
   "automation": {"enabled": false, "auto_accept": false, "auto_reject": false, "requires_g5": true},
   "normalization_rules": [
-    {"rule_id": "bounded-01", "metric_names": ["type_compatibility", "quality_ratio"], "method": "identity_v1", "version": "1"},
-    {"rule_id": "matcher-rank", "metric_names": ["matcher_rank"], "method": "ordinal_presence_v1", "version": "1"},
+    {"rule_id": "bounded-01", "metric_names": ["quality_ratio"], "method": "identity_v1", "version": "1"},
+    {"rule_id": "compatibility-01", "metric_names": ["type_compatibility"], "method": "compatibility_strength_v1", "version": "1"},
+    {"rule_id": "matcher-rank", "metric_names": ["matcher_rank:coma", "matcher_rank:cupid"], "method": "ordinal_presence_v1", "version": "1"},
     {"rule_id": "qualitative-only", "metric_names": ["semantic_hypothesis", "domain_assertion"], "method": "qualitative_only_v1", "version": "1"}
   ],
   "scoring_dimensions": [
-    {"dimension_id": "matcher_rank", "metric_names": ["matcher_rank"], "weight": 1.0, "normalization_rule_id": "matcher-rank", "dependency_group": "matcher_rank", "required": true},
-    {"dimension_id": "type_compatibility", "metric_names": ["type_compatibility"], "weight": 0.75, "normalization_rule_id": "bounded-01", "dependency_group": "type_compatibility", "required": true}
+    {"dimension_id": "matcher:coma:rank", "metric_names": ["matcher_rank:coma"], "weight": 1.0, "normalization_rule_id": "matcher-rank", "dependency_group": "matcher:coma", "required": false},
+    {"dimension_id": "matcher:cupid:rank", "metric_names": ["matcher_rank:cupid"], "weight": 1.0, "normalization_rule_id": "matcher-rank", "dependency_group": "matcher:cupid", "required": false},
+    {"dimension_id": "type_compatibility", "metric_names": ["type_compatibility"], "weight": 0.75, "normalization_rule_id": "compatibility-01", "dependency_group": "type_compatibility", "required": true}
   ],
   "band_policy": [
     {"band": "HIGH", "minimum": 0.75},
@@ -20,8 +22,8 @@
     {"band": "LOW", "maximum": 0.4}
   ],
   "conflict_rules": [
-    {"rule_id": "semantic-structural", "conflict_type": "SEMANTIC_STRUCTURAL_CONFLICT", "semantics": "semantic support plus relevant structural contradiction"},
-    {"rule_id": "type-semantic", "conflict_type": "TYPE_SEMANTIC_CONFLICT", "semantics": "incompatible type plus semantic or matcher support"},
+    {"rule_id": "semantic-structural", "conflict_type": "SEMANTIC_STRUCTURAL_CONFLICT", "semantics": "semantic support plus relevant structural contradiction", "eligible_metric_names": ["type_compatibility"], "eligible_families": ["SCHEMA_MATCHING"]},
+    {"rule_id": "type-semantic", "conflict_type": "TYPE_SEMANTIC_CONFLICT", "semantics": "incompatible type plus semantic or matcher support", "eligible_metric_names": ["type_compatibility"], "eligible_families": ["SCHEMA_MATCHING"]},
     {"rule_id": "multiple-target", "conflict_type": "MULTIPLE_TARGET_AMBIGUITY", "semantics": "competing target candidate changes applicability"}
   ],
   "required_producer_families": ["PROFILE", "QUALITY", "DEPENDENCY"],

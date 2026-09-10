@@ -233,6 +233,8 @@ class FusionConflictRule(_SourceModel):
     conflict_type: ConflictType
     threshold: float | None = Field(default=None, ge=0, le=1)
     semantics: str = Field(min_length=1)
+    eligible_metric_names: tuple[str, ...] = ()
+    eligible_families: tuple[EvidenceFamily, ...] = ()
 
 
 class FusionAutomationPolicy(_SourceModel):
@@ -275,6 +277,11 @@ class FusionPolicyReference(_SourceModel):
         rule_ids = {item.rule_id for item in self.normalization_rules}
         if any(item.normalization_rule_id not in rule_ids for item in self.scoring_dimensions):
             raise ValueError("every scoring dimension must reference a declared normalization rule")
+        rules = {item.rule_id: item for item in self.normalization_rules}
+        for dimension in self.scoring_dimensions:
+            rule = rules[dimension.normalization_rule_id]
+            if not set(dimension.metric_names).issubset(set(rule.metric_names)):
+                raise ValueError(f"scoring dimension {dimension.dimension_id} contains metrics not accepted by its normalization rule")
         return self
 
 
@@ -367,7 +374,7 @@ class SemanticMappingDecision(_SourceModel):
     def source_to_source_only(self) -> "SemanticMappingDecision":
         if self.source_id == self.target_source_id and self.source_column_id == self.target_column_id:
             raise ValueError("semantic mappings must be cross-source hypotheses")
-        if self.decision_state is not DecisionState.REVIEW_REQUIRED:
+        if self.decision_state not in {DecisionState.REVIEW_REQUIRED, DecisionState.INCOMPLETE_REQUIRED_EVIDENCE}:
             raise ValueError("semantic mappings are review-only in Step17")
         return self
 
@@ -379,6 +386,14 @@ class ProducerEvidenceStatus(_SourceModel):
     result_id: str = Field(min_length=1)
     detail: str = ""
     input_fingerprint: str | None = None
+    source_ids: tuple[str, ...] = ()
+    snapshot_by_source: Mapping[str, str] = {}
+
+
+class ExpectedProducerResult(_SourceModel):
+    family: EvidenceFamily
+    producer_id: str = Field(min_length=1)
+    result_id: str = Field(min_length=1)
     source_ids: tuple[str, ...] = ()
     snapshot_by_source: Mapping[str, str] = {}
 
@@ -452,6 +467,7 @@ class EvidenceFusionRequest(_SourceModel):
     fusion_contract_version: str = "step17-fusion-v2"
     policy: FusionPolicyReference
     expected_producer_result_ids: Mapping[str, str] = Field(default_factory=dict)
+    expected_producer_results: tuple[ExpectedProducerResult, ...] = Field(default=(), max_length=128)
     max_relationship_candidates: int = Field(default=2_000, ge=1, le=100_000)
     max_mapping_candidates: int = Field(default=2_000, ge=1, le=100_000)
     max_evidence_per_subject: int = Field(default=128, ge=1, le=10_000)

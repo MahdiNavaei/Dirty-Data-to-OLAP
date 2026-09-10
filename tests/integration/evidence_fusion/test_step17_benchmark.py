@@ -28,7 +28,7 @@ def _run(case_id: str, runtime: dict):
         subject = "map:crm:customer_code<->erp:client_no"
         policy = EvidenceFusionService.load_policy("mapping")
         candidate_ids = (candidate["candidate_id"],)
-        evidence = [{"evidence_id": "matcher", "metric_name": "matcher_rank", "metric_value": 1.0, "direction": "SUPPORTS", "family": "SCHEMA_MATCHING", "score_dimension_id": "matcher_rank"}, {"evidence_id": "type", "metric_name": "type_compatibility", "metric_value": 1.0, "direction": "SUPPORTS", "family": "SCHEMA_MATCHING", "score_dimension_id": "type_compatibility"}]
+        evidence = [{"evidence_id": "matcher", "metric_name": "matcher_rank:coma", "metric_value": 1.0, "direction": "SUPPORTS", "family": "SCHEMA_MATCHING", "score_dimension_id": "matcher:coma:rank"}, {"evidence_id": "type", "metric_name": "type_compatibility", "metric_value": 1.0, "direction": "SUPPORTS", "family": "SCHEMA_MATCHING", "score_dimension_id": "type_compatibility"}]
         snapshot_map = {"crm": "snap-crm", "erp": "snap-erp"}
     else:
         candidate = dict(defaults["relationship_candidate"], candidate_id=case_id + "-candidate")
@@ -42,6 +42,8 @@ def _run(case_id: str, runtime: dict):
         declared = (DeclaredConstraintInput(constraint_id="declared-fk", constraint_type="FOREIGN_KEY", source_id="src", from_table="orders", from_columns=("customer_id",), to_table="customers", to_columns=("id",), scope_id="catalog:src"),)
     if override.get("semantic_support"):
         evidence.append({"evidence_id": "semantic", "metric_name": "semantic_hypothesis", "metric_value": None, "direction": "SUPPORTS", "family": "SEMANTIC_AI", "score_bearing": False, "qualitative_text": "qualitative candidate hypothesis"})
+    if override.get("ml_disagreement"):
+        evidence.append({"evidence_id": "ml-disagreement", "metric_name": "learned_rank", "metric_value": .99, "direction": "SUPPORTS", "family": "APPLIED_ML", "score_bearing": False, "qualitative_text": "experimental learned ranking retained as non-score evidence"})
     if override.get("domain_assertion"):
         evidence.append({"evidence_id": "domain", "metric_name": "domain_assertion", "metric_value": None, "direction": "CONTEXT", "family": "DOMAIN_ASSERTION", "score_bearing": False, "qualitative_text": "domain context"})
     if override.get("low_cardinality"):
@@ -49,6 +51,10 @@ def _run(case_id: str, runtime: dict):
     if override.get("type_conflict"):
         evidence = [item for item in evidence if item["metric_name"] != "type_compatibility"]
         evidence.append({"evidence_id": "type", "metric_name": "type_compatibility", "metric_value": 0.0, "direction": "CONTRADICTS", "family": "SCHEMA_MATCHING", "score_dimension_id": "type_compatibility"})
+    if override.get("matcher_disagreement"):
+        evidence.append({"evidence_id": "matcher-cupid", "metric_name": "matcher_rank:cupid", "metric_value": .7, "direction": "SUPPORTS", "family": "SCHEMA_MATCHING", "score_dimension_id": "matcher:cupid:rank"})
+    if override.get("structural_contradiction"):
+        evidence.append({"evidence_id": "structural-contradiction", "metric_name": "orphan_ratio", "metric_value": .7, "direction": "CONTRADICTS", "family": "DEPENDENCY", "score_dimension_id": "inclusion"})
     if override.get("sample_full"):
         evidence.append({"evidence_id": "coverage-sample", "metric_name": "inclusion_coverage", "metric_value": .1, "direction": "SUPPORTS", "family": "DEPENDENCY", "score_dimension_id": "inclusion", "reliability": "SAMPLED"})
     if override.get("collision"):

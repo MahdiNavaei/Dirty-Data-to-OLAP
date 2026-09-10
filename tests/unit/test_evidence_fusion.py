@@ -144,7 +144,7 @@ def test_actual_applied_ml_evidence_binds_to_relationship_subject_without_scorin
 
     schema = MLFeatureSchema(schema_id="schema", task=MLTask.RELATIONSHIP_CANDIDATE_RANKING, features=(MLFeatureDefinition(feature_id="coverage", family=MLFeatureFamily.DEPENDENCY, source_contract="DependencyResult", missing_semantics="missing", version="1"),))
     learned = LearnedRankingEvidence(evidence_id="ml-evidence", candidate_id="rel-1", model_id="model", feature_schema_id=schema.schema_id, ranking_score=.99, rank=1, model_status=MLModelStatus.EXPERIMENTAL, input_evidence_refs=("coverage",))
-    ml = AppliedMLResult.model_construct(task=MLTask.RELATIONSHIP_CANDIDATE_RANKING, status=MLStageStatus.EXECUTED_EXPERIMENTAL, feature_schema=schema, learned_evidence=(learned,), capability=MLCapability(capability_id="cap", available=True, engine="test", version="1", detail="test"))
+    ml = AppliedMLResult(task=MLTask.RELATIONSHIP_CANDIDATE_RANKING, status=MLStageStatus.EXECUTED_EXPERIMENTAL, feature_schema=schema, learned_evidence=(learned,), capability=MLCapability(capability_id="cap", available=True, engine="test", version="1", detail="test"))
     base_inputs = EvidenceFusionInputs(producer_statuses=_statuses(), relationship_candidates=(_candidate(),), evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0)))
     base = EvidenceFusionService().fuse(_request(), base_inputs)
     with_ml = EvidenceFusionService().fuse(_request(), base_inputs, applied_ml_result=ml)
@@ -167,12 +167,31 @@ def test_multiple_target_and_producer_state_change_replay_identity():
     assert stale.completeness is EvidenceFusionCompleteness.INCOMPLETE_REQUIRED_EVIDENCE
 
 
+def test_multiple_expected_results_and_duplicate_fingerprints_are_explicit():
+    from dirty_data_to_olap.application.evidence_fusion import _producer_state
+    from dirty_data_to_olap.domain.contracts.evidence_fusion import ExpectedProducerResult
+
+    assert _producer_state(type("Result", (), {"status": "NOT_CONFIGURED"})()) is ProducerResultState.NOT_CONFIGURED
+    first = ProducerEvidenceStatus(producer_id="profiling", family=EvidenceFamily.PROFILE, state=ProducerResultState.COMPLETE, result_id="profile-a", input_fingerprint="fingerprint-a")
+    second = first.model_copy(update={"input_fingerprint": "fingerprint-b"})
+    expected = (ExpectedProducerResult(family=EvidenceFamily.PROFILE, producer_id="profiling", result_id="profile-a"), ExpectedProducerResult(family=EvidenceFamily.PROFILE, producer_id="profiling", result_id="profile-b"))
+    statuses = _statuses() + (first, second)
+    result = EvidenceFusionService().fuse(EvidenceFusionRequest(request_id="expected", execution_context_id="expected", relationship_candidate_ids=("rel-1",), policy=EvidenceFusionService.load_policy(), expected_producer_results=expected), EvidenceFusionInputs(producer_statuses=statuses, relationship_candidates=(_candidate(),), evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0))))
+    assert any(item.kind is FusionFailureKind.STALE_EVIDENCE for item in result.failures)
+    assert any("profile-b" in item.detail for item in result.failures)
+
+
 def test_actual_semantic_result_requires_explicit_subject_binding_and_stays_qualitative():
-    from dirty_data_to_olap.domain.contracts.semantic_ai import LLMEvidence, SemanticContextManifest, SemanticEvidenceResult, SemanticHypothesis, SemanticHypothesisKind, SemanticSupportState
+    from dirty_data_to_olap.domain.contracts.semantic_ai import LLMEvidence, SemanticAuthorization, SemanticCapability, SemanticCapabilityStatus, SemanticContextManifest, SemanticEvidenceResult, SemanticGenerationReference, SemanticHypothesis, SemanticHypothesisKind, SemanticPromptReference, SemanticProviderReference, SemanticSupportState, SemanticTask
 
     context = SemanticContextManifest(manifest_id="manifest", subject_refs=("upstream-rel",), requested_evidence_refs=(), provided_context_item_refs=(), allowed_provider_evidence_refs=("coverage",), items=(), input_char_count=0, context_builder_version="1", input_fingerprint="context")
-    evidence = LLMEvidence.model_construct(evidence_id="llm-evidence", request_id="semantic-request", subject_refs=("upstream-rel",), hypotheses=(SemanticHypothesis(hypothesis_id="hypothesis", kind=SemanticHypothesisKind.SUPPORTS_HYPOTHESIS, statement="candidate relationship is plausible"),), context_manifest=context)
-    semantic = SemanticEvidenceResult.model_construct(request_id="semantic-request", state=SemanticSupportState.CANDIDATE_ONLY, evidence=evidence)
+    provider = SemanticProviderReference(provider="fixture", api_version="1", endpoint="http://127.0.0.1", model="fixture", model_digest="digest")
+    task = SemanticTask.RELATIONSHIP_SEMANTIC_HYPOTHESIS
+    prompt = SemanticPromptReference(prompt_version="v1", system_prompt_hash="system", task_template_hash="task", schema_version="schema", context_builder_version="1", prompt_hash="prompt")
+    authorization = SemanticAuthorization(authorization_id="auth", policy_id="policy", policy_version="1", request_id="semantic-request", task=task, context_manifest_fingerprint=context.input_fingerprint, subject_refs=("upstream-rel",), evidence_refs=("coverage",), model="fixture", model_digest="digest", prompt_version="v1")
+    generation = SemanticGenerationReference(temperature=0, seed=1, num_predict=64, timeout_seconds=1, retry_count=0, stream=False, think=False, structured_schema_id="schema", structured_schema_hash="schema-hash", config_fingerprint="config")
+    evidence = LLMEvidence(evidence_id="llm-evidence", request_id="semantic-request", task=task, subject_refs=("upstream-rel",), hypotheses=(SemanticHypothesis(hypothesis_id="hypothesis", kind=SemanticHypothesisKind.SUPPORTS_HYPOTHESIS, statement="candidate relationship is plausible"),), provider=provider, prompt=prompt, context_manifest=context, authorization=authorization, generation=generation, response_hash="response")
+    semantic = SemanticEvidenceResult(request_id="semantic-request", state=SemanticSupportState.CANDIDATE_ONLY, evidence=evidence, capability=SemanticCapability(capability_id="capability", status=SemanticCapabilityStatus.AVAILABLE, provider="fixture", model="fixture", detail="fixture"))
     binding = FusionSubjectBinding(upstream_subject_ref="upstream-rel", candidate_id="rel-1", fusion_subject_id="rel:orders:customer_id->customers:id", binding_basis="explicit_candidate_id", evidence_refs=("coverage",))
     inputs = EvidenceFusionInputs(producer_statuses=_statuses(), relationship_candidates=(_candidate(),), evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0)), subject_bindings=(binding,))
     result = EvidenceFusionService().fuse(_request(), inputs, semantic_results=(semantic,))
@@ -180,23 +199,47 @@ def test_actual_semantic_result_requires_explicit_subject_binding_and_stays_qual
     assert signal.role is EvidenceRole.DERIVED_INTERPRETATION and not signal.score_bearing and signal.normalized_value is None
 
 
-def test_actual_profile_quality_and_repair_contracts_are_consumed_and_forwarded():
-    from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, ProfileMode, ProfileObservationScope, ProfileRequest, ProfileResult, ProfileObservationStatus, TableProfile
-    from dirty_data_to_olap.domain.contracts.quality import DetectionBasis, QualityDimension, QualityIssue, QualityIssueStatus, QualityResult, QualitySeverity, MeasurementSemantics, RepairProposal, RepairProposalStatus, Repairability
-    from dirty_data_to_olap.domain.contracts.source import SourceTableKind, TableObservationStatus
+def test_semantic_multiple_subject_refs_must_resolve_to_one_subject():
+    from dirty_data_to_olap.domain.contracts.semantic_ai import LLMEvidence, SemanticContextManifest, SemanticEvidenceResult, SemanticHypothesis, SemanticHypothesisKind, SemanticSupportState
 
-    scope = ProfileObservationScope.model_construct(source_snapshot_mode="FULL", source_snapshot_was_bounded=False, source_table_observation_status=TableObservationStatus.FULLY_OBSERVED, source_rows_observed=10, rows_available_in_snapshot=10, rows_profiled=10, profiling_mode=ProfileMode.FULL, sample_method="none", all_available_staged_rows_covered=True, completeness=ProfileObservationStatus.FULLY_OBSERVED)
-    table = TableProfile.model_construct(profile_id="profile-orders", source_id="src", snapshot_id="snap", table_id="orders", table_kind=SourceTableKind.TABLE, observation_scope=scope, rows_available_in_snapshot=10, rows_profiled=10, column_profile_refs=(), duplicate_row_count=0, duplicate_observation_complete=True, provenance=None, status=ProfileCompleteness.COMPLETE)
-    profile = ProfileResult.model_construct(profile_request=ProfileRequest(profile_request_id="profile-result", source_id="src", snapshot_id="snap", selected_table_ids=("orders",), mode=ProfileMode.FULL), tables=(table,), columns=(), patterns=(), failures=(), completeness=ProfileCompleteness.COMPLETE)
-    issue = QualityIssue.model_construct(issue_id="quality-issue", issue_type="REQUIRED_VALUE_MISSING", quality_dimension=QualityDimension.COMPLETENESS, entity_type="table", entity_id="orders", source_id="src", snapshot_id="snap", table_id="orders", column_ids=(), rule_id="rule", severity=QualitySeverity.HIGH, detection_basis=DetectionBasis.EXACT_MEASUREMENT, measurement_semantics=MeasurementSemantics.EXACT_ON_FULL_SNAPSHOT_SCOPE, observation_scope=scope, affected_count=1, affected_ratio=.1, affected_record_refs=(), affected_rows_estimate=1, evidence_refs=(), profile_refs=("profile-orders",), declared_constraint_refs=(), domain_assertion_refs=(), repairability=Repairability.REVIEW_REQUIRED, repair_proposal_refs=("proposal-1",), status=QualityIssueStatus.OPEN, provenance="quality")
-    proposal = RepairProposal.model_construct(proposal_id="proposal-1", issue_refs=("quality-issue",), table_id="orders", column_ids=(), status=RepairProposalStatus.PROPOSED)
-    quality = QualityResult.model_construct(quality_run_id="quality-result", source_id="src", snapshot_id="snap", issues=(issue,), repair_proposals=(proposal,), completeness="COMPLETE")
+    context = SemanticContextManifest(manifest_id="manifest-multi", subject_refs=("upstream-rel", "upstream-rel-2"), requested_evidence_refs=(), provided_context_item_refs=(), allowed_provider_evidence_refs=(), items=(), input_char_count=0, context_builder_version="1", input_fingerprint="context-multi")
+    evidence = LLMEvidence.model_construct(evidence_id="llm-multi", request_id="semantic-multi", subject_refs=("upstream-rel", "upstream-rel-2"), hypotheses=(SemanticHypothesis(hypothesis_id="hypothesis-multi", kind=SemanticHypothesisKind.SUPPORTS_HYPOTHESIS, statement="ambiguous candidate"),), context_manifest=context)
+    semantic = SemanticEvidenceResult.model_construct(request_id="semantic-multi", state=SemanticSupportState.CANDIDATE_ONLY, evidence=evidence)
+    bindings = (FusionSubjectBinding(upstream_subject_ref="upstream-rel", candidate_id="rel-1", fusion_subject_id="rel:orders:customer_id->customers:id", binding_basis="explicit"), FusionSubjectBinding(upstream_subject_ref="upstream-rel-2", candidate_id="rel-2", fusion_subject_id="rel:orders:customer_id->clients:id", binding_basis="explicit"))
+    candidates = (_candidate(), _candidate("rel-2", "clients"))
+    inputs = EvidenceFusionInputs(producer_statuses=_statuses(), relationship_candidates=candidates, evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0)), subject_bindings=bindings)
+    result = EvidenceFusionService().fuse(EvidenceFusionRequest(request_id="semantic-multi", execution_context_id="semantic-multi", relationship_candidate_ids=("rel-1", "rel-2"), policy=EvidenceFusionService.load_policy()), inputs, semantic_results=(semantic,))
+    assert any(item.kind is FusionFailureKind.SUBJECT_BINDING_ERROR for item in result.failures)
+
+
+def test_actual_profile_quality_and_repair_contracts_are_consumed_and_forwarded():
+    from datetime import datetime, timezone
+    from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, ProfileMode, ProfileObservationScope, ProfileProvenance, ProfileRequest, ProfileResult, ProfileObservationStatus, TableProfile
+    from dirty_data_to_olap.domain.contracts.quality import DetectionBasis, QualityDimension, QualityIssue, QualityIssueStatus, QualityResult, QualitySeverity, MeasurementSemantics, RepairProposal, RepairProposalStatus, RepairValidationPlan, Repairability
+    from dirty_data_to_olap.domain.contracts.source import AdapterReference, SourceTableKind, TableObservationStatus
+
+    scope = ProfileObservationScope(source_snapshot_mode="FULL", source_snapshot_was_bounded=False, source_table_observation_status=TableObservationStatus.FULLY_OBSERVED, source_rows_observed=10, rows_available_in_snapshot=10, rows_profiled=10, profiling_mode=ProfileMode.FULL, sample_method="none", all_available_staged_rows_covered=True, completeness=ProfileObservationStatus.FULLY_OBSERVED)
+    provenance = ProfileProvenance(execution_context_id="profile-exec", source_id="src", snapshot_id="snap", table_id="orders", schema_fingerprint="schema", input_batch_ids=("batch",), input_batch_hashes=("hash",), profiling_adapter=AdapterReference(name="fixture-profiler", version="1", config_fingerprint="config"), dataprofiler_version="fixture", profile_config_hash="profile-config", created_at=datetime(2026, 9, 11, tzinfo=timezone.utc))
+    table = TableProfile(profile_id="profile-orders", source_id="src", snapshot_id="snap", table_id="orders", table_kind=SourceTableKind.TABLE, observation_scope=scope, rows_available_in_snapshot=10, rows_profiled=10, column_profile_refs=(), duplicate_row_count=0, duplicate_observation_complete=True, provenance=provenance, status=ProfileCompleteness.COMPLETE)
+    profile = ProfileResult(profile_request=ProfileRequest(profile_request_id="profile-result", source_id="src", snapshot_id="snap", selected_table_ids=("orders",), mode=ProfileMode.FULL), tables=(table,), columns=(), patterns=(), failures=(), completeness=ProfileCompleteness.COMPLETE)
+    issue = QualityIssue(issue_id="quality-issue", issue_type="REQUIRED_VALUE_MISSING", quality_dimension=QualityDimension.COMPLETENESS, entity_type="table", entity_id="orders", source_id="src", snapshot_id="snap", table_id="orders", column_ids=(), rule_id="rule", severity=QualitySeverity.HIGH, detection_basis=DetectionBasis.EXACT_MEASUREMENT, measurement_semantics=MeasurementSemantics.EXACT_ON_FULL_SNAPSHOT_SCOPE, observation_scope=scope, affected_count=1, affected_ratio=.1, affected_record_refs=(), affected_rows_estimate=1, evidence_refs=(), profile_refs=("profile-orders",), declared_constraint_refs=(), domain_assertion_refs=(), repairability=Repairability.REVIEW_REQUIRED, repair_proposal_refs=("proposal-1",), status=QualityIssueStatus.OPEN, provenance="quality")
+    plan = RepairValidationPlan(plan_id="plan-1", remeasure_metrics=("completeness",), invariants=("row_count_preserved",), row_accounting_expectation="preserve", abort_conditions=("new_issue",), lineage_requirements=("quality-issue",), expected_improvement=("fewer_missing",), forbidden_new_issues=("type_mismatch",))
+    proposal = RepairProposal(proposal_id="proposal-1", issue_refs=("quality-issue",), repair_type="review_missing", repairability=Repairability.REVIEW_REQUIRED, target_layer="staged", affected_entity_type="table", table_id="orders", column_ids=(), affected_record_refs=(), transform_id="review", transform_version="1", preconditions=("review_required",), expected_effect="review", risk_notes=("none",), lineage_requirement="retain", row_accounting_requirement="preserve", validation_plan=plan, review_required=True, status=RepairProposalStatus.PROPOSED, provenance="quality")
+    quality = QualityResult(quality_run_id="quality-result", source_id="src", snapshot_id="snap", rule_set_id="rules", rule_set_version="1", issues=(issue,), repair_proposals=(proposal,), rule_evaluations=(), failures=(), dimension_summaries=(), input_profile_refs=("profile-orders",), input_batch_ids=("batch",), input_batch_hashes=("hash",), provenance="quality", completeness="COMPLETE")
     inputs = EvidenceFusionInputs(producer_statuses=(ProducerEvidenceStatus(producer_id="dependency", family=EvidenceFamily.DEPENDENCY, state=ProducerResultState.COMPLETE, result_id="dependency-result"),), relationship_candidates=(_candidate(),), evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0)))
     result = EvidenceFusionService().fuse(_request(), inputs, profile_result=profile, quality_result=quality)
     bundle = result.bundles[0]
     assert any(item.family is EvidenceFamily.PROFILE for item in bundle.signals)
     assert any(item.family is EvidenceFamily.QUALITY and "quality-issue" in item.derived_from_refs for item in bundle.signals)
     assert result.forwarded_repair_proposal_refs == ("proposal-1",)
+    unrelated_profile = profile.model_copy(update={"tables": (table.model_copy(update={"table_id": "order"}),)})
+    unrelated_issue = issue.model_copy(update={"table_id": "order", "column_ids": ("id",)})
+    unrelated_proposal = proposal.model_copy(update={"table_id": "order", "column_ids": ("id",)})
+    unrelated_quality = quality.model_copy(update={"issues": (unrelated_issue,), "repair_proposals": (unrelated_proposal,)})
+    isolated = EvidenceFusionService().fuse(_request(), inputs, profile_result=unrelated_profile, quality_result=unrelated_quality)
+    isolated_ids = {item.evidence_id for item in isolated.bundles[0].signals}
+    assert not any(item.startswith("profile:profile-orders") or item.startswith("quality:quality-issue") for item in isolated_ids)
+    assert isolated.forwarded_repair_proposal_refs == ()
 
 
 def test_actual_schema_match_snapshot_mapping_is_source_specific():
@@ -218,3 +261,41 @@ def test_actual_schema_match_snapshot_mapping_is_source_specific():
     broken = broken.model_copy(update={"candidates": (broken_candidate,)})
     mismatched = EvidenceFusionService().fuse(EvidenceFusionRequest(request_id="mapping-bad", execution_context_id="mapping-bad", cross_source_mapping_scope=True, relationship_candidate_ids=(), mapping_candidate_ids=("map-1",), policy=EvidenceFusionService.load_policy("mapping")), inputs, schema_match_result=broken)
     assert any(item.kind is FusionFailureKind.SNAPSHOT_SCOPE_MISMATCH for item in mismatched.failures)
+
+
+def test_optional_declared_dimension_has_a_valid_shared_denominator():
+    declared = DeclaredConstraintInput(constraint_id="fk-optional", constraint_type="FOREIGN_KEY", source_id="src", from_table="orders", from_columns=("customer_id",), to_table="customers", to_columns=("id",), scope_id="catalog:src")
+    evidence = (_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0))
+    result = EvidenceFusionService().fuse(_request(), EvidenceFusionInputs(producer_statuses=_statuses(), relationship_candidates=(_candidate(),), declared_constraints=(declared,), evidence_items=evidence))
+    score = result.relationships[0].score
+    assert score.eligible_weight == 3.75
+    assert score.observed_weight == 3.75
+    assert score.evidence_coverage == 1.0
+    assert score.value == round((.8 + .9 + .75 + 1.0) / 3.75, 12)
+    assert -1 <= score.value <= 1
+
+
+def test_type_compatibility_has_material_adverse_normalization():
+    compatible = EvidenceFusionService().fuse(_request(), EvidenceFusionInputs(producer_statuses=_statuses(), relationship_candidates=(_candidate(),), evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 1.0))))
+    incompatible = EvidenceFusionService().fuse(_request(), EvidenceFusionInputs(producer_statuses=_statuses(), relationship_candidates=(_candidate(),), evidence_items=(_item("coverage", "inclusion_coverage", .8), _item("unique", "target_uniqueness", .9), _item("type", "type_compatibility", 0.0, EvidenceDirection.CONTRADICTS))))
+    good = next(item for item in compatible.relationships[0].score.contributions if item == "type_compatibility")
+    assert compatible.relationships[0].score.contributions[good] == .75
+    assert incompatible.relationships[0].score.contributions[good] == -.75
+    assert incompatible.relationships[0].score.contributions[good] != 0
+
+
+def test_matcher_families_are_independent_and_order_invariant():
+    candidate = {"candidate_id": "map-order", "source_id": "crm", "source_column_id": "customer_code", "target_source_id": "erp", "target_column_id": "client_no"}
+    subject = "map:crm:customer_code<->erp:client_no"
+    matcher_coma = _item("coma", "matcher_rank:coma", 1.0, subject=subject, family=EvidenceFamily.SCHEMA_MATCHING, score=True).model_copy(update={"score_dimension_id": "matcher:coma:rank"})
+    matcher_cupid = _item("cupid", "matcher_rank:cupid", 2.0, subject=subject, family=EvidenceFamily.SCHEMA_MATCHING, score=True).model_copy(update={"score_dimension_id": "matcher:cupid:rank"})
+    type_signal = _item("mapping-type", "type_compatibility", 1.0, subject=subject, family=EvidenceFamily.SCHEMA_MATCHING, score=True).model_copy(update={"score_dimension_id": "type_compatibility"})
+    statuses = _statuses(schema=True)
+    one = EvidenceFusionService().fuse(_request(mapping=True, relationship_ids=(), mapping_ids=("map-order",)), EvidenceFusionInputs(producer_statuses=statuses, mapping_candidates=(candidate,), evidence_items=(matcher_coma, matcher_cupid, type_signal)))
+    two = EvidenceFusionService().fuse(_request(mapping=True, relationship_ids=(), mapping_ids=("map-order",)), EvidenceFusionInputs(producer_statuses=statuses, mapping_candidates=(candidate,), evidence_items=(type_signal, matcher_cupid, matcher_coma)))
+    one_signal_set = {(item.raw_metric_name, item.normalized_value) for item in one.signals if item.family is EvidenceFamily.SCHEMA_MATCHING}
+    two_signal_set = {(item.raw_metric_name, item.normalized_value) for item in two.signals if item.family is EvidenceFamily.SCHEMA_MATCHING}
+    assert {"matcher_rank:coma", "matcher_rank:cupid", "type_compatibility"} <= {item[0] for item in one_signal_set}
+    assert one_signal_set == two_signal_set
+    assert one.mappings[0].score == two.mappings[0].score
+    assert one.mappings[0].decision_id == two.mappings[0].decision_id

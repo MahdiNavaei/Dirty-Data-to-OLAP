@@ -16,6 +16,7 @@ from dirty_data_to_olap.domain.contracts.evidence_fusion import (
     EvidenceDirection, EvidenceFamily, EvidenceFusionInputs, EvidenceFusionRequest,
     EvidencePresenceState, EvidenceReliabilityState, EvidenceRole, FusionEvidenceItem,
     FusionFailureKind, FusionPolicyStatus, ProducerEvidenceStatus, ProducerResultState,
+    ExpectedProducerResult,
 )
 
 
@@ -43,6 +44,25 @@ def _relationship_items(subject):
     return (_item("coverage", subject, "inclusion_coverage", .8, dimension="inclusion"), _item("orphan", subject, "orphan_ratio", .2, direction=EvidenceDirection.CONTRADICTS, dimension="inclusion"), _item("unique", subject, "target_uniqueness", .9, dimension="target_uniqueness"), _item("type", subject, "type_compatibility", 1.0, dimension="type_compatibility"))
 
 
+def _mapping_items(subject, *, reverse=False):
+    values = (
+        _item("coma", subject, "matcher_rank:coma", 1.0, family=EvidenceFamily.SCHEMA_MATCHING, dimension="matcher:coma:rank"),
+        _item("cupid", subject, "matcher_rank:cupid", .7, family=EvidenceFamily.SCHEMA_MATCHING, dimension="matcher:cupid:rank"),
+        _item("mapping-type", subject, "type_compatibility", 1.0, family=EvidenceFamily.SCHEMA_MATCHING, dimension="type_compatibility"),
+    )
+    if reverse:
+        values = tuple(reversed(values))
+    return tuple(item.model_copy(update={"source_ids": ("crm", "erp"), "snapshot_ids": ("snap-crm", "snap-erp"), "snapshot_by_source": {"crm": "snap-crm", "erp": "snap-erp"}}) for item in values)
+
+
+def _run_mapping(policy, evidence, *, execution="validator-mapping"):
+    candidate = _mapping_candidate()
+    subject = "map:crm:customer_code<->erp:client_no"
+    statuses = _statuses() + (ProducerEvidenceStatus(producer_id="schema", family=EvidenceFamily.SCHEMA_MATCHING, state=ProducerResultState.COMPLETE, result_id="schema-result"),)
+    request = EvidenceFusionRequest(request_id=execution, execution_context_id=execution, cross_source_mapping_scope=True, mapping_candidate_ids=(candidate["candidate_id"],), policy=policy)
+    return EvidenceFusionService().fuse(request, EvidenceFusionInputs(producer_statuses=statuses, mapping_candidates=(candidate,), evidence_items=evidence))
+
+
 def _run_relationship(policy, *, candidate=None, evidence=None, statuses=None, execution="validator"):
     candidate = candidate or _relationship_candidate()
     subject = "rel:orders:customer_id->" + candidate["to_table"] + ":id"
@@ -62,6 +82,18 @@ def main() -> int:
     clean = _run_relationship(relationship, execution="validator-clean")
     score = clean.relationships[0].score
     checks.append(("runtime policy drives exact independent dimensions", set(score.contributions) == {"inclusion", "target_uniqueness", "type_compatibility"} and score.eligible_weight == 2.75 and score.observed_weight == 2.75 and score.contributions["inclusion"] == .8))
+    checks.append(("every scoring metric is covered by its declared normalization rule", all(set(dimension.metric_names).issubset(next(rule for rule in relationship.normalization_rules if rule.rule_id == dimension.normalization_rule_id).metric_names) for dimension in relationship.scoring_dimensions) and all(set(dimension.metric_names).issubset(next(rule for rule in mapping.normalization_rules if rule.rule_id == dimension.normalization_rule_id).metric_names) for dimension in mapping.scoring_dimensions)))
+    declared_subject = subject
+    declared = _item("declared", declared_subject, "declared_foreign_key", 1.0, family=EvidenceFamily.DEPENDENCY, dimension="declared_constraint")
+    optional = _run_relationship(relationship, evidence=_relationship_items(subject) + (declared,), execution="validator-optional")
+    checks.append(("optional declared-FK evidence expands denominator only when observed", optional.relationships[0].score.eligible_weight == 3.75 and optional.relationships[0].score.observed_weight == 3.75 and optional.relationships[0].score.evidence_coverage == 1.0))
+    incompatible = _item("type-bad", subject, "type_compatibility", 0.0, family=EvidenceFamily.SCHEMA_MATCHING, direction=EvidenceDirection.CONTRADICTS, dimension="type_compatibility")
+    bad_type = _run_relationship(relationship, evidence=tuple(item for item in _relationship_items(subject) if item.evidence_id != "type") + (incompatible,), execution="validator-type")
+    checks.append(("incompatible type is a signed nonzero contribution", bad_type.relationships[0].score.contributions["type_compatibility"] < 0 and bad_type.relationships[0].score.value is not None))
+    mapping_subject = "map:crm:customer_code<->erp:client_no"
+    mapping_a = _run_mapping(mapping, _mapping_items(mapping_subject), execution="validator-matcher-a")
+    mapping_b = _run_mapping(mapping, _mapping_items(mapping_subject, reverse=True), execution="validator-matcher-b")
+    checks.append(("matcher families remain separate and order invariant", {item.raw_metric_name for item in mapping_a.signals} >= {"matcher_rank:coma", "matcher_rank:cupid"} and mapping_a.mappings[0].score == mapping_b.mappings[0].score and mapping_a.mappings[0].decision_id == mapping_b.mappings[0].decision_id))
     changed_dimensions = tuple(item.model_copy(update={"weight": 2.0}) if item.dimension_id == "inclusion" else item for item in relationship.scoring_dimensions)
     changed_policy = relationship.model_copy(update={"scoring_dimensions": changed_dimensions, "content_hash": "validator-policy-b"})
     changed = _run_relationship(changed_policy, execution="validator-policy-b")
@@ -81,6 +113,12 @@ def main() -> int:
     state_change = _run_relationship(relationship, statuses=_statuses(dependency=ProducerResultState.INCOMPLETE), execution="validator-state")
     checks.append(("required producer state changes completeness and identity", state_change.completeness.value == "INCOMPLETE_REQUIRED_EVIDENCE" and state_change.relationships[0].input_evidence_fingerprint != clean.relationships[0].input_evidence_fingerprint))
     checks.append(("all emitted decisions remain review-only", all(item.decision_state.value in {"REVIEW_REQUIRED", "INCOMPLETE_REQUIRED_EVIDENCE"} for item in (*clean.relationships, *mapping_result.mappings))))
+    expected = (ExpectedProducerResult(family=EvidenceFamily.PROFILE, producer_id="profile", result_id="profile-result"), ExpectedProducerResult(family=EvidenceFamily.PROFILE, producer_id="profile", result_id="missing-profile"))
+    expected_result = _run_relationship(relationship, execution="validator-expected", statuses=_statuses())
+    expected_result = EvidenceFusionService().fuse(EvidenceFusionRequest(request_id="validator-expected", execution_context_id="validator-expected", relationship_candidate_ids=("validator-rel",), policy=relationship, expected_producer_results=expected), EvidenceFusionInputs(producer_statuses=_statuses() + (ProducerEvidenceStatus(producer_id="profile", family=EvidenceFamily.PROFILE, state=ProducerResultState.COMPLETE, result_id="profile-result", input_fingerprint="different"),), relationship_candidates=(_relationship_candidate(),), evidence_items=_relationship_items(subject)))
+    checks.append(("producer identity and stale duplicate evidence are explicit", any(item.kind is FusionFailureKind.STALE_EVIDENCE for item in expected_result.failures) and any("missing-profile" in item.detail for item in expected_result.failures)))
+    from dirty_data_to_olap.application.evidence_fusion import _producer_state
+    checks.append(("NOT_CONFIGURED remains distinct from unavailable", _producer_state(type("NotConfigured", (), {"status": "NOT_CONFIGURED"})()) is ProducerResultState.NOT_CONFIGURED and _producer_state(type("Unavailable", (), {"status": "UNAVAILABLE"})()) is ProducerResultState.UNAVAILABLE))
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     checks.append(("G4 remains PASS and G5 remains PENDING", state["gates"]["G4_BOUNDED_INTELLIGENCE"] == "PASS" and state["gates"]["G5_INFERENCE_VALIDITY"] == "PENDING"))
     checks.append(("Step18 implementation is absent", not (ROOT / "src/dirty_data_to_olap/application/ml_evaluation.py").exists()))
@@ -102,11 +140,28 @@ def _yaml_matches_json(kind: str) -> bool:
     stem = "mapping_fusion_v1" if kind == "mapping" else "relationship_fusion_v1"
     data = json.loads((ROOT / "policies/evidence-fusion" / (stem + ".json")).read_text(encoding="utf-8"))
     human = yaml.safe_load((ROOT / "policies/evidence-fusion" / (stem + ".yml")).read_text(encoding="utf-8"))
-    dimensions = {item["dimension_id"]: item["weight"] for item in data["scoring_dimensions"]}
-    yaml_dimensions = {item["dimension_id"]: item["weight"] for item in human.get("scoring_dimensions", [])}
-    rules = [(item["rule_id"], item["conflict_type"], item.get("threshold")) for item in data.get("conflict_rules", [])]
-    yaml_rules = [(item["rule_id"], item["conflict_type"], item.get("threshold")) for item in human.get("conflict_rules", [])]
-    return data["policy_id"] == human["policy_id"] and str(data["version"]) == str(human["version"]) and data["status"] == human["status"] and dimensions == yaml_dimensions and rules == yaml_rules
+    def normalize_dimension(item):
+        return {key: item.get(key) for key in ("dimension_id", "metric_names", "weight", "normalization_rule_id", "dependency_group", "required")}
+
+    def normalize_rule(item):
+        return {key: item.get(key) for key in ("rule_id", "metric_names", "method", "version")}
+
+    def normalize_conflict(item):
+        return {key: item.get(key) for key in ("rule_id", "conflict_type", "threshold", "semantics", "eligible_metric_names", "eligible_families")}
+
+    dimensions = sorted((normalize_dimension(item) for item in data["scoring_dimensions"]), key=lambda item: item["dimension_id"])
+    yaml_dimensions = sorted((normalize_dimension(item) for item in human.get("scoring_dimensions", [])), key=lambda item: item["dimension_id"])
+    rules = sorted((normalize_rule(item) for item in data.get("normalization_rules", [])), key=lambda item: item["rule_id"])
+    yaml_rules = sorted((normalize_rule(item) for item in human.get("normalization_rules", [])), key=lambda item: item["rule_id"])
+    conflicts = sorted((normalize_conflict(item) for item in data.get("conflict_rules", [])), key=lambda item: item["rule_id"])
+    yaml_conflicts = sorted((normalize_conflict(item) for item in human.get("conflict_rules", [])), key=lambda item: item["rule_id"])
+    return (data["policy_id"] == human["policy_id"] and str(data["version"]) == str(human["version"])
+            and data["status"] == human["status"]
+            and dimensions == yaml_dimensions
+            and rules == yaml_rules
+            and conflicts == yaml_conflicts
+            and data.get("required_producer_families") == human.get("critical_evidence", {}).get("required_producers")
+            and bool(data.get("cross_source_mapping_requires_schema_matching")) == bool(human.get("critical_evidence", {}).get("cross_source_mapping_requires_schema_matching")))
 
 
 if __name__ == "__main__":
