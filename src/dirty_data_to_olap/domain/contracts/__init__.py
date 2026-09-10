@@ -261,6 +261,33 @@ from .applied_ml import (
     ml_linear_score,
     ml_model_config_hash,
 )
+from .semantic_ai import (
+    LLMEvidence,
+    SemanticArtifactReference,
+    SemanticAuthorization,
+    SemanticBudget,
+    SemanticCapability,
+    SemanticCapabilityStatus,
+    SemanticContextItem,
+    SemanticContextManifest,
+    SemanticEvidenceRequest,
+    SemanticEvidenceResult,
+    SemanticFailure,
+    SemanticFailureKind,
+    SemanticHypothesis,
+    SemanticHypothesisKind,
+    SemanticPrivacyContext,
+    SemanticPromptReference,
+    SemanticProviderHypothesis,
+    SemanticProviderOutput,
+    SemanticProviderPolicy,
+    SemanticProviderReference,
+    SemanticRepeatabilityObservation,
+    SemanticSafetyEvaluation,
+    SemanticSupportState,
+    SemanticTask,
+    semantic_evidence_id,
+)
 
 __all__ = [
     "BoundedSampleObservation",

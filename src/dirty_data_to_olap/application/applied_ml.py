@@ -40,18 +40,33 @@ from dirty_data_to_olap.domain.contracts.applied_ml import (
 from dirty_data_to_olap.domain.contracts.source import stable_digest
 
 
-def _baseline_score(vector: Any) -> float:
-    values = vector.values
-    score = (
-        0.30 * values["inclusion_coverage"]
-        + 0.20 * values["target_uniqueness_ratio"]
-        + 0.20 * values["type_compatible"]
-        + 0.15 * values["matcher_max_score"]
-        - 0.10 * values["ind_unmatched_ratio"]
-        - 0.10 * values["low_cardinality_risk"]
-        - 0.05 * values["dependency_bounded_scope"]
-    )
-    return float(score)
+def _value(vector: Any, feature_id: str) -> float:
+    return float(vector.values.get(feature_id, 0.0))
+
+
+def _structural_score(vector: Any) -> float:
+    return _value(vector, "inclusion_coverage") if "inclusion_coverage" not in vector.missing_feature_ids else 0.0
+
+
+def _uniqueness_score(vector: Any) -> float:
+    return _value(vector, "target_uniqueness_ratio") if "target_uniqueness_ratio" not in vector.missing_feature_ids else 0.0
+
+
+def _declared_score(vector: Any) -> float:
+    return _value(vector, "declared_fk_present") if "declared_fk_present" not in vector.missing_feature_ids else 0.0
+
+
+def _matcher_rank_score(vector: Any) -> float:
+    ranks = [_value(vector, key) for key in vector.values if key.endswith("_rank") and not key.endswith("_missing") and key.startswith("matcher_") and key not in vector.missing_feature_ids]
+    return 1.0 / min(ranks) if ranks else 0.0
+
+
+_BASELINES = (
+    ("ind_coverage", "IND coverage baseline", _structural_score),
+    ("target_uniqueness", "target uniqueness baseline", _uniqueness_score),
+    ("declared_constraint", "declared constraint baseline", _declared_score),
+    ("individual_matcher_rank", "individual matcher rank baseline", _matcher_rank_score),
+)
 
 
 def _zero_metrics() -> RankingMetrics:
@@ -124,22 +139,14 @@ class AppliedMLService:
         dataset_manifest = None
         split_manifest = None
         baseline_metrics = _zero_metrics()
-        baselines = (
+        baselines = tuple(
             MLBaselineEvaluation(
-                baseline_id="structural_source_backed_v1",
-                name="deterministic structural evidence baseline",
+                baseline_id=baseline_id,
+                name=name,
                 metrics=baseline_metrics,
-                ranked_candidate_ids=tuple(
-                    vector.candidate_id
-                    for vector in sorted(
-                        vectors, key=lambda item: (-_baseline_score(item), item.candidate_id)
-                    )
-                ),
-                limitations=(
-                    "baseline score is a ranking aid, not an acceptance decision",
-                    "missing aggregate evidence is not treated as positive evidence",
-                ),
-            ),
+                ranked_candidate_ids=tuple(vector.candidate_id for vector in sorted(vectors, key=lambda item: (-score_fn(item), item.candidate_id))),
+                limitations=("transparent single-family ranking aid only", "missing aggregate evidence is not treated as positive evidence"),
+            ) for baseline_id, name, score_fn in _BASELINES
         )
         if labels is None:
             return AppliedMLResult(
@@ -162,13 +169,11 @@ class AppliedMLService:
             )
             baseline_metrics = ranking_metrics(
                 dataset_rows,
-                _baseline_score,
+                _structural_score,
                 split_manifest=split_manifest,
                 split="test",
             )
-            baselines = (
-                baselines[0].model_copy(update={"metrics": baseline_metrics}),
-            )
+            baselines = tuple(item.model_copy(update={"metrics": ranking_metrics(dataset_rows, score_fn, split_manifest=split_manifest, split="test")}) for item, (_, _, score_fn) in zip(baselines, _BASELINES))
         except ValueError as exc:
             return AppliedMLResult(
                 task=MLTask.RELATIONSHIP_CANDIDATE_RANKING,
@@ -249,9 +254,21 @@ class AppliedMLService:
                     ranker.score,
                     split_manifest=split_manifest,
                     split="train",
-                )
+                ),
+                "validation_metrics": ranking_metrics(dataset_rows, ranker.score, split_manifest=split_manifest, split="validation"),
+                "test_metrics": ranking_metrics(dataset_rows, ranker.score, split_manifest=split_manifest, split="test"),
+                "reverse_pair_leakage_status": "PASS_GROUPS_SHARED_BY_LOGICAL_PAIR",
             }
         )
+        shuffled_rows = tuple(row.model_copy(update={"label": row.label.model_copy(update={"label": 1 - row.label.label})}) for row in dataset_rows)
+        shuffle_metrics = None
+        try:
+            shuffled_ranker = SklearnRelationshipRanker(feature_schema, random_seed=self.random_seed + 1)
+            shuffled_ranker.train(shuffled_rows, split_manifest=split_manifest, dataset_manifest=dataset_manifest, model_id="label-shuffle-control")
+            shuffle_metrics = ranking_metrics(shuffled_rows, shuffled_ranker.score, split_manifest=split_manifest, split="test")
+        except (OptionalMLUnavailable, ValueError, RuntimeError):
+            shuffle_metrics = None
+        model = model.model_copy(update={"label_shuffle_test_metrics": shuffle_metrics})
         ranked = sorted(
             vectors,
             key=lambda vector: (-score_by_candidate[vector.candidate_id], vector.candidate_id),
@@ -259,6 +276,7 @@ class AppliedMLService:
         rank_by_candidate = {
             vector.candidate_id: index for index, vector in enumerate(ranked, start=1)
         }
+        structural_rank = {vector.candidate_id: index for index, vector in enumerate(sorted(vectors, key=lambda item: (-_structural_score(item), item.candidate_id)), start=1)}
         learned = tuple(
             LearnedRankingEvidence(
                 evidence_id=f"learned_{stable_digest((model.specification.model_id, vector.candidate_id))[:24]}",
@@ -288,7 +306,7 @@ class AppliedMLService:
                 rank_mean=float(rank_by_candidate[vector.candidate_id]),
                 rank_stddev=0.0,
                 top_rank_frequency=1.0 if rank_by_candidate[vector.candidate_id] <= 3 else 0.0,
-                methods=("fixed_seed_linear_model",),
+                methods=("INSUFFICIENT_STABILITY_EVIDENCE",),
             )
             for vector in ranked
         )
@@ -297,13 +315,13 @@ class AppliedMLService:
                 suggestion_id=f"label_query_{stable_digest(vector.candidate_id)[:24]}",
                 candidate_id=vector.candidate_id,
                 priority_score=float(
-                    abs(score_by_candidate[vector.candidate_id] - _baseline_score(vector))
+                    abs(rank_by_candidate[vector.candidate_id] - structural_rank[vector.candidate_id])
                     + (0.5 if vector.missing_feature_ids else 0.0)
                     + (0.5 if vector.risk_flags else 0.0)
                 ),
                 reasons=tuple(
                     [ActiveLearningReason.MODEL_BASELINE_DISAGREEMENT]
-                    if abs(score_by_candidate[vector.candidate_id] - _baseline_score(vector)) > 0.25
+                    if abs(rank_by_candidate[vector.candidate_id] - structural_rank[vector.candidate_id]) >= 2
                     else [ActiveLearningReason.MISSING_CRITICAL_FEATURES]
                     if vector.missing_feature_ids
                     else [ActiveLearningReason.HARD_CONFLICT]
@@ -314,19 +332,18 @@ class AppliedMLService:
             for vector in sorted(
                 vectors,
                 key=lambda item: (
-                    -abs(score_by_candidate[item.candidate_id] - _baseline_score(item)),
+                    -abs(rank_by_candidate[item.candidate_id] - structural_rank[item.candidate_id]),
                     item.candidate_id,
                 ),
             )[: self.max_active_learning_suggestions]
-            if vector.missing_feature_ids or vector.risk_flags
-            or abs(score_by_candidate[vector.candidate_id] - _baseline_score(vector)) > 0.25
+            if vector.missing_feature_ids or vector.risk_flags or abs(rank_by_candidate[vector.candidate_id] - structural_rank[vector.candidate_id]) >= 2
         )
         calibration = MLCalibrationExperiment(
             experiment_id=f"calibration_{model.specification.model_id}",
             method="grouped_holdout_calibration_experiment_not_applied",
             status=(
                 MLCalibrationStatus.CALIBRATION_EXPERIMENT
-                if sum(row.label.label for row in dataset_rows) >= 5
+                if len([row for row in dataset_rows if split_manifest.assignments.get(row.row_id) in {"validation", "test"}]) >= 5 and len({row.label.group_id for row in dataset_rows if split_manifest.assignments.get(row.row_id) in {"validation", "test"}}) >= 2 and {row.label.label for row in dataset_rows if split_manifest.assignments.get(row.row_id) in {"validation", "test"}} == {0, 1}
                 else MLCalibrationStatus.INSUFFICIENT_CALIBRATION_DATA
             ),
             calibration_rows=sum(

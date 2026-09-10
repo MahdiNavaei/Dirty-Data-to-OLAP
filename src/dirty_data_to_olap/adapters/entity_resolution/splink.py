@@ -50,6 +50,16 @@ class SplinkEntityResolutionAdapter:
     runtime_dependency = "splink==4.0.17"
     adapter_reference = AdapterReference(name=name, version="1.0", config_fingerprint="entity-resolution-splink-v1")
 
+    @staticmethod
+    def _configure_term_frequency_adjustment(comparison: Any, comparison_id: str) -> Any:
+        configure = getattr(comparison, "configure", None)
+        if not callable(configure):
+            raise _ERTraining(f"term-frequency adjustment requested for {comparison_id}, but official Splink comparison has no configure API")
+        try:
+            return configure(term_frequency_adjustments=True)
+        except Exception as error:
+            raise _ERTraining(f"term-frequency adjustment could not be configured for {comparison_id}: {error.__class__.__name__}") from None
+
     def __init__(self, *, project_root: Path, reader: DependencyStagedReader | None = None, privacy_policy: Any | None = None) -> None:
         self.project_root = project_root.resolve()
         self.reader = reader or DependencyStagedReader()
@@ -169,15 +179,22 @@ class SplinkEntityResolutionAdapter:
         private_root.mkdir(parents=True, exist_ok=True)
         db_path = private_root / "private.duckdb"
         comparisons = []
+        configured_term_frequency: list[str] = []
         field_map = {field.field_id: field for field in spec.identity_fields}
         for item in spec.comparisons:
             column = self._field_column(item.field_id)
             if item.method == "jaro_winkler":
-                comparisons.append(cl.JaroWinklerAtThresholds(column, item.thresholds or (0.95, 0.85)))
+                comparison = cl.JaroWinklerAtThresholds(column, item.thresholds or (0.95, 0.85))
             elif item.method == "levenshtein":
-                comparisons.append(cl.LevenshteinAtThresholds(column, item.thresholds or (1, 2)))
+                comparison = cl.LevenshteinAtThresholds(column, item.thresholds or (1, 2))
             else:
-                comparisons.append(cl.ExactMatch(column))
+                comparison = cl.ExactMatch(column)
+            if item.method == "jaro_winkler":
+                comparison = cl.JaroWinklerAtThresholds(column, item.thresholds or (0.95, 0.85))
+            if item.term_frequency_adjustment:
+                comparison = self._configure_term_frequency_adjustment(comparison, item.comparison_id)
+                configured_term_frequency.append(item.comparison_id)
+            comparisons.append(comparison)
         blocking_sql = [self._safe_blocking_sql(rule, field_map) for rule in spec.blocking_rules]
         prior = spec.training_policy.prior_value
         if prior is None:
@@ -220,7 +237,7 @@ class SplinkEntityResolutionAdapter:
             prior_estimation_method=spec.training_policy.prior_estimation_method,
             prior_assumptions=spec.training_policy.prior_assumptions,
             comparison_definitions=tuple(f"{item.comparison_id}:{item.method}" for item in spec.comparisons),
-            term_frequency_comparison_ids=tuple(item.comparison_id for item in spec.comparisons if item.term_frequency_adjustment),
+            term_frequency_comparison_ids=tuple(configured_term_frequency),
             training_completeness="COMPLETE",
             warnings_limitations=("explicit prior is benchmark-policy evidence and is not production-validated", "runtime budget is observational/cooperative and cannot interrupt an in-process call"),
         )

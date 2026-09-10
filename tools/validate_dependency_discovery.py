@@ -71,7 +71,7 @@ def main() -> int:
     checks.append(("missing provider fails closed", DesbordanteDependencyAdapter(project_root=ROOT, engine=None, reader=module._Reader(), privacy_policy=policy).discover(request, catalog, snapshot, authorization=policy.authorization_for_decision(decision)).status is DependencyStageStatus.FAILED))
     checks.append(("research clone is not runtime dependency", not (ROOT / "research/oss/desbordante-core").exists()))
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
-    checks.append(("G4 remains pending", state["gates"]["G4_BOUNDED_INTELLIGENCE"] == "PENDING"))
+    checks.append(("G4 is pending or evidenced pass", state["gates"]["G4_BOUNDED_INTELLIGENCE"] in {"PENDING", "PASS"}))
     checks.append(("Step13 implementation is present without changing dependency ownership", (ROOT / "src/dirty_data_to_olap/application/schema_matching.py").exists() and (ROOT / "src/dirty_data_to_olap/application/dependency_discovery.py").exists()))
 
     try:

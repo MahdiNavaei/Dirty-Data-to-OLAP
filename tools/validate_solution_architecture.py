@@ -785,6 +785,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "llm_semantic_ai_engineer", "post-Step 15 state must hand off to Step16")
         require("LLM" in str(execution.get("current_specialist")), "current specialist must be Step16")
         require("LLM" in str(execution.get("next_step")), "next step must be Step16")
+    elif execution.get("current_step") == 17:
+        require(execution.get("last_completed_step") == 16, "post-Step 16 state must record completed Step 16")
+        require(execution.get("last_completed_role") == "llm_semantic_ai_engineer", "post-Step 16 role must be llm_semantic_ai_engineer")
+        require(execution.get("current_role") == "evidence_fusion_engineer", "post-Step 16 state must hand off to Step17")
+        require("Evidence Fusion" in str(execution.get("current_specialist")), "current specialist must be Step17")
+        require("Evidence Fusion" in str(execution.get("next_step")), "next step must be Step17")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -807,7 +813,7 @@ def check_state() -> None:
         "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE",
         "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE",
     ]
-    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[1:]), "G3-G15 must remain pending except an evidenced G3 decision")
+    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[2:]), "G3-G15 must remain pending except evidenced G3/G4 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 

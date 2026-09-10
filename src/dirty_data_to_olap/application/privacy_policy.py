@@ -53,6 +53,41 @@ class PrivacyPolicyService:
         self._dependency_authorizations: dict[str, object] = {}
         self._matching_authorizations: dict[str, object] = {}
         self._entity_resolution_authorizations: dict[str, object] = {}
+        self._semantic_authorizations: dict[str, object] = {}
+
+    def authorize_semantic_ai_analysis(self, context, *, request, context_manifest, provider_ref, prompt_ref) -> PrivacyDecision:
+        """Authorize one exact, aggregate-only, loopback semantic request."""
+        from dirty_data_to_olap.domain.contracts.semantic_ai import SemanticPrivacyContext, SemanticAuthorization
+        try:
+            validated = SemanticPrivacyContext.model_validate(context)
+        except Exception:
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="semantic AI context failed the fixed local-only contract", classification_id="semantic-ai-local-analysis", failure_ref="privacy-semantic-context-invalid")
+        if validated.purpose != "SEMANTIC_AI_LOCAL_ANALYSIS" or not provider_ref.local_loopback_verified or provider_ref.endpoint not in {"http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434"}:
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="semantic AI provider is not verified loopback local", classification_id="semantic-ai-local-analysis", failure_ref="privacy-semantic-provider-not-local")
+        if not context_manifest.subject_refs or any(item not in context_manifest.evidence_refs for item in request.evidence_refs if item):
+            return PrivacyDecision(allowed=False, action=PrivacyAction.BLOCK, reason="semantic AI request and context manifest are not bound", classification_id="semantic-ai-local-analysis", failure_ref="privacy-semantic-scope-unbound")
+        authorization = SemanticAuthorization(
+            authorization_id="semantic-auth-" + hashlib.sha256(f"{self.policy.policy_id}:{self.policy.version}:{request.request_id}:{request.task.value}:{context_manifest.input_fingerprint}:{provider_ref.model}:{provider_ref.model_digest}:{prompt_ref.prompt_version}".encode()).hexdigest()[:32],
+            policy_id=self.policy.policy_id,
+            policy_version=self.policy.version,
+            request_id=request.request_id,
+            task=request.task,
+            context_manifest_fingerprint=context_manifest.input_fingerprint,
+            subject_refs=request.subject_refs,
+            evidence_refs=request.evidence_refs,
+            model=provider_ref.model,
+            model_digest=provider_ref.model_digest,
+            prompt_version=prompt_ref.prompt_version,
+        )
+        self._semantic_authorizations[authorization.authorization_id] = authorization
+        return PrivacyDecision(allowed=True, action=PrivacyAction.RETAIN_RESTRICTED, reason="semantic AI is authorized for aggregate-only loopback analysis", classification_id="semantic-ai-local-analysis", required_transformation="aggregate_project_owned_evidence", authorization_id=authorization.authorization_id)
+
+    def verify_semantic_ai_authorization(self, authorization, *, request, context_manifest, provider_ref, prompt_ref) -> bool:
+        from dirty_data_to_olap.domain.contracts.semantic_ai import SemanticAuthorization
+        return isinstance(authorization, SemanticAuthorization) and self._semantic_authorizations.get(authorization.authorization_id) == authorization and authorization.request_id == request.request_id and authorization.task == request.task and authorization.context_manifest_fingerprint == context_manifest.input_fingerprint and authorization.model == provider_ref.model and authorization.model_digest == provider_ref.model_digest and authorization.prompt_version == prompt_ref.prompt_version
+
+    def semantic_authorization_for_decision(self, decision: PrivacyDecision):
+        return self._semantic_authorizations.get(decision.authorization_id)
 
     @staticmethod
     def load_policy(config_path: Path | None = None) -> PrivacyPolicy:

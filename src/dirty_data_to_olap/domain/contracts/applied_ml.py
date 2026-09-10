@@ -246,6 +246,10 @@ class MLModelEvidence(_SourceModel):
     training_groups: int = Field(ge=0)
     class_counts: Mapping[str, int] = Field(default_factory=dict)
     training_metrics: RankingMetrics | None = None
+    validation_metrics: RankingMetrics | None = None
+    test_metrics: RankingMetrics | None = None
+    label_shuffle_test_metrics: RankingMetrics | None = None
+    reverse_pair_leakage_status: str = "NOT_EVALUATED"
     per_fold_metrics: tuple[RankingMetrics, ...] = ()
     limitations: tuple[str, ...] = ()
 

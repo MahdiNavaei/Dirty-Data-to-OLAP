@@ -131,7 +131,7 @@ class SklearnRelationshipRanker:
             missing_value_policy="project_contract_missing_as_zero_with_explicit_missing_feature_ids",
         )
         specification = MLModelSpecification(
-            model_id=model_id,
+            model_id=f"{model_id}-{config_hash[:16]}",
             task=self.feature_schema.task,
             hyperparameters=self.hyperparameters,
             random_seed=self.random_seed,
@@ -162,6 +162,25 @@ class SklearnRelationshipRanker:
         if artifact_path is not None:
             self._write_json_artifact(Path(artifact_path), evidence)
         return self._evidence
+
+    @classmethod
+    def from_json_artifact(cls, feature_schema: MLFeatureSchema, path: str | Path) -> "SklearnRelationshipRanker":
+        """Load only the project JSON inference artifact; labels are not required."""
+        artifact = Path(path)
+        payload = json.loads(artifact.read_text(encoding="utf-8"))
+        if payload.get("feature_schema_id") != feature_schema.schema_id or tuple(payload.get("feature_order", ())) != feature_schema.feature_order:
+            raise ValueError("model artifact feature schema does not match inference schema")
+        coefficients = tuple(float(value) for value in payload.get("coefficients", ()))
+        if len(coefficients) != len(feature_schema.feature_order):
+            raise ValueError("model artifact coefficient count does not match feature schema")
+        ranker = cls(feature_schema, random_seed=int(payload.get("random_seed", 0)))
+        ranker._coefficients = coefficients
+        ranker._intercept = float(payload["intercept"])
+        ranker._evidence = MLModelEvidence(
+            specification=MLModelSpecification(model_id=str(payload["model_id"]), task=feature_schema.task, hyperparameters=payload.get("hyperparameters", ranker.hyperparameters), random_seed=int(payload.get("random_seed", 0)), feature_schema_id=feature_schema.schema_id, model_config_hash=str(payload["model_config_hash"]), dataset_fingerprint=str(payload.get("dataset_fingerprint", "artifact")), split_fingerprint=str(payload.get("split_fingerprint", "artifact")), sklearn_version=str(payload.get("sklearn_version", "unknown")), status=MLModelStatus.EXPERIMENTAL),
+            class_labels=tuple(int(value) for value in payload.get("class_labels", (0, 1))), coefficients=coefficients, intercept=float(payload["intercept"]), training_rows=0, training_groups=0, limitations=("inference loaded from the validated JSON artifact without labels",),
+        )
+        return ranker
 
     def _require_fitted(self) -> tuple[tuple[float, ...], float, MLModelEvidence]:
         if self._coefficients is None or self._intercept is None or self._evidence is None:
@@ -236,6 +255,8 @@ class SklearnRelationshipRanker:
             "dataset_fingerprint": evidence.specification.dataset_fingerprint,
             "split_fingerprint": evidence.specification.split_fingerprint,
             "status": evidence.specification.status.value,
+            "hyperparameters": dict(evidence.specification.hyperparameters),
+            "random_seed": evidence.specification.random_seed,
         }
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
         temporary: str | None = None

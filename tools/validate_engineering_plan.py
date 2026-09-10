@@ -254,15 +254,15 @@ def main() -> int:
     check("bootstrap is PASS", state.get("bootstrap", {}).get("status") == "PASS")
     check("all prior repairs are PASS", all(item.get("status") == "PASS" for item in state.get("post_bootstrap_repairs", [])))
     check("G0 and G1 are PASS", gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS")
-    check("G3-G15 are pending except an evidenced G3 PASS", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and all(gates.get(key) == "PENDING" for key in LATER_GATES[1:]))
+    check("G3-G15 preserve evidenced G3/G4 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" for key in LATER_GATES[2:]))
     check("blocked is false", state.get("blocked") is False)
-    if mode == "pre":
+    if mode == "pre" and execution.get("current_step", 0) < 6:
         check("pre-gate G2 is PENDING", gates.get("G2_ARCHITECTURE_READY") == "PENDING")
         check("pre-gate current specialist is Step 05", execution.get("current_step") == 5 and execution.get("current_role") == "technical_lead")
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
             "post-gate current specialist is Step06 through Step16 when G3 passes",
@@ -276,7 +276,8 @@ def main() -> int:
             or (execution.get("current_step") == 13 and execution.get("current_role") == "schema_matching_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 14 and execution.get("current_role") == "entity_resolution_engineer" and execution.get("last_completed_step") == 13 and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 15 and execution.get("current_role") == "applied_ml_engineer" and execution.get("last_completed_step") == 14 and gates.get("G3_SOURCE_SAFETY") == "PASS")
-            or (execution.get("current_step") == 16 and execution.get("current_role") == "llm_semantic_ai_engineer" and execution.get("last_completed_step") == 15 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
+            or (execution.get("current_step") == 16 and execution.get("current_role") == "llm_semantic_ai_engineer" and execution.get("last_completed_step") == 15 and gates.get("G3_SOURCE_SAFETY") == "PASS")
+            or (execution.get("current_step") == 17 and execution.get("current_role") == "evidence_fusion_engineer" and execution.get("last_completed_step") == 16 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
         )
 
     # 4-5: required artifacts parse and carry provenance.

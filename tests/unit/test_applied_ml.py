@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+from pathlib import Path
 
 import pytest
 
@@ -52,8 +54,8 @@ def _rows():
             candidate_id=f"candidate_{index}",
             logical_pair_key=vectors[index].logical_pair_key,
             label=index % 2,
-            group_id=f"group_{index}",
-            base_scenario_id=f"scenario_{index}",
+            group_id=f"group_{index // 2}",
+            base_scenario_id=f"scenario_{index // 2}",
             source="synthetic_step15_benchmark",
             provenance_refs=(f"fixture_case_{index}",),
         )
@@ -102,27 +104,28 @@ def test_label_shuffle_and_source_id_permutation_are_leakage_negative_controls()
     assert vectors[0].values == permuted_vector.values
 
 
-def test_real_sklearn_adapter_persists_json_and_reconstructs_contributions(tmp_path):
+def test_real_sklearn_adapter_persists_json_and_reconstructs_contributions():
     if not SklearnRelationshipRanker.capability()[0]:
         pytest.skip("optional sklearn runtime is unavailable")
     schema, vectors, labels = _rows()
     rows, manifest = build_dataset(vectors, labels, schema)
     split = make_grouped_split(rows)
     ranker = SklearnRelationshipRanker(schema, random_seed=7)
-    evidence = ranker.train(
-        rows,
-        split_manifest=split,
-        dataset_manifest=manifest,
-        model_id="step15-test-model",
-        artifact_path=tmp_path / "model.json",
-    )
-    assert evidence.artifact_location is not None
-    payload = json.loads((tmp_path / "model.json").read_text(encoding="utf-8"))
-    assert "candidate_id" not in json.dumps(payload)
-    assert not any(path.suffix in {".pkl", ".pickle", ".joblib"} for path in tmp_path.iterdir())
-    score = ranker.score(vectors[1])
-    contributions = ranker.contributions(vectors[1])
-    assert score == pytest.approx(evidence.intercept + sum(item.contribution for item in contributions))
+    root = Path("workspace/test-temp/applied-ml").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    artifact = root / "model.json"
+    try:
+        evidence = ranker.train(rows, split_manifest=split, dataset_manifest=manifest, model_id="step15-test-model", artifact_path=artifact)
+        assert evidence.artifact_location is not None
+        payload = json.loads(artifact.read_text(encoding="utf-8"))
+        assert "candidate_id" not in json.dumps(payload)
+        assert not any(path.suffix in {".pkl", ".pickle", ".joblib"} for path in root.iterdir())
+        score = ranker.score(vectors[1])
+        contributions = ranker.contributions(vectors[1])
+        assert score == pytest.approx(evidence.intercept + sum(item.contribution for item in contributions))
+    finally:
+        if root.exists():
+            shutil.rmtree(root)
 
 
 def test_service_runs_project_contract_to_feature_builder_to_sklearn():
@@ -136,8 +139,8 @@ def test_service_runs_project_contract_to_feature_builder_to_sklearn():
             candidate_id=candidate.candidate_id,
             logical_pair_key=vectors[index].logical_pair_key,
             label=index % 2,
-            group_id=f"group_{index}",
-            base_scenario_id=f"scenario_{index}",
+            group_id=f"group_{index // 2}",
+            base_scenario_id=f"scenario_{index // 2}",
             source="synthetic_step15_benchmark",
             provenance_refs=(f"fixture_case_{index}",),
         )

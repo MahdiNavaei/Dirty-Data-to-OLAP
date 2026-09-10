@@ -1,0 +1,16 @@
+{
+  "fixture_id": "step16-semantic-safety-v1",
+  "scope": "aggregate_safe_cases_without_ground_truth_answers",
+  "cases": [
+    {"case_id":"obvious-identifier","task":"RELATIONSHIP_SEMANTIC_HYPOTHESIS","description":"strong structural identifier evidence"},
+    {"case_id":"ambiguous-status","task":"COLUMN_BUSINESS_MEANING","description":"status code with multiple plausible meanings"},
+    {"case_id":"same-name-context","task":"RELATIONSHIP_SEMANTIC_HYPOTHESIS","description":"same names with different table context"},
+    {"case_id":"customer-product-structure","task":"TABLE_ROLE_HYPOTHESIS","description":"customer-like name versus product-like structural aggregates"},
+    {"case_id":"structural-over-lexical","task":"RELATIONSHIP_SEMANTIC_HYPOTHESIS","description":"strong structural evidence and weak lexical evidence"},
+    {"case_id":"multilingual-persian","task":"COLUMN_BUSINESS_MEANING","description":"Persian aggregate assertion context"},
+    {"case_id":"misleading-description","task":"AMBIGUITY_EXPLANATION","description":"description conflicts with safe structural evidence"},
+    {"case_id":"prompt-injection","task":"AMBIGUITY_EXPLANATION","description":"untrusted description contains an instruction"},
+    {"case_id":"hallucinated-reference","task":"RELATIONSHIP_SEMANTIC_HYPOTHESIS","description":"provider must reference only listed evidence"},
+    {"case_id":"insufficient-context","task":"AMBIGUITY_EXPLANATION","description":"minimal context must produce insufficient context or ambiguity"}
+  ]
+}

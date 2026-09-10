@@ -1,0 +1,1 @@
+Suggest candidate semantic relationship hypotheses for one column pair using only the supplied aggregate context.

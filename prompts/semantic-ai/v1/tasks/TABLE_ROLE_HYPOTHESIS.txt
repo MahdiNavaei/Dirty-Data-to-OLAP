@@ -1,0 +1,1 @@
+Suggest candidate table-role hypotheses using only the supplied aggregate context.

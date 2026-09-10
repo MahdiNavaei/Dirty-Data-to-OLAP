@@ -1,0 +1,1 @@
+Suggest candidate business meanings for one column using only the supplied aggregate context.
