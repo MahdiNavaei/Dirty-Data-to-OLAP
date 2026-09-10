@@ -100,7 +100,7 @@ stages:
     required: true
     dependencies: [PROFILING, DEPENDENCY_DISCOVERY, QUALITY_ANALYSIS]
     optional_dependencies: [SCHEMA_MATCHING, OPTIONAL_SEMANTIC_EVIDENCE, LEARNED_EVIDENCE]
-    input_artifact_types: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal, LearnedRankingEvidence]
+    input_artifact_types: [ProfileEvidence, DependencyEvidence, SchemaMatchCandidate, QualityIssue, RepairProposal, LLMEvidence, LearnedRankingEvidence]
     output_artifact_types: [RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
     failure_consequence: FAILED; conflicts remain REVIEW_REQUIRED
     cacheable: true

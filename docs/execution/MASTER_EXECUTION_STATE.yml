@@ -27,20 +27,20 @@ post_bootstrap_repairs:
     scope: "Stage-scoped temporal review checkpoints, artifact-bound ReviewDecision compatibility, review invalidation/replay semantics and topological validator checks"
     specialist_step_started: false
 specialist_execution:
-  current_step: 16
-  current_role: "llm_semantic_ai_engineer"
-  current_specialist: "Step16 — LLM / Semantic AI Engineer"
-  last_completed_step: 15
-  last_completed_role: "applied_ml_engineer"
-  last_completed_specialist: "Step15 — Applied ML Engineer"
-  last_completed_content_commit: "30b5319e25b059fd2652d9affdb4fed03ea262d6"
-  next_step: "Step16 — LLM / Semantic AI Engineer"
+  current_step: 17
+  current_role: "evidence_fusion_engineer"
+  current_specialist: "Step17 — Evidence Fusion Engineer"
+  last_completed_step: 16
+  last_completed_role: "llm_semantic_ai_engineer"
+  last_completed_specialist: "Step16 — LLM / Semantic AI Engineer"
+  last_completed_content_commit: "5f9efa4861d59ce17bc13dde804ab29d20dcf040"
+  next_step: "Step17 — Evidence Fusion Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
   G2_ARCHITECTURE_READY: "PASS"
   G3_SOURCE_SAFETY: "PASS"
-  G4_BOUNDED_INTELLIGENCE: "PENDING"
+  G4_BOUNDED_INTELLIGENCE: "PASS"
   G5_INFERENCE_VALIDITY: "PENDING"
   G6_DATA_CORRECTNESS: "PENDING"
   G7_END_TO_END_PRODUCT: "PENDING"

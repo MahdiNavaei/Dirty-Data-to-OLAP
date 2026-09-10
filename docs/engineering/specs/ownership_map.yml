@@ -39,7 +39,7 @@ components:
   - {component_id: application.quality, primary_specialist: "Step09 Data Quality Engineer", implementation_step: 9, test_strategy: "quality taxonomy fixtures and negatives"}
   - {component_id: application.privacy_policy, primary_specialist: "Step10 Data Security / Privacy Engineer", implementation_step: 10, implementation_status: IMPLEMENTED, test_strategy: "privacy contract, canary, exposure and retention tests"}
   - {component_id: application.database_security, primary_specialist: "Step11 Database Security Specialist", implementation_step: 11, implementation_status: IMPLEMENTED, test_strategy: "provider policy, SQLite attack and secret-canary tests"}
-  - {component_id: application.semantic_evidence, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "bounded optional-provider contract"}
+  - {component_id: application.semantic_evidence, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, implementation_status: IMPLEMENTED, test_strategy: "bounded optional-provider contract"}
   - {component_id: application.evidence_fusion, primary_specialist: "Step17 Evidence Fusion Engineer", implementation_step: 17, test_strategy: "evidence, conflict and decision evaluation"}
   - {component_id: application.canonical_hypotheses, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, test_strategy: "canonical contract and lineage tests"}
   - {component_id: application.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "ER adapter and false-merge evaluation"}
@@ -57,7 +57,7 @@ components:
   - {component_id: adapters.matching, primary_specialist: "Step13 Schema Matching Engineer", implementation_step: 13, implementation_status: IMPLEMENTED, test_strategy: "Valentine adapter contract tests"}
   - {component_id: adapters.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, implementation_status: IMPLEMENTED, test_strategy: "Splink normalized-output contract tests"}
   - {component_id: adapters.ml, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "real sklearn adapter, contribution reconstruction and JSON persistence tests"}
-  - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, test_strategy: "provider provenance and unavailable-path tests"}
+  - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, implementation_status: IMPLEMENTED, test_strategy: "provider provenance and unavailable-path tests"}
   - {component_id: adapters.materialization, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "DuckDB/materializer compatibility tests"}
   - {component_id: persistence.control_store, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, comprehensive_platform_owner: "Step23 Data Platform Engineer", test_strategy: "schema, migration and lifecycle tests"}
   - {component_id: persistence.artifact_store, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, test_strategy: "immutability, hash and retention tests"}

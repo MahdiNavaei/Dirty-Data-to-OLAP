@@ -16,7 +16,7 @@ components:
     depends_on: []
     implementation_owner: Step06 Database Engineer / DBA
     implementation_step: 6
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     ownership_scope: bootstrap-only; semantic contract families remain separately owned
     side_effect_class: none
     persistence_access: none
@@ -33,7 +33,7 @@ components:
     ports_used: [ControlStorePort, CapabilityRegistryPort]
     implementation_owner: Step27 Backend Engineer
     implementation_step: 27
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: control_metadata
     persistence_access: ControlStorePort
     optional: false
