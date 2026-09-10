@@ -48,6 +48,48 @@ release claims remain future work.
 Handoff: `Step18 — ML Evaluation Engineer`. Do not begin Step18 in this
 execution.
 
+## Final Step17 Scoring Integrity Closure
+
+This is a second surgical Step17 closure. The JSON policies remain runtime
+authoritative and the human YAML mirrors now include normalization metrics,
+dimension bindings, conflict eligibility and required-producer declarations.
+Every score dimension is checked against its normalization rule; relationship
+and mapping policies remain separate.
+
+Optional declared-FK evidence is denominator-inclusive only when observed.
+Incompatible type compatibility uses the explicit signed compatibility
+normalization and therefore contributes a nonzero negative value. Coma and
+Cupid matcher ranks are separate optional dimensions; native matcher scores
+are never averaged, and matcher order does not change the decision identity.
+
+The real SchemaMatchResult path is covered by a valid contract integration and
+reaches a review-ready mapping with matcher, type and qualitative signals.
+Profile tables, quality issues and repair proposals bind to exact source,
+snapshot, table and column topology; substring lookalikes do not attach or
+forward repair references. Conflict rules are metric/family eligible, so
+unrelated quality signals cannot create declared-data or semantic-structural
+conflicts.
+
+Expected producer identities enforce family, producer, result and snapshot
+scope. Conflicting duplicate fingerprints become explicit stale evidence;
+NOT_CONFIGURED remains distinct from UNAVAILABLE. Semantic evidence must bind
+to exactly one fusion subject, and multi-subject bindings fail closed.
+
+The executable benchmark remains runtime-input-only and separate from
+expected controls, covering A-O and M1-M8, including clean/relevant declared
+FK cases and matcher/ML disagreement visibility. The fusion validator now
+reports 21 behavioral checks. The final repository verification recorded unit
+`102 passed`, contract `7 passed`, integration `33 passed, 2 optional skips`,
+architecture `9 passed`, security `24 passed`, full regression `175 passed,
+2 optional skips, 41 warnings`, compileall PASS, diff-check PASS, all
+validators PASS and engineering post-gate `73` checks PASS.
+
+Step18 implementation, calibration, G5 inference-validity work, canonical
+modeling, ReviewDecision generation and repair execution were not started.
+G4 and G4A remain PASS; G5-G15 remain PENDING. A known dlt/SQLite cursor
+cleanup traceback is emitted after successful source integration/full-suite
+exit; it does not change the zero exit status or test result.
+
 ## Post-Step17 Evidence Fusion Integrity Closure
 
 This is a surgical Step17 repair only. Step18 implementation, calibration,

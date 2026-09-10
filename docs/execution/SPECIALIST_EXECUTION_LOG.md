@@ -1025,3 +1025,14 @@ handoff_to:
 - verification: focused fusion unit/contract/integration `20 passed`; full regression `169 passed, 2 optional skips, 41 warnings`; unit `97`, contract `7`, integration `32 passed/2 skipped`, architecture `9`, security `24`; compileall and diff-check PASS; all `validate_*.py` validators PASS, including engineering post-gate `73` checks and fusion validator `15` checks
 - state_boundary: G4/G4A remain PASS; G5 remains PENDING; all decisions remain REVIEW_REQUIRED or INCOMPLETE_REQUIRED_EVIDENCE; no ReviewDecision, canonical identity, calibration or repair execution
 - handoff: remains `Step18 - ML Evaluation Engineer`; Step18 must not be started by this closure
+
+## Final Post-Step17 Fusion Scoring Integrity Closure
+
+- execution_step: `17` surgical scoring/subject-binding closure; Step18 not started
+- starting_head: `828ee7db8b873d092a5328208cb53724a59274e4`
+- repaired_content_commit: `1c5004f`
+- repaired: policy JSON/YAML metric and conflict-rule consistency; optional declared-FK denominator behavior; signed incompatible-type scoring; matcher-family separation and order invariance; valid SchemaMatchResult integration; exact profile/quality/repair topology binding; relevant conflict eligibility; producer identity, stale duplicate and NOT_CONFIGURED semantics; semantic single-subject binding; benchmark disagreement controls and 21-check behavioral validator
+- verification: unit `102 passed`; contract `7 passed`; integration `33 passed, 2 optional skips`; architecture `9 passed`; security `24 passed`; full `175 passed, 2 optional skips, 41 warnings`; compileall, diff-check, all validators and engineering post-gate `73` PASS
+- state: G4/G4A remain PASS; G5-G15 remain PENDING; all decisions remain REVIEW_REQUIRED or INCOMPLETE_REQUIRED_EVIDENCE; no calibration, canonical identity, ReviewDecision or repair execution
+- known_runtime_note: successful integration/full exits still emit the existing dlt/SQLite cursor cleanup traceback
+- handoff: `Step18 - ML Evaluation Engineer`; do not begin Step18 in this execution
