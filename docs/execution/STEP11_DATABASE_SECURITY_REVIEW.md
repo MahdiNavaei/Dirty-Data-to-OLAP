@@ -119,8 +119,9 @@ acceptance, deployment IAM, encryption or legal compliance.
 
 Security artifacts contain safe references/fingerprints and no raw SQL or
 secret values. SQLite catalogs, bounded extraction and Parquet staging remain
-project-owned. The dlt bounded-generator cleanup path was explicitly closed
-before engine disposal; provider live status remains honest.
+project-owned. The bounded dlt resource lifecycle was exercised by the full
+suite without a post-test cursor-finalizer diagnostic; provider live status
+remains honest.
 
 ## FILES CHANGED
 
@@ -132,7 +133,7 @@ staged.
 
 ## STEP11 EVIDENCE / STEP12 HANDOFF
 
-Content commit: `bcd500483fdf83b33a9eec0118bcf6673bb12acf`.
+Content commit: `b511e83bd1ea59bac56ebb424fdd04a01f976942`.
 Step12 remains unimplemented and receives the explicit handoff only after G3.
 
 ## EXECUTION STATE / GIT
