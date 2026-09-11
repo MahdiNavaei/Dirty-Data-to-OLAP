@@ -15,6 +15,8 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     CanonicalEntityKind,
     CanonicalEntityType,
     CanonicalIdentityFieldHypothesis,
+    CanonicalIdentityMembership,
+    CanonicalIdentityProposal,
     CanonicalModel,
     CanonicalModelHypothesis,
     CanonicalRelationship,
@@ -22,6 +24,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     CanonicalSurvivorshipDecision,
     CanonicalValueReference,
     EntityResolutionRequirement,
+    IdentityDerivationBasis,
     MappingStatus,
     NullSemanticState,
     RecordDisposition,
@@ -35,8 +38,9 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     canonical_entity_id,
     canonical_model_id,
     hypothesis_id,
+    identity_proposal_id,
 )
-from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionResult, EntityResolutionStatus
+from dirty_data_to_olap.domain.contracts.entity_resolution import EntityMatchPredictionBand, EntityResolutionResult, EntityResolutionStatus
 from dirty_data_to_olap.domain.contracts.evidence_fusion import DecisionState, RelationshipDecision, SemanticMappingDecision
 from dirty_data_to_olap.domain.contracts.source import stable_digest, stable_id, utc_now
 from .review_policy import ReviewCompatibilityError, ReviewPolicyService
@@ -69,6 +73,7 @@ class CanonicalHypothesisService:
         evidence_reviews: Sequence[ReviewDecision],
         relationship_decisions: Sequence[RelationshipDecision] = (),
         semantic_mapping_decisions: Sequence[SemanticMappingDecision] = (),
+        evidence_domain_assertion_refs: Mapping[str, Sequence[str]] | None = None,
         entity_types: Sequence[CanonicalEntityType],
         source_ids: Sequence[str],
         domain_assertion_refs: Sequence[str],
@@ -100,6 +105,38 @@ class CanonicalHypothesisService:
         if any(item.decision_state not in {DecisionState.REVIEW_REQUIRED, DecisionState.INCOMPLETE_REQUIRED_EVIDENCE} for item in semantic_mapping_decisions):
             raise CanonicalizationError("INVALID_SOURCE_MAPPING", "fusion mapping decisions must remain review-only")
         requirements = {key: EntityResolutionRequirement(value) for key, value in entity_resolution_requirements.items()}
+        domain_by_decision = {key: tuple(sorted(value)) for key, value in (evidence_domain_assertion_refs or {}).items()}
+        decisions_by_id = {item.decision_id: item for item in (*relationship_decisions, *semantic_mapping_decisions)}
+        if len(decisions_by_id) != len(relationship_decisions) + len(semantic_mapping_decisions):
+            raise CanonicalizationError("INCOMPLETE_REVIEW", "evidence decision IDs must be unique")
+        reviews_by_id = {item.review_decision_id: item for item in evidence_reviews}
+        if len(reviews_by_id) != len(evidence_reviews):
+            raise CanonicalizationError("INCOMPLETE_REVIEW", "review decision IDs must be unique")
+        bound_review_ids: set[str] = set()
+        for relationship in relationships:
+            upstream = decisions_by_id.get(relationship.upstream_decision_ref)
+            if not isinstance(upstream, RelationshipDecision) or relationship.review_decision_ref is None:
+                raise CanonicalizationError("INCOMPLETE_REVIEW", f"relationship {relationship.relationship_id} lacks its exact reviewed decision")
+            review = reviews_by_id.get(relationship.review_decision_ref)
+            if review is None:
+                raise CanonicalizationError("INCOMPLETE_REVIEW", f"relationship {relationship.relationship_id} references an unknown review")
+            try:
+                self.review_policy.require_compatible(review, self.review_policy.evidence_context(upstream, domain_by_decision.get(upstream.decision_id, ())))
+            except ReviewCompatibilityError as error:
+                raise CanonicalizationError("INCOMPLETE_REVIEW", str(error)) from error
+            bound_review_ids.add(review.review_decision_id)
+        for mapping in source_attribute_mappings:
+            upstream = decisions_by_id.get(mapping.upstream_decision_ref)
+            if not isinstance(upstream, SemanticMappingDecision) or mapping.review_decision_ref is None:
+                raise CanonicalizationError("INCOMPLETE_REVIEW", f"mapping {mapping.mapping_id} lacks its exact reviewed decision")
+            review = reviews_by_id.get(mapping.review_decision_ref)
+            if review is None:
+                raise CanonicalizationError("INCOMPLETE_REVIEW", f"mapping {mapping.mapping_id} references an unknown review")
+            try:
+                self.review_policy.require_compatible(review, self.review_policy.evidence_context(upstream, domain_by_decision.get(upstream.decision_id, ())))
+            except ReviewCompatibilityError as error:
+                raise CanonicalizationError("INCOMPLETE_REVIEW", str(error)) from error
+            bound_review_ids.add(review.review_decision_id)
         spec_by_family = {spec.entity_family: spec for spec in entity_resolution_specs}
         missing = [family for family, requirement in requirements.items() if requirement is EntityResolutionRequirement.ER_REQUIRED and family not in spec_by_family]
         if missing:
@@ -109,7 +146,7 @@ class CanonicalHypothesisService:
             "execution_context_id": execution_context_id,
             "model_version": model_version,
             "upstream_decision_refs": sorted({ref for item in relationships for ref in (item.upstream_decision_ref,)} | {ref for item in source_attribute_mappings for ref in (item.upstream_decision_ref,)} | {item.decision_id for item in relationship_decisions} | {item.decision_id for item in semantic_mapping_decisions}),
-            "upstream_review_decision_refs": sorted(review.review_decision_id for review in evidence_reviews),
+            "upstream_review_decision_refs": sorted(bound_review_ids or {review.review_decision_id for review in evidence_reviews}),
             "source_ids": sorted(set(source_ids)),
             "snapshot_fingerprints": dict(sorted((snapshot_fingerprints or {}).items())),
             "source_schema_fingerprints": dict(sorted((source_schema_fingerprints or {}).items())),
@@ -159,34 +196,140 @@ class CanonicalHypothesisService:
         )
 
 
+class CanonicalIdentityProposalService:
+    def build(
+        self,
+        *,
+        hypothesis: CanonicalModelHypothesis,
+        memberships: Sequence[CanonicalIdentityMembership],
+        er_results: Mapping[str, EntityResolutionResult] | None = None,
+        source_schema_fingerprints: Mapping[str, str] | None = None,
+        policy_refs: Sequence[str],
+        provenance_refs: Sequence[str],
+        created_at: datetime | None = None,
+    ) -> CanonicalIdentityProposal:
+        er_results = dict(er_results or {})
+        entity_types = {item.canonical_entity_type_id: item for item in hypothesis.entity_types}
+        seen_records: set[str] = set()
+        normalized: list[CanonicalIdentityMembership] = []
+        result_refs: set[str] = set()
+        spec_refs: set[str] = set()
+        for membership in memberships:
+            entity_type = entity_types.get(membership.canonical_entity_type_id)
+            if entity_type is None:
+                raise CanonicalizationError("UNRESOLVED_IDENTITY", f"unknown entity type {membership.canonical_entity_type_id}")
+            if seen_records.intersection(membership.source_record_refs):
+                raise CanonicalizationError("UNRESOLVED_IDENTITY", "a source record appears in multiple identity groups")
+            seen_records.update(membership.source_record_refs)
+            family = membership.entity_resolution_family or entity_type.entity_resolution_family or entity_type.semantic_id
+            requirement = hypothesis.entity_resolution_requirements.get(family, EntityResolutionRequirement.ER_NOT_REQUIRED)
+            if membership.derivation_basis is IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE:
+                if requirement is not EntityResolutionRequirement.ER_REQUIRED:
+                    raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", f"ER linkage is not required/authorized for {family}")
+                result = er_results.get(family)
+                if result is None:
+                    raise CanonicalizationError("MISSING_REQUIRED_ER", family)
+                self.validate_er_membership(hypothesis, membership, result, family)
+                artifact_ids = tuple(sorted(item.artifact_id for item in result.artifacts))
+                membership = membership.model_copy(update={"entity_resolution_family": family, "er_result_refs": artifact_ids, "er_spec_refs": (result.spec.spec_id,), "evidence_refs": tuple(sorted(set(membership.evidence_refs) | set(membership.authorized_edge_refs) | set(artifact_ids)))})
+                result_refs.update(artifact_ids)
+                spec_refs.add(result.spec.spec_id)
+            elif requirement is EntityResolutionRequirement.ER_REQUIRED and membership.derivation_basis is not IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW:
+                raise CanonicalizationError("MISSING_REQUIRED_ER", family)
+            elif entity_type.kind is CanonicalEntityKind.EVENT and membership.derivation_basis is not IdentityDerivationBasis.SOURCE_LOCAL_EVENT_IDENTITY:
+                raise CanonicalizationError("UNRESOLVED_IDENTITY", "event identity requires explicit source-local identity basis")
+            normalized.append(membership)
+        if not normalized:
+            raise CanonicalizationError("UNRESOLVED_IDENTITY", "identity proposal requires at least one membership group")
+        payload = {
+            "hypothesis": hypothesis.content_hash,
+            "entity_types": sorted(entity_types[item.canonical_entity_type_id].semantic_id for item in normalized),
+            "requirements": {key: value.value for key, value in sorted(hypothesis.entity_resolution_requirements.items())},
+            "memberships": [item.model_dump(mode="json") for item in sorted(normalized, key=lambda item: item.membership_group_id)],
+            "er_result_refs": sorted(result_refs),
+            "er_spec_refs": sorted(spec_refs),
+            "source_schema_fingerprints": dict(sorted((source_schema_fingerprints or hypothesis.source_schema_fingerprints).items())),
+            "domain_assertion_refs": sorted(hypothesis.domain_assertion_refs),
+            "policy_refs": sorted(set(policy_refs)),
+            "provenance_refs": sorted(set(provenance_refs) | set(hypothesis.provenance_refs)),
+        }
+        if not payload["policy_refs"] or not payload["provenance_refs"]:
+            raise CanonicalizationError("PROVENANCE_INCOMPLETE", "identity proposal requires policy and provenance refs")
+        return CanonicalIdentityProposal(
+            proposal_id=identity_proposal_id(payload),
+            hypothesis_artifact_id=hypothesis.artifact_id,
+            canonical_entity_type_ids=tuple(sorted({item.canonical_entity_type_id for item in normalized})),
+            entity_resolution_requirements=hypothesis.entity_resolution_requirements,
+            memberships=tuple(sorted(normalized, key=lambda item: item.membership_group_id)),
+            er_result_refs=tuple(sorted(result_refs)),
+            er_spec_refs=tuple(sorted(spec_refs)),
+            source_schema_fingerprints=payload["source_schema_fingerprints"],
+            domain_assertion_refs=hypothesis.domain_assertion_refs,
+            policy_refs=payload["policy_refs"],
+            unresolved_identity_cases=hypothesis.unresolved_ambiguities,
+            provenance_refs=payload["provenance_refs"],
+            created_at=created_at or utc_now(),
+        )
+
+    @staticmethod
+    def validate_er_membership(hypothesis: CanonicalModelHypothesis, membership: CanonicalIdentityMembership, result: EntityResolutionResult, family: str) -> None:
+        expected = next((item for item in hypothesis.entity_resolution_specs if item.entity_family == family), None)
+        if expected is None:
+            raise CanonicalizationError("MISSING_REQUIRED_ER", family)
+        if result.status is not EntityResolutionStatus.COMPLETE or result.spec.entity_family != family or result.spec.fingerprint != expected.fingerprint:
+            raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", family)
+        if set(result.spec.source_ids) != set(expected.source_ids) or dict(result.spec.snapshot_ids) != dict(expected.snapshot_ids) or {key: tuple(value) for key, value in result.spec.table_ids_by_source.items()} != {key: tuple(value) for key, value in expected.table_ids_by_source.items()}:
+            raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", f"scope mismatch for {family}")
+        scope = result.observation_scope
+        if set(scope.source_ids) != set(expected.source_ids) or dict(scope.snapshot_ids) != dict(expected.snapshot_ids) or {key: tuple(value) for key, value in scope.table_ids_by_source.items()} != {key: tuple(value) for key, value in expected.table_ids_by_source.items()}:
+            raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", f"observation scope mismatch for {family}")
+        edges = {item.edge_id: item for item in result.edges}
+        if any(edge_id not in edges for edge_id in membership.authorized_edge_refs):
+            raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", "membership references a missing ER edge")
+        allowed = {EntityMatchPredictionBand.STRONG_LINK_EVIDENCE}
+        if result.spec.clustering_policy.include_review_edges:
+            allowed.add(EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE)
+        selected_edges = [edges[edge_id] for edge_id in membership.authorized_edge_refs]
+        if any(edge.model_prediction_band not in allowed for edge in selected_edges):
+            raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", "membership uses an edge outside the authorized cluster policy")
+        evidence_records = {ref for edge in result.edges for ref in (edge.left_record_ref, edge.right_record_ref)} | {ref for cluster in result.clusters for ref in cluster.record_refs}
+        if not set(membership.source_record_refs).issubset(evidence_records):
+            raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", "membership contains records absent from the ER evaluated output")
+        linked_records = {ref for edge in selected_edges for ref in (edge.left_record_ref, edge.right_record_ref)}
+        if not set(membership.source_record_refs).issubset(linked_records):
+            raise CanonicalizationError("UNRESOLVED_IDENTITY", "every ER-derived member must be supported by an authorized edge")
+
+
 class CanonicalFinalizationService:
     def __init__(self, review_policy: ReviewPolicyService | None = None) -> None:
         self.review_policy = review_policy or ReviewPolicyService()
 
-    def identity_context(self, hypothesis: CanonicalModelHypothesis, er_hashes: Mapping[str, str] | None = None) -> ReviewCompatibilityContext:
-        fingerprints = dict(hypothesis.source_schema_fingerprints)
+    def identity_context(self, hypothesis: CanonicalModelHypothesis, identity_proposal: CanonicalIdentityProposal, er_hashes: Mapping[str, str] | None = None) -> ReviewCompatibilityContext:
+        if identity_proposal.hypothesis_artifact_id != hypothesis.artifact_id:
+            raise CanonicalizationError("STALE_REVIEW", "identity proposal does not bind the hypothesis")
+        fingerprints = dict(identity_proposal.source_schema_fingerprints)
         fingerprints.update({f"er:{family}": digest for family, digest in (er_hashes or {}).items()})
         return ReviewCompatibilityContext(
             review_checkpoint_id=ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY,
-            subject_stage="CANONICAL_HYPOTHESES",
-            subject_artifact_id=hypothesis.artifact_id,
-            subject_content_hash=hypothesis.content_hash,
-            subject_schema_version=hypothesis.schema_version,
+            subject_stage="CANONICAL_IDENTITY_PROPOSAL",
+            subject_artifact_id=identity_proposal.proposal_id,
+            subject_content_hash=identity_proposal.content_hash,
+            subject_schema_version=identity_proposal.schema_version,
             model_version=hypothesis.model_version,
             source_schema_fingerprints=fingerprints,
             policy_version="canonical-identity-v1",
-            domain_assertion_refs=hypothesis.domain_assertion_refs,
-            subject_semantic_id=stable_id("csem", sorted(item.semantic_id for item in hypothesis.entity_types)),
-            applicability_fingerprint=stable_digest({"hypothesis": hypothesis.content_hash, "er": fingerprints}),
+            domain_assertion_refs=identity_proposal.domain_assertion_refs,
+            subject_semantic_id=stable_id("csem", identity_proposal.canonical_entity_type_ids),
+            applicability_fingerprint=stable_digest({"hypothesis": hypothesis.content_hash, "proposal": identity_proposal.content_hash, "er": fingerprints}),
         )
 
     def finalize(
         self,
         *,
         hypothesis: CanonicalModelHypothesis,
+        identity_proposal: CanonicalIdentityProposal,
         identity_review: ReviewDecision,
         er_results: Mapping[str, EntityResolutionResult] | None = None,
-        memberships: Mapping[str, Sequence[str]] | None = None,
         source_record_metadata: Mapping[str, Mapping[str, str]] | None = None,
         survivorship_decisions: Sequence[CanonicalSurvivorshipDecision] = (),
         conflicts: Sequence[CanonicalConflict] = (),
@@ -197,47 +340,64 @@ class CanonicalFinalizationService:
         er_results = dict(er_results or {})
         er_hashes = {family: stable_digest(result.model_dump(mode="json")) for family, result in er_results.items()}
         try:
-            self.review_policy.require_compatible(identity_review, self.identity_context(hypothesis, er_hashes))
+            self.review_policy.require_compatible(identity_review, self.identity_context(hypothesis, identity_proposal, er_hashes))
         except ReviewCompatibilityError as error:
             raise CanonicalizationError("STALE_REVIEW", str(error)) from error
-        for family, requirement in hypothesis.entity_resolution_requirements.items():
-            if requirement is EntityResolutionRequirement.ER_REQUIRED:
-                result = er_results.get(family)
-                if result is None:
-                    raise CanonicalizationError("MISSING_REQUIRED_ER", family)
-                if result.status is not EntityResolutionStatus.COMPLETE:
-                    raise CanonicalizationError("INCOMPATIBLE_ER_RESULT", family)
         if any(requirement is EntityResolutionRequirement.ER_REQUIRED for requirement in hypothesis.entity_resolution_requirements.values()) and identity_review.decision is ReviewDecisionStatus.SKIPPED:
             raise CanonicalizationError("INCOMPLETE_REVIEW", "required ER identity cannot be skipped")
-        memberships = {key: tuple(sorted(set(value))) for key, value in (memberships or {}).items()}
+        if identity_proposal.hypothesis_artifact_id != hypothesis.artifact_id:
+            raise CanonicalizationError("STALE_REVIEW", "identity proposal does not bind the hypothesis")
         instances: list[CanonicalEntityInstance] = []
         maps: list[SourceRecordCanonicalMap] = []
         metadata = source_record_metadata or {}
-        for entity_type in sorted(hypothesis.entity_types, key=lambda item: item.canonical_entity_type_id):
-            if entity_type.kind is CanonicalEntityKind.EVENT:
-                continue
-            er_family = entity_type.entity_resolution_family or entity_type.semantic_id
-            family_members = memberships.get(entity_type.semantic_id) or memberships.get(er_family, ())
-            if not family_members:
-                continue
+        entity_types = {item.canonical_entity_type_id: item for item in hypothesis.entity_types}
+        for membership in identity_proposal.memberships:
+            entity_type = entity_types.get(membership.canonical_entity_type_id)
+            if entity_type is None:
+                raise CanonicalizationError("UNRESOLVED_IDENTITY", membership.canonical_entity_type_id)
+            family = membership.entity_resolution_family or entity_type.entity_resolution_family or entity_type.semantic_id
+            requirement = hypothesis.entity_resolution_requirements.get(family, EntityResolutionRequirement.ER_NOT_REQUIRED)
+            family_result = er_results.get(family)
+            if membership.derivation_basis is IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE:
+                if requirement is not EntityResolutionRequirement.ER_REQUIRED or family_result is None:
+                    raise CanonicalizationError("MISSING_REQUIRED_ER", family)
+                CanonicalIdentityProposalService.validate_er_membership(hypothesis, membership, family_result, family)
+            family_members = tuple(sorted(set(membership.source_record_refs)))
             entity_id = canonical_entity_id(entity_type.canonical_entity_type_id, family_members, hypothesis.model_version)
-            family_result = er_results.get(er_family)
             linkage_refs = set()
             if family_result is not None:
                 linkage_refs.update(artifact.artifact_id for artifact in family_result.artifacts)
                 member_set = set(family_members)
                 linkage_refs.update(edge.edge_id for edge in family_result.edges if {edge.left_record_ref, edge.right_record_ref}.issubset(member_set))
-            instance = CanonicalEntityInstance(canonical_entity_id=entity_id, canonical_entity_type_id=entity_type.canonical_entity_type_id, source_record_refs=family_members, identity_decision_ref=identity_review.review_decision_id, review_decision_ref=identity_review.review_decision_id, linkage_evidence_refs=tuple(sorted(linkage_refs | set(er_hashes.values()))), source_cluster_evidence_refs=(), canonical_model_version=hypothesis.model_version, provenance_refs=hypothesis.provenance_refs)
+            linkage_refs.update(membership.evidence_refs)
+            instance = CanonicalEntityInstance(canonical_entity_id=entity_id, canonical_entity_type_id=entity_type.canonical_entity_type_id, source_record_refs=family_members, identity_decision_ref=identity_review.review_decision_id, review_decision_ref=identity_review.review_decision_id, linkage_evidence_refs=tuple(sorted(linkage_refs | set(er_hashes.values()))), source_cluster_evidence_refs=membership.cluster_evidence_refs, canonical_model_version=hypothesis.model_version, provenance_refs=tuple(sorted(set(hypothesis.provenance_refs) | set(identity_proposal.provenance_refs))))
             instances.append(instance)
             for record_ref in family_members:
                 item = metadata.get(record_ref, {})
                 if not all(item.get(key) for key in ("source_id", "snapshot_id", "table_id")):
                     raise CanonicalizationError("PROVENANCE_INCOMPLETE", f"missing source metadata for {record_ref}")
-                maps.append(SourceRecordCanonicalMap(record_ref=record_ref, source_id=item["source_id"], snapshot_id=item["snapshot_id"], table_id=item["table_id"], canonical_entity_id=entity_id, canonical_entity_type_id=entity_type.canonical_entity_type_id, identity_decision_ref=identity_review.review_decision_id, review_decision_ref=identity_review.review_decision_id, linkage_evidence_refs=tuple(sorted(linkage_refs | set(er_hashes.values()))), cluster_evidence_ref=None, canonical_model_version=hypothesis.model_version, terminal_disposition=RecordDisposition.CONSOLIDATED if len(family_members) > 1 else RecordDisposition.EMITTED_DIRECT, disposition_reason="accepted canonical identity review", provenance_refs=hypothesis.provenance_refs))
-        if any(hypothesis.entity_resolution_requirements.get(entity.entity_resolution_family or entity.semantic_id) is EntityResolutionRequirement.ER_REQUIRED and not (memberships.get(entity.semantic_id) or memberships.get(entity.entity_resolution_family or entity.semantic_id)) for entity in hypothesis.entity_types):
+                maps.append(SourceRecordCanonicalMap(
+                    record_ref=record_ref,
+                    source_id=item["source_id"],
+                    snapshot_id=item["snapshot_id"],
+                    table_id=item["table_id"],
+                    canonical_entity_id=entity_id,
+                    canonical_entity_type_id=entity_type.canonical_entity_type_id,
+                    identity_decision_ref=identity_review.review_decision_id,
+                    review_decision_ref=identity_review.review_decision_id,
+                    linkage_evidence_refs=tuple(sorted(linkage_refs | set(er_hashes.values()))),
+                    cluster_evidence_ref=membership.cluster_evidence_refs[0] if membership.cluster_evidence_refs else None,
+                    canonical_model_version=hypothesis.model_version,
+                    terminal_disposition=RecordDisposition.EMITTED_DIRECT if entity_type.kind is CanonicalEntityKind.EVENT or len(family_members) == 1 else RecordDisposition.CONSOLIDATED,
+                    disposition_reason=f"accepted canonical identity proposal via {membership.derivation_basis.value}",
+                    provenance_refs=tuple(sorted(set(hypothesis.provenance_refs) | set(identity_proposal.provenance_refs))),
+                ))
+        required_families = {entity.entity_resolution_family or entity.semantic_id for entity in hypothesis.entity_types if hypothesis.entity_resolution_requirements.get(entity.entity_resolution_family or entity.semantic_id) is EntityResolutionRequirement.ER_REQUIRED}
+        proposed_families = {membership.entity_resolution_family or entity_types[membership.canonical_entity_type_id].entity_resolution_family or entity_types[membership.canonical_entity_type_id].semantic_id for membership in identity_proposal.memberships}
+        if not required_families.issubset(proposed_families):
             raise CanonicalizationError("UNRESOLVED_IDENTITY", "required identity family has no accepted membership")
         accepted_mappings = tuple(item for item in hypothesis.source_attribute_mappings if item.status is MappingStatus.ACCEPTED)
-        payload = {"hypothesis": hypothesis.content_hash, "review": identity_review.content_hash, "instances": [item.model_dump(mode="json") for item in instances], "maps": [item.model_dump(mode="json") for item in maps], "model_version": hypothesis.model_version, "survivorship": [item.model_dump(mode="json") for item in survivorship_decisions], "conflicts": [item.model_dump(mode="json") for item in conflicts]}
+        payload = {"hypothesis": hypothesis.content_hash, "proposal": identity_proposal.content_hash, "review": identity_review.content_hash, "instances": [item.model_dump(mode="json") for item in instances], "maps": [item.model_dump(mode="json") for item in maps], "model_version": hypothesis.model_version, "survivorship": [item.model_dump(mode="json") for item in survivorship_decisions], "conflicts": [item.model_dump(mode="json") for item in conflicts]}
         model_id = canonical_model_id(payload)
         return CanonicalModel(model_id=model_id, model_version=hypothesis.model_version, hypothesis_artifact_id=hypothesis.artifact_id, finalized_at=finalized_at or utc_now(), review_decision_refs=tuple(sorted(set(hypothesis.upstream_review_decision_refs) | {identity_review.review_decision_id} | {item.review_decision_ref for item in survivorship_decisions if item.review_decision_ref})), entity_types=hypothesis.entity_types, attributes=hypothesis.attributes, relationships=hypothesis.relationships, instances=tuple(instances), source_attribute_mappings=accepted_mappings, source_record_maps=tuple(sorted(maps, key=lambda item: item.record_ref)), survivorship_decisions=tuple(sorted(survivorship_decisions, key=lambda item: item.survivorship_decision_id)), conflicts=tuple(sorted(conflicts, key=lambda item: item.conflict_id)), lineage_refs=tuple(sorted(set(lineage_refs) | set(hypothesis.provenance_refs))), record_accounting_refs=tuple(record_accounting_refs) or (stable_id("account", [item.model_dump(mode="json") for item in maps]),), provenance_refs=hypothesis.provenance_refs, unresolved_items=hypothesis.unresolved_ambiguities + hypothesis.unresolved_semantic_conflicts)
 

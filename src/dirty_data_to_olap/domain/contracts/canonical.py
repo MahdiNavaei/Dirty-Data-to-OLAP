@@ -32,6 +32,12 @@ class ReviewDecisionStatus(str, Enum):
     INVALIDATED = "INVALIDATED"
 
 
+class IdentityDerivationBasis(str, Enum):
+    ER_AUTHORIZED_LINKAGE = "ER_AUTHORIZED_LINKAGE"
+    HUMAN_DOMAIN_REVIEW = "HUMAN_DOMAIN_REVIEW"
+    SOURCE_LOCAL_EVENT_IDENTITY = "SOURCE_LOCAL_EVENT_IDENTITY"
+
+
 class CanonicalEntityKind(str, Enum):
     IDENTITY = "IDENTITY"
     EVENT = "EVENT"
@@ -88,6 +94,15 @@ class CanonicalFailureKind(str, Enum):
     PROVENANCE_INCOMPLETE = "PROVENANCE_INCOMPLETE"
 
 
+class ReviewSkipAuthorization(_SourceModel):
+    policy_id: str = Field(min_length=1)
+    policy_version: str = Field(min_length=1)
+    checkpoint: ReviewCheckpoint
+    scope: str = Field(min_length=1)
+    applicability_fingerprint: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
 class ReviewCompatibilityContext(_SourceModel):
     review_checkpoint_id: ReviewCheckpoint
     subject_stage: str = Field(min_length=1)
@@ -100,6 +115,7 @@ class ReviewCompatibilityContext(_SourceModel):
     domain_assertion_refs: tuple[str, ...] = ()
     subject_semantic_id: str = Field(min_length=1)
     applicability_fingerprint: str = Field(min_length=1)
+    skip_authorization: ReviewSkipAuthorization | None = None
 
 
 class ReviewDecision(_SourceModel):
@@ -123,6 +139,7 @@ class ReviewDecision(_SourceModel):
     superseded: bool = False
     superseded_by: str | None = None
     invalidation_reason: str | None = None
+    skip_authorization: ReviewSkipAuthorization | None = None
 
     @model_validator(mode="after")
     def invalidation_is_explicit(self) -> "ReviewDecision":
@@ -130,6 +147,8 @@ class ReviewDecision(_SourceModel):
             raise ValueError("superseded review decisions require superseded_by")
         if self.decision is ReviewDecisionStatus.INVALIDATED and not self.invalidation_reason:
             raise ValueError("invalidated review decisions require a reason")
+        if self.decision is ReviewDecisionStatus.SKIPPED and self.skip_authorization is None:
+            raise ValueError("skipped review decisions require explicit skip authorization")
         return self
 
     @property
@@ -149,6 +168,9 @@ class ReviewDecision(_SourceModel):
             errors.append("MISMATCH_DOMAIN_ASSERTION_SCOPE")
         if self.decision not in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
             errors.append("DECISION_NOT_SATISFYING_GUARD")
+        if self.decision is ReviewDecisionStatus.SKIPPED:
+            if context.skip_authorization is None or self.skip_authorization != context.skip_authorization:
+                errors.append("SKIP_POLICY_NOT_AUTHORIZED")
         if self.superseded or self.invalidation_reason:
             errors.append("DECISION_INVALIDATED_OR_SUPERSEDED")
         return tuple(errors)
@@ -225,6 +247,55 @@ class CanonicalEntityType(_SourceModel):
     domain_assertion_refs: tuple[str, ...] = ()
     review_state: str = Field(min_length=1)
     provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+
+class CanonicalIdentityMembership(_SourceModel):
+    membership_group_id: str = Field(min_length=1)
+    canonical_entity_type_id: str = Field(min_length=1)
+    entity_resolution_family: str | None = None
+    source_record_refs: tuple[str, ...] = Field(min_length=1)
+    derivation_basis: IdentityDerivationBasis
+    er_result_refs: tuple[str, ...] = ()
+    er_spec_refs: tuple[str, ...] = ()
+    authorized_edge_refs: tuple[str, ...] = ()
+    cluster_evidence_refs: tuple[str, ...] = ()
+    actor: str | None = None
+    actor_source: str | None = None
+    domain_assertion_refs: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = Field(min_length=1)
+    policy_refs: tuple[str, ...] = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def basis_requirements(self) -> "CanonicalIdentityMembership":
+        if self.derivation_basis is IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE and not self.authorized_edge_refs:
+            raise ValueError("ER-derived membership requires authorized edge refs")
+        if self.derivation_basis is IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW and (not self.actor or not self.actor_source or not self.domain_assertion_refs):
+            raise ValueError("human/domain membership requires actor, source and domain assertion refs")
+        if self.derivation_basis is IdentityDerivationBasis.SOURCE_LOCAL_EVENT_IDENTITY and self.authorized_edge_refs:
+            raise ValueError("source-local event identity cannot contain ER edge refs")
+        return self
+
+
+class CanonicalIdentityProposal(_SourceModel):
+    proposal_id: str = Field(pattern=r"^cip_[a-f0-9]{32}$")
+    hypothesis_artifact_id: str = Field(min_length=1)
+    canonical_entity_type_ids: tuple[str, ...] = Field(min_length=1)
+    entity_resolution_requirements: Mapping[str, EntityResolutionRequirement]
+    memberships: tuple[CanonicalIdentityMembership, ...] = Field(min_length=1)
+    er_result_refs: tuple[str, ...] = ()
+    er_spec_refs: tuple[str, ...] = ()
+    source_schema_fingerprints: Mapping[str, str] = Field(default_factory=dict)
+    domain_assertion_refs: tuple[str, ...] = Field(min_length=1)
+    policy_refs: tuple[str, ...] = Field(min_length=1)
+    unresolved_identity_cases: tuple[str, ...] = ()
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+    created_at: datetime
+
+    @property
+    def content_hash(self) -> str:
+        return stable_digest(self.model_dump(mode="json", exclude={"created_at"}))
 
 
 class CanonicalRelationship(_SourceModel):
@@ -393,6 +464,10 @@ def hypothesis_id(payload: Mapping[str, Any]) -> str:
 
 def canonical_model_id(payload: Mapping[str, Any]) -> str:
     return stable_id("cmodel", payload)
+
+
+def identity_proposal_id(payload: Mapping[str, Any]) -> str:
+    return stable_id("cip", payload)
 
 
 def canonical_entity_id(entity_type_id: str, source_record_refs: tuple[str, ...], model_version: str) -> str:
