@@ -34,21 +34,23 @@ checkpoints:
     skip_or_auto_policy: versioned policy may record SKIPPED only when manual review is not required; no arbitrary numeric confidence threshold is defined
   - checkpoint_id: REVIEW_CANONICAL_IDENTITY
     checkpoint_stage: REVIEW_CANONICAL_IDENTITY
-    subject_stage: CANONICAL_HYPOTHESES
+    subject_stage: CANONICAL_IDENTITY_PREPARATION
+    subject_artifact_types: [CanonicalIdentityProposal]
     additional_subject_stages:
+      - stage: CANONICAL_HYPOTHESES
+        artifact_types: [CanonicalModelHypothesis]
       - stage: ENTITY_RESOLUTION
-        artifact_types: [EntityMatchEdge, EntityCluster]
+        artifact_types: [EntityResolutionResult]
         required_when: entity_resolution_required(entity_family) == true
-    subject_artifact_types: [CanonicalModelHypothesis]
     review_types: [canonical_identity, entity_merge, linkage, survivorship, canonical_conflict, identity_ambiguity]
-    required_when: policy requires identity or linkage review; ER-required families require this checkpoint after complete ER output
+    required_when: policy requires identity or linkage review; the exact proposal is assembled after hypothesis and any required complete ER output; ER-required families require this checkpoint after complete ER output
     downstream_guarded_stage: CANONICAL_FINALIZATION
     decision_contract: ReviewDecision
-    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id]
+    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, er_result_semantic_hash]
     invalidating_changes: [canonical_hypothesis_change, entity_resolution_configuration_change, linkage_artifact_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change, survivorship_policy_change]
     unresolved_run_state: NEEDS_REVIEW
     reject_behavior: rejected identity or linkage review cannot satisfy finalization; revise the hypothesis, ER policy or decision and create a new compatible review
-    skip_or_auto_policy: ER-not-required or unambiguous families may be policy-recorded SKIPPED; ER-required families cannot skip this guard
+    skip_or_auto_policy: ER-not-required or unambiguous families may be policy-recorded SKIPPED; ER-required families require a compatible COMPLETE ER result and cannot skip this guard
   - checkpoint_id: REVIEW_ANALYTICAL_PLAN
     checkpoint_stage: REVIEW_ANALYTICAL_PLAN
     subject_stage: ANALYTICAL_PLANNING

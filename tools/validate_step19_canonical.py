@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from dirty_data_to_olap.application.canonical import CanonicalFinalizationService, CanonicalIdentityProposalService, CanonicalizationError
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
-from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityProposal, ReviewDecision, ReviewDecisionStatus
+from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityMembership, CanonicalIdentityProposal, IdentityDerivationBasis, ReviewDecision, ReviewDecisionStatus
 from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionResult
 from dirty_data_to_olap.domain.contracts.source import stable_digest
 
@@ -49,13 +49,13 @@ def main() -> int:
     accounting = load("record_accounting.json")
     manifest = load("run_manifest.json")
     passed = []
-    passed.append(check("exact checkpoints", manifest["flow"] == ["REVIEW_EVIDENCE_DECISIONS", "CANONICAL_HYPOTHESES", "ENTITY_RESOLUTION", "REVIEW_CANONICAL_IDENTITY", "CANONICAL_FINALIZATION"], "unexpected stage order"))
+    passed.append(check("exact checkpoints", manifest["flow"] == ["REVIEW_EVIDENCE_DECISIONS", "CANONICAL_HYPOTHESES", "ENTITY_RESOLUTION", "CANONICAL_IDENTITY_PREPARATION", "REVIEW_CANONICAL_IDENTITY", "CANONICAL_FINALIZATION"], "unexpected stage order"))
     passed.append(check("review accepted", len(load("review_evidence_decisions.json")) == 2 and all(item["decision"] == "ACCEPTED" for item in load("review_evidence_decisions.json")) and load("review_canonical_identity.json")["decision"] == "ACCEPTED", "accepted reviews required"))
     evidence_by_id = {item["decision_id"]: item for item in upstream_decisions}
     review_by_subject = {item.subject_artifact_id: item for item in evidence_reviews}
     passed.append(check("exact evidence bindings", set(review_by_subject) == set(evidence_by_id) and all(item.decision == ReviewDecisionStatus.ACCEPTED for item in evidence_reviews), "each concrete relationship/mapping decision lacks its exact accepted review"))
     passed.append(check("er requirement", hypothesis["entity_resolution_requirements"]["person"] == "ER_REQUIRED" and binding["family"] == "person" and binding["status"] == "COMPLETE" and binding["synthetic_reference_fixture"] is True, "required family is not bound to a complete result"))
-    passed.append(check("non-er event", hypothesis["entity_resolution_requirements"]["order"] == "ER_NOT_REQUIRED" and any(item["semantic_id"] == "order" and item["kind"] == "EVENT" for item in hypothesis["entity_types"]) and any(item["canonical_entity_type_id"] == "cet_order" for item in model["entity_types"]), "event boundary missing"))
+    passed.append(check("non-er event", hypothesis["entity_resolution_requirements"]["order"] == "ER_NOT_REQUIRED" and any(item["semantic_id"] == "order" and item["kind"] == "EVENT" for item in hypothesis["entity_types"]) and any(item["canonical_entity_type_id"] == "cet_order" for item in model["entity_types"]) and any(item["record_ref"] == "order-r1" and item["terminal_disposition"] == "EMITTED_DIRECT" for item in maps), "event boundary missing"))
     passed.append(check("canonical namespace", model["model_id"].startswith("cmodel_") and all(item["canonical_entity_id"].startswith("cent_") for item in model["instances"]), "canonical ID namespace invalid"))
     passed.append(check("cluster separation", not any("cluster" in item["canonical_entity_id"].lower() for item in model["instances"]), "cluster ID leaked into canonical ID"))
     passed.append(check("record preservation", accounting["source_records_preserved"] is True and accounting["destructive_deduplication"] is False and len(maps) == accounting["source_records_mapped"] == 3, "source mapping accounting mismatch"))
@@ -72,6 +72,84 @@ def main() -> int:
 
     h = __import__("dirty_data_to_olap.domain.contracts.canonical", fromlist=["CanonicalModelHypothesis"]).CanonicalModelHypothesis.model_validate(hypothesis)
     finalizer = CanonicalFinalizationService(ReviewPolicyService())
+    human = CanonicalIdentityMembership(
+        membership_group_id="validator-human-required",
+        canonical_entity_type_id="cet_customer",
+        entity_resolution_family="person",
+        source_record_refs=("crm-r1", "erp-r1"),
+        derivation_basis=IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW,
+        actor="validator",
+        actor_source="validator-domain",
+        domain_assertion_refs=("domain-assertion-customer-order",),
+        evidence_refs=("domain-assertion-customer-order",),
+        policy_refs=("manual-identity-v1",),
+        rationale="validator human override",
+        provenance_refs=("validator",),
+    )
+    builder = CanonicalIdentityProposalService()
+    try:
+        builder.build(hypothesis=h, memberships=(human,), er_results={}, policy_refs=("canonical-identity-v1",), provenance_refs=("validator",))
+    except CanonicalizationError as error:
+        passed.append(check("human override cannot bypass ER", "MISSING_REQUIRED_ER" in str(error), "human identity bypassed required ER"))
+    else:
+        raise AssertionError("human identity bypassed required ER")
+    human_proposal = builder.build(hypothesis=h, memberships=(human,), er_results={"person": er_reference}, policy_refs=("canonical-identity-v1",), provenance_refs=("validator",))
+    passed.append(check("human override binds ER", human_proposal.er_result_hashes.get("person") == stable_digest(er_reference.model_dump(mode="json")), "compatible human override did not bind ER hash"))
+    try:
+        builder.build(hypothesis=h, memberships=(human.model_copy(update={"source_record_refs": ("outside-r1",)}),), er_results={"person": er_reference}, policy_refs=("canonical-identity-v1",), provenance_refs=("validator",))
+    except CanonicalizationError as error:
+        passed.append(check("human population restriction", "INCOMPATIBLE_ER_RESULT" in str(error), "human override injected an outside record"))
+    else:
+        raise AssertionError("human override injected an outside record")
+
+    def graph_membership(record_refs, edge_refs):
+        return CanonicalIdentityMembership(
+            membership_group_id="validator-graph",
+            canonical_entity_type_id="cet_customer",
+            entity_resolution_family="person",
+            source_record_refs=tuple(record_refs),
+            derivation_basis=IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE,
+            authorized_edge_refs=tuple(edge_refs),
+            evidence_refs=tuple(edge_refs),
+            policy_refs=("er-clustering-v1",),
+            rationale="validator graph test",
+            provenance_refs=("validator",),
+        )
+
+    def graph_result(pairs):
+        edges = tuple(er_reference.edges[0].model_copy(update={"edge_id": edge_id, "left_record_ref": left, "right_record_ref": right}) for edge_id, left, right in pairs)
+        return er_reference.model_copy(update={"edges": edges, "clusters": ()})
+
+    graph_negative_cases = (
+        (("A", "B", "C"), (("e-ab", "A", "B"),)),
+        (("A", "B", "C", "D"), (("e-ab", "A", "B"), ("e-cd", "C", "D"))),
+        (("A", "B"), (("e-ac", "A", "C"),)),
+        (("A", "B"), (("e-ab", "A", "B"), ("e-cd", "C", "D"))),
+    )
+    for record_refs, pairs in graph_negative_cases:
+        try:
+            CanonicalIdentityProposalService.validate_er_membership(h, graph_membership(record_refs, tuple(edge[0] for edge in pairs)), graph_result(pairs), "person")
+        except CanonicalizationError:
+            continue
+        raise AssertionError("invalid ER graph was accepted")
+    connected = (("e-ab", "A", "B"), ("e-bc", "B", "C"))
+    CanonicalIdentityProposalService.validate_er_membership(h, graph_membership(("A", "B", "C"), ("e-ab", "e-bc")), graph_result(connected), "person")
+    passed.append("connected ER graph accepted")
+
+    try:
+        finalizer.finalize(hypothesis=h, identity_proposal=proposal, identity_review=identity, er_results={}, source_record_metadata={})
+    except CanonicalizationError as error:
+        passed.append(check("finalizer ER-required guard", "MISSING_REQUIRED_ER" in str(error), "finalizer allowed missing ER"))
+    else:
+        raise AssertionError("finalizer allowed missing ER")
+
+    changed_er = er_reference.model_copy(update={"edges": (er_reference.edges[0].model_copy(update={"match_weight": er_reference.edges[0].match_weight + 1.0}),)})
+    try:
+        finalizer.finalize(hypothesis=h, identity_proposal=proposal, identity_review=identity, er_results={"person": changed_er}, source_record_metadata={})
+    except CanonicalizationError as error:
+        passed.append(check("ER hash stale review", "STALE_REVIEW" in str(error), "changed ER result remained review-compatible"))
+    else:
+        raise AssertionError("changed ER result remained review-compatible")
     try:
         finalizer.review_policy.require_compatible(identity, finalizer.identity_context(h, proposal, {"person": stable_digest(er_reference.model_dump(mode="json"))}))
     except Exception as error:

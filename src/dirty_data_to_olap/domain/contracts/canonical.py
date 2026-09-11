@@ -285,6 +285,7 @@ class CanonicalIdentityProposal(_SourceModel):
     entity_resolution_requirements: Mapping[str, EntityResolutionRequirement]
     memberships: tuple[CanonicalIdentityMembership, ...] = Field(min_length=1)
     er_result_refs: tuple[str, ...] = ()
+    er_result_hashes: Mapping[str, str] = Field(default_factory=dict)
     er_spec_refs: tuple[str, ...] = ()
     source_schema_fingerprints: Mapping[str, str] = Field(default_factory=dict)
     domain_assertion_refs: tuple[str, ...] = Field(min_length=1)

@@ -144,19 +144,43 @@ stages:
     dependencies: [CANONICAL_HYPOTHESES]
     optional_dependencies: []
     input_artifact_types: [EntityResolutionSpec, SourceCatalog, SourceSnapshotResult, BatchReference, SourceRecordReference, IdentityFieldSpecification, EntityResolutionAuthorization, EvidenceReferences]
-    output_artifact_types: [EntityMatchEdge, EntityCluster]
+    output_artifact_types: [EntityMatchEdge, EntityCluster, EntityResolutionResult]
     failure_consequence: affected family FAILED or NEEDS_REVIEW
     cacheable: true
     idempotency: pinned spec/input/adapter
     review_boundary: linkage evidence generation; review is a downstream checkpoint
     skip_semantics: SKIPPED when policy does not require entity resolution; no fake identity links are produced
-  - stage_id: REVIEW_CANONICAL_IDENTITY
+  - stage_id: CANONICAL_IDENTITY_PREPARATION
     required: true
     conditional: true
     capability_required_for_v1: false
     dependencies: [CANONICAL_HYPOTHESES]
     optional_dependencies: [ENTITY_RESOLUTION]
-    input_artifact_types: [CanonicalModelHypothesis, EntityMatchEdge, EntityCluster, Conflict]
+    input_artifact_types: [CanonicalModelHypothesis, EntityResolutionResult]
+    output_artifact_types: [CanonicalIdentityProposal]
+    failure_consequence: NEEDS_REVIEW
+    cacheable: true
+    idempotency: pinned hypothesis/ER result/membership policy
+    review_boundary: exact identity proposal assembly before canonical identity review
+    conditional_dependencies:
+      - dependency: ENTITY_RESOLUTION
+        scope: entity_family
+        when: entity_resolution_required(entity_family) == true
+        requires: compatible COMPLETE EntityResolutionResult exists before proposal assembly
+        on_failure: family_scoped NEEDS_REVIEW; no identity proposal is published
+      - dependency: ENTITY_RESOLUTION
+        scope: entity_family
+        when: entity_resolution_required(entity_family) == false
+        requires: source/domain identity basis is explicit; ER may be absent
+        on_success: proposal assembly may proceed for that family
+    skip_semantics: this is not a silent global skip; ER_NOT_REQUIRED families may omit ER, while ER_REQUIRED families may not bypass the ER result
+  - stage_id: REVIEW_CANONICAL_IDENTITY
+    required: true
+    conditional: true
+    capability_required_for_v1: false
+    dependencies: [CANONICAL_IDENTITY_PREPARATION]
+    optional_dependencies: []
+    input_artifact_types: [CanonicalIdentityProposal, EntityResolutionResult, Conflict]
     output_artifact_types: [ReviewDecision]
     failure_consequence: NEEDS_REVIEW
     cacheable: false
@@ -164,20 +188,20 @@ stages:
     review_boundary: canonical identity, linkage, survivorship and conflict review
     review_checkpoint_id: REVIEW_CANONICAL_IDENTITY
     conditional_dependencies:
-      - dependency: ENTITY_RESOLUTION
+      - dependency: CANONICAL_IDENTITY_PREPARATION
         scope: entity_family
         when: entity_resolution_required(entity_family) == true
-        requires: ENTITY_RESOLUTION output exists before this checkpoint and linkage review decision is bound to that output
+        requires: exact proposal contains a compatible COMPLETE ER result hash and identity membership subject
         on_failure: family_scoped NEEDS_REVIEW; no finalization for that family
-      - dependency: ENTITY_RESOLUTION
+      - dependency: CANONICAL_IDENTITY_PREPARATION
         scope: entity_family
         when: entity_resolution_required(entity_family) == false
-        requires: canonical hypothesis exists; ER may be absent or policy-recorded SKIPPED
-        on_success: checkpoint may be SKIPPED or completed according to policy
-    skip_semantics: SKIPPED only when policy says identity review is not required for the unambiguous family; no unnecessary universal manual review
+        requires: exact source/domain identity proposal exists; ER may be absent
+        on_success: checkpoint may be completed or explicitly policy-authorized SKIPPED
+    skip_semantics: SKIPPED only when policy says identity review is not required for the unambiguous ER_NOT_REQUIRED family; ER_REQUIRED families cannot skip this guard
   - stage_id: CANONICAL_FINALIZATION
     required: true
-    dependencies: [CANONICAL_HYPOTHESES, REVIEW_CANONICAL_IDENTITY]
+    dependencies: [CANONICAL_HYPOTHESES, CANONICAL_IDENTITY_PREPARATION, REVIEW_CANONICAL_IDENTITY]
     optional_dependencies: [ENTITY_RESOLUTION]
     input_artifact_types: [CanonicalModelHypothesis, EntityMatchEdge, EntityCluster, ReviewDecision]
     output_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]

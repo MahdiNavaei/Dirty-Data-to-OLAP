@@ -351,6 +351,7 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
         "SOURCE_DISCOVERY", "SOURCE_SNAPSHOT_STAGE", "PROFILING",
         "DEPENDENCY_DISCOVERY", "SCHEMA_MATCHING", "QUALITY_ANALYSIS",
         "EVIDENCE_FUSION", "REVIEW_EVIDENCE_DECISIONS", "CANONICAL_HYPOTHESES",
+        "CANONICAL_IDENTITY_PREPARATION",
         "REVIEW_CANONICAL_IDENTITY", "REVIEW_ANALYTICAL_PLAN",
         "REVIEW_MATERIALIZATION_PLAN",
         "CANONICAL_FINALIZATION", "ANALYTICAL_PLANNING", "COMPILATION",
@@ -374,7 +375,7 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
     require(not has_cycle(stage_ids, edges), "stage DAG contains a cycle")
     er = by_id["ENTITY_RESOLUTION"]
     finalization = by_id["CANONICAL_FINALIZATION"]
-    require(set(er.get("output_artifact_types", [])) == {"EntityMatchEdge", "EntityCluster"}, "ER stage output ownership is invalid")
+    require(set(er.get("output_artifact_types", [])) == {"EntityMatchEdge", "EntityCluster", "EntityResolutionResult"}, "ER stage output ownership is invalid")
     require("SourceRecordCanonicalMap" in finalization.get("output_artifact_types", []), "finalization must output SourceRecordCanonicalMap")
     require("SourceRecordCanonicalMap" not in er.get("output_artifact_types", []), "ER stage must not output SourceRecordCanonicalMap")
     require("RelationshipCandidate" in by_id["DEPENDENCY_DISCOVERY"].get("output_artifact_types", []), "dependency stage must expose RelationshipCandidate")
@@ -465,6 +466,10 @@ def check_review_checkpoints(data: dict[str, Any], stage_graph: dict[str, Any]) 
     require(data.get("rejected_decision_satisfies_guard") is False and data.get("deferred_decision_satisfies_guard") is False, "rejected/deferred decisions must not satisfy guards")
     require(data.get("validation_failure_can_be_manually_promoted_to_success") is False, "validation failure must not be manually promoted to success")
     canonical = next((item for item in checkpoints if item.get("checkpoint_id") == "REVIEW_CANONICAL_IDENTITY"), {})
+    require(canonical.get("subject_stage") == "CANONICAL_IDENTITY_PREPARATION", "canonical checkpoint must review the post-ER identity proposal subject")
+    require(canonical.get("subject_artifact_types") == ["CanonicalIdentityProposal"], "canonical checkpoint must review CanonicalIdentityProposal")
+    require("er_result_semantic_hash" in canonical.get("compatibility_fields", []), "canonical checkpoint must bind the ER semantic hash")
+    require(any(item.get("stage") == "CANONICAL_HYPOTHESES" and "CanonicalModelHypothesis" in item.get("artifact_types", []) for item in canonical.get("additional_subject_stages", [])), "canonical checkpoint lacks the hypothesis subject")
     require(any(item.get("stage") == "ENTITY_RESOLUTION" for item in canonical.get("additional_subject_stages", [])), "canonical checkpoint lacks conditional ER subject")
     return len(checkpoints), len(positions)
 

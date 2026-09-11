@@ -94,6 +94,7 @@ stages:
   - {stage_id: REVIEW_EVIDENCE_DECISIONS, owner_component: application.review_policy, implementation_step: 27, test_strategy: "review guard and invalidation"}
   - {stage_id: CANONICAL_HYPOTHESES, owner_component: application.canonical_hypotheses, implementation_step: 19, test_strategy: "canonical contract"}
   - {stage_id: ENTITY_RESOLUTION, owner_component: application.entity_resolution, implementation_step: 14, test_strategy: "false-merge evaluation"}
+  - {stage_id: CANONICAL_IDENTITY_PREPARATION, owner_component: application.canonical_hypotheses, implementation_step: 19, test_strategy: "proposal contract, ER compatibility and identity graph integrity"}
   - {stage_id: LEARNED_EVIDENCE, owner_component: application.learned_evidence, implementation_step: 15, test_strategy: "grouped ranking and candidate-only evidence"}
   - {stage_id: REVIEW_CANONICAL_IDENTITY, owner_component: application.review_policy, implementation_step: 27, test_strategy: "identity review guard"}
   - {stage_id: CANONICAL_FINALIZATION, owner_component: application.canonical_finalization, implementation_step: 19, test_strategy: "mapping and survivorship"}

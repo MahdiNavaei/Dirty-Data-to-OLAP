@@ -2,6 +2,7 @@ import json
 
 from dirty_data_to_olap.domain.contracts.canonical import (
     CanonicalEntityInstance,
+    CanonicalIdentityProposal,
     CanonicalModel,
     CanonicalModelHypothesis,
     NullSemanticState,
@@ -17,6 +18,7 @@ def test_reference_canonical_artifacts_round_trip_without_native_objects():
     hypothesis = json.loads((run / "canonical_model_hypothesis.json").read_text(encoding="utf-8"))
     model = json.loads((run / "canonical_model.json").read_text(encoding="utf-8"))
     assert CanonicalModelHypothesis.model_validate(hypothesis).schema_version == "1.0"
+    assert CanonicalIdentityProposal.model_validate(json.loads((run / "canonical_identity_proposal.json").read_text(encoding="utf-8"))).er_result_hashes
     assert CanonicalModel.model_validate(model).schema_version == "1.0"
     assert all(not isinstance(value, object) or isinstance(value, (str, int, float, bool, list, dict, tuple, type(None))) for value in model.values())
 

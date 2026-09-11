@@ -278,6 +278,28 @@ def test_required_identity_fails_closed_without_membership_or_provenance():
         )
 
 
+def test_required_er_cannot_be_bypassed_by_human_identity_basis():
+    policy = ReviewPolicyService()
+    evidence = review(policy, context())
+    required_hypothesis = hypothesis(evidence).model_copy(update={"entity_resolution_requirements": {"customer": EntityResolutionRequirement.ER_REQUIRED}})
+    membership = CanonicalIdentityMembership(
+        membership_group_id="human-required",
+        canonical_entity_type_id="cet_customer",
+        entity_resolution_family="customer",
+        source_record_refs=("crm:r1",),
+        derivation_basis=IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW,
+        actor="reviewer",
+        actor_source="unit-test",
+        domain_assertion_refs=("domain-1",),
+        evidence_refs=("evidence-1",),
+        policy_refs=("manual-identity-v1",),
+        rationale="explicit unit-test override",
+        provenance_refs=("prov-1",),
+    )
+    with pytest.raises(CanonicalizationError, match="MISSING_REQUIRED_ER"):
+        CanonicalIdentityProposalService().build(hypothesis=required_hypothesis, memberships=(membership,), er_results={}, policy_refs=("canonical-identity-v1",), provenance_refs=("prov-1",))
+
+
 def test_null_semantics_and_survivorship_conflicts_retain_alternatives():
     policy = ReviewPolicyService()
     finalizer = CanonicalFinalizationService(policy)

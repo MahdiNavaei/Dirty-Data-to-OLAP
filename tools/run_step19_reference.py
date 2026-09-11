@@ -265,7 +265,7 @@ def main() -> int:
     dump(RUN / "source_record_canonical_map.json", [jdump(item) for item in model.source_record_maps])
     dump(RUN / "record_accounting.json", accounting)
     dump(RUN / "canonical_model.json", jdump(model))
-    dump(RUN / "run_manifest.json", {"run_id": "step19-reference-run", "flow": ["REVIEW_EVIDENCE_DECISIONS", "CANONICAL_HYPOTHESES", "ENTITY_RESOLUTION", "REVIEW_CANONICAL_IDENTITY", "CANONICAL_FINALIZATION"], "runtime_truth_inputs": [], "step18_evaluation_truth_used": False, "er_input": "explicit synthetic project-owned ER contract fixture only", "identity_membership_basis": {"customer": "ER_AUTHORIZED_LINKAGE via authorized strong edge", "order": "SOURCE_LOCAL_EVENT_IDENTITY via reviewed proposal"}, "canonical_model_content_hash": model.content_hash, "hypothesis_content_hash": hypothesis.content_hash})
+    dump(RUN / "run_manifest.json", {"run_id": "step19-reference-run", "flow": ["REVIEW_EVIDENCE_DECISIONS", "CANONICAL_HYPOTHESES", "ENTITY_RESOLUTION", "CANONICAL_IDENTITY_PREPARATION", "REVIEW_CANONICAL_IDENTITY", "CANONICAL_FINALIZATION"], "runtime_truth_inputs": [], "step18_evaluation_truth_used": False, "er_input": "explicit synthetic project-owned ER contract fixture only", "identity_membership_basis": {"customer": "ER_AUTHORIZED_LINKAGE via authorized strong edge", "order": "SOURCE_LOCAL_EVENT_IDENTITY via reviewed proposal"}, "canonical_model_content_hash": model.content_hash, "hypothesis_content_hash": hypothesis.content_hash})
     print(json.dumps({"run": str(RUN), "hypothesis": hypothesis.artifact_id, "model": model.model_id, "model_content_hash": model.content_hash, "instances": len(model.instances), "maps": len(model.source_record_maps), "conflicts": len(model.conflicts)}, sort_keys=True))
     return 0
 
