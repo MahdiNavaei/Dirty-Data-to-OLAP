@@ -1116,6 +1116,7 @@ handoff_to:
 ## Step18 Runtime and Reproducibility Closure
 
 - execution_step: `18` continuation and surgical harness repair only; Step19 was not started
+- content_commit_sha: `e5eed4f` (`fix: repair Step18 provider runtime and reproducibility harness`)
 - repaired: explicit provider package/version/dependency provisioning contract; metadata-plus-import verification; no editable project install; project-owned provider fixtures; no test-module imports or sentinel runtime creation; same-source ER support with `LINK_AND_DEDUPE`
 - provisioning: dedicated `matching-venv` and `er-venv` used child-local temporary/cache roots and `PYTHONNOUSERSITE=1`; Valentine `1.0.0` and Splink `4.0.17` installs both failed as `NETWORK_TIMEOUT`; no provider artifact was fabricated
 - optional_suite: clean normal integration run `33 passed, 2 skipped`; unavailable optional providers now skip rather than fail

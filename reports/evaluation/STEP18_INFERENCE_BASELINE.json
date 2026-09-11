@@ -1,6 +1,6 @@
 {
   "report_id": "step18-inference-baseline-v4",
-  "git_content_commit": "PENDING-CONTENT-COMMIT",
+  "git_content_commit": "e5eed4f",
   "dataset_id": "step18-inference-baseline-v4",
   "protocol_version": "step18-evaluation-protocol-v4",
   "formal_gate": "PENDING",
