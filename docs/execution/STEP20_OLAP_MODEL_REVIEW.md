@@ -132,11 +132,13 @@ controlled target publication and no Step21/evaluation runtime boundary.
 
 ## VALIDATION STATUS
 
-The focused Step20 suite, independent Step20 validator, architecture
-validator, engineering validator, compileall and diff-check were run during
-implementation. The final full-matrix command results and verified content
-commit are recorded in the execution log and repository state metadata after
-the content commit.
+The focused Step20 suite passed `14` tests and the independent Step20 validator
+passed `24` checks. Final matrix results were unit `148 passed`, contract `12
+passed`, integration `38 passed, 2 skipped`, architecture `11 passed`,
+security `27 passed`, and full regression `236 passed, 2 skipped`. All existing
+validators passed, including the Step20 validator; compileall and diff-check
+also passed. Verified content commit:
+`f7c04b0366ecaeb3433a28efc48ee5aaaede3be6`.
 
 ## LIMITATIONS AND NON-CLAIMS
 

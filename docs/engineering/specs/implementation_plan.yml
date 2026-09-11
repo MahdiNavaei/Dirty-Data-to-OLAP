@@ -2,7 +2,7 @@ schema_version: "1.0"
 scope: "v1 implementation plan after the frozen product, domain, data and software architecture"
 provenance:
   authority: "05_MASTER_BUILD_SEQUENCE.md, product/domain/data/solution contracts, Step 05 cross-artifact audit"
-  status: "G2 PASS; implementation authorized from Step06; Step20 content is implemented and the next handoff is Step21"
+  status: "G2 PASS; Step20 content is implemented and the next handoff is Step21"
 
 sequence_authority:
   master_sequence_path: docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md

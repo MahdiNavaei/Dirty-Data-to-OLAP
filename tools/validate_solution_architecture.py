@@ -818,6 +818,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "olap_engineer", "post-Step 19 state must hand off to Step20")
         require("OLAP" in str(execution.get("current_specialist")), "current specialist must be Step20")
         require("OLAP" in str(execution.get("next_step")), "next step must be Step20")
+    elif execution.get("current_step") == 21:
+        require(execution.get("last_completed_step") == 20, "post-Step 20 state must record completed Step 20")
+        require(execution.get("last_completed_role") == "olap_engineer", "post-Step 20 role must be olap_engineer")
+        require(execution.get("current_role") == "analytical_semantic_layer_engineer", "post-Step 20 state must hand off to Step21")
+        require("Analytical Model" in str(execution.get("current_specialist")), "current specialist must be Step21")
+        require("Analytical Model" in str(execution.get("next_step")), "next step must be Step21")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -831,7 +837,7 @@ def check_state() -> None:
         require(execution.get("current_specialist") == "Step06 — Database Engineer / DBA", "post-Step 05 current specialist must be Step06")
         require(execution.get("next_step") == "Step06 — Database Engineer / DBA", "post-Step 05 next step must be Step06")
     else:
-        require(False, "execution state must be at Step 05 or post-Step 05 handoff")
+        require(False, "execution state must be at Step 05 or a supported post-step handoff")
     require(gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS", "G0/G1 must remain PASS")
     require(gates.get("G2_ARCHITECTURE_READY") in {"PENDING", "PASS"}, "G2 must be PENDING or PASS")
     later_gate_keys = [
