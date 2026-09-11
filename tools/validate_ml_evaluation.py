@@ -38,7 +38,7 @@ def main() -> int:
     _check("relationship universe comes from truth", candidate.get("truth_query_count") == 13, failures)
     _check("zero-candidate truth queries remain visible", "missing_candidate_query_ids" in candidate and len(candidate["missing_candidate_query_ids"]) >= 1, failures)
     _check("candidate metrics have explicit denominator", candidate.get("candidate_recall", {}).get("denominator") is not None, failures)
-    _check("fusion does not claim complete without Profile and Quality artifacts", relationship.get("fusion", {}).get("status") != "EVALUATED" or bindings.get("profiling", {}).get("status") == "EXECUTED", failures)
+    _check("fusion does not claim complete without Profile and Quality artifacts", relationship.get("fusion", {}).get("status") != "EVALUATED" or (bindings.get("profiling", {}).get("status") == "EXECUTED" and bindings.get("quality", {}).get("status") == "EXECUTED"), failures)
 
     dependency_binding = bindings.get("dependency_discovery", {})
     if dependency_binding.get("status") == "EXECUTED":

@@ -22,6 +22,8 @@ from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 from dirty_data_to_olap.domain.contracts.dependency import DependencyResult
 from dirty_data_to_olap.domain.contracts.evidence_fusion import EvidenceFusionRequest
 from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionResult
+from dirty_data_to_olap.domain.contracts.profiling import ProfileResult
+from dirty_data_to_olap.domain.contracts.quality import QualityResult
 from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchResult
 from dirty_data_to_olap.domain.contracts.source import stable_digest
 from dirty_data_to_olap.evaluation.contracts import FormalGateStatus, InferenceValidityStatus
@@ -86,8 +88,8 @@ def main() -> int:
     _write("manifest/split_manifest.json", split.model_dump(mode="json"))
 
     bindings = {}
-    for component, rel in (("dependency_discovery","dependency_discovery/provider_receipt.json"),("schema_matching","schema_matching/provider_receipt.json"),("entity_resolution","entity_resolution/provider_receipt.json")):
-        expected = {"manifest": _sha(rel_manifest) if component == "dependency_discovery" else _sha(schema_manifest) if component == "schema_matching" else _sha(entity_fixture)}
+    for component, rel in (("dependency_discovery","dependency_discovery/provider_receipt.json"),("schema_matching","schema_matching/provider_receipt.json"),("entity_resolution","entity_resolution/provider_receipt.json"),("profiling","profiling_quality/profiling_receipt.json"),("quality","profiling_quality/quality_receipt.json")):
+        expected = {"manifest": _sha(rel_manifest) if component in {"dependency_discovery", "profiling", "quality"} else _sha(schema_manifest) if component == "schema_matching" else _sha(entity_fixture)}
         receipt_path = RUN / rel
         if receipt_path.is_file():
             receipt = _load_json(receipt_path)
@@ -118,14 +120,17 @@ def main() -> int:
     fusion_failures: list[str] = []
     if "dependency_discovery" in provider_payloads:
         policy = EvidenceFusionService.load_policy()
+        profiles_by_group = {item["scenario_group_id"]: ProfileResult.model_validate(item["result"]) for item in provider_payloads.get("profiling", {}).get("results", ())}
+        qualities_by_group = {item["scenario_group_id"]: QualityResult.model_validate(item["result"]) for item in provider_payloads.get("quality", {}).get("results", ())}
         for item in provider_payloads["dependency_discovery"]["results"]:
             dependency = DependencyResult.model_validate(item["result"])
             request = EvidenceFusionRequest(request_id=f"step18-v2-fusion-{item['scenario_group_id']}", execution_context_id=f"step18-v2-fusion-{item['scenario_group_id']}", relationship_candidate_ids=tuple(candidate.candidate_id for candidate in dependency.relationship_candidates), policy=policy)
-            result = EvidenceFusionService().fuse(request, dependency_result=dependency)
+            result = EvidenceFusionService().fuse(request, profile_result=profiles_by_group.get(item["scenario_group_id"]), quality_result=qualities_by_group.get(item["scenario_group_id"]), dependency_result=dependency)
             fusion_decisions.extend([{"scenario_group_id":item["scenario_group_id"],"decision":decision.model_dump(mode="json"),"provider_result_hash":stable_digest(item["result"]),"policy_hash":policy.content_hash} for decision in result.relationships])
             fusion_failures.extend(failure.kind.value for failure in result.failures)
-    _write("fusion/inference_artifact.json", {"provider_output_bound": "dependency_discovery" in provider_payloads,"decisions":fusion_decisions,"failures":sorted(set(fusion_failures)),"decision_band_source":"actual RelationshipDecision.confidence_band","policy_hash":EvidenceFusionService.load_policy().content_hash})
-    _write("relationship/test_metrics.json", {"candidate_generation":{"truth_query_count":len(rel_query_universe),"candidate_recall":candidate_recall.model_dump(mode="json"),"missing_candidate_query_ids":missing,"generated_candidate_count":len(rel_rows),"generated_true_candidate_count":sum(row["is_true"] for row in rel_rows),"generated_false_candidate_count":sum(not row["is_true"] for row in rel_rows)},"fusion":{"status":"EVALUATED" if fusion_decisions and not fusion_failures else "INSUFFICIENT_EVIDENCE","decision_count":len(fusion_decisions),"failures":sorted(set(fusion_failures))},"ranking":{"status":"INSUFFICIENT_EVIDENCE","reason":"provider DependencyResult does not publish a ranking score; no authored score substituted"},"baselines":{"status":"INSUFFICIENT_EVIDENCE","reason":"independent Profile/Quality results were not present in the provider artifact"}})
+    fusion_bound = bool(fusion_decisions) and not fusion_failures and {"dependency_discovery", "profiling", "quality"}.issubset(provider_payloads)
+    _write("fusion/inference_artifact.json", {"provider_output_bound": {"dependency_discovery": "dependency_discovery" in provider_payloads, "profiling": "profiling" in provider_payloads, "quality": "quality" in provider_payloads},"decisions":fusion_decisions,"failures":sorted(set(fusion_failures)),"decision_band_source":"actual RelationshipDecision.confidence_band","policy_hash":EvidenceFusionService.load_policy().content_hash})
+    _write("relationship/test_metrics.json", {"candidate_generation":{"truth_query_count":len(rel_query_universe),"candidate_recall":candidate_recall.model_dump(mode="json"),"missing_candidate_query_ids":missing,"generated_candidate_count":len(rel_rows),"generated_true_candidate_count":sum(row["is_true"] for row in rel_rows),"generated_false_candidate_count":sum(not row["is_true"] for row in rel_rows)},"fusion":{"status":"EVALUATED" if fusion_bound else "INSUFFICIENT_EVIDENCE","decision_count":len(fusion_decisions),"failures":sorted(set(fusion_failures))},"ranking":{"status":"INSUFFICIENT_EVIDENCE","reason":"provider DependencyResult does not publish a ranking score; no authored score substituted"},"baselines":{"status":"EVALUATED" if {"profiling", "quality"}.issubset(provider_payloads) else "INSUFFICIENT_EVIDENCE","reason":"ProfileResult and QualityResult loaded from normalized project-owned artifacts" if {"profiling", "quality"}.issubset(provider_payloads) else "independent Profile/Quality results were not present in the provider artifact"}})
 
     schema_rows: list[dict[str, Any]] = []
     if "schema_matching" in provider_payloads:
@@ -167,12 +172,12 @@ def main() -> int:
 
     provider_bindings = {key:value.model_dump(mode="json") for key,value in bindings.items()}
     all_bound = all(value.status == "EXECUTED" for value in bindings.values())
-    fusion_bound = bool(fusion_decisions) and not fusion_failures
     controls_pass = bindings["entity_resolution"].population_match and ("dependency_discovery" in provider_payloads or bindings["dependency_discovery"].status != "EXECUTED")
     formal = FormalGateStatus.PASS if all_bound and fusion_bound and controls_pass else FormalGateStatus.PENDING
     mode = "REVIEW_ONLY_VALIDATED" if formal is FormalGateStatus.PASS else "UNVALIDATED"
     gate = InferenceValidityStatus.REVIEW_ONLY_VALIDATED if formal is FormalGateStatus.PASS else InferenceValidityStatus.INSUFFICIENT_EVIDENCE
-    assessment = {"assessment_id":"step18-g5-assessment-v2","formal_gate":formal.value,"inference_validity_mode":mode,"gate_recommendation":gate.value,"automation_recommendation":"NOT_AUTHORIZED","automation_enabled":False,"held_out_test_status":"EXECUTED_UNTOUCHED_BY_TUNING","protocol_hash":protocol_hash,"dataset_hash":dataset.content_hash,"split_hash":split_hash,"required_provider_status":{key:value.status for key,value in bindings.items()},"provider_bindings":provider_bindings,"calibration_status":"INSUFFICIENT_CALIBRATION_DATA_EVIDENCE_DERIVED","threshold_study_status":"NO_AUTOMATION_THRESHOLD_SELECTED","negative_controls":{"receipt_only":"PASS","input_order":"PASS","truth_shuffle":"INSUFFICIENT_EVIDENCE" if not schema_rows else "PASS","population_identity":"PASS" if controls_pass else "FAIL"},"limitations":(["v1 evidence is superseded and not used as v2 quality input"] if not all_bound else []) + (["pinned provider runtimes are unavailable in the current interpreter; v2 outputs are not loaded"] if not all_bound else []) + (["Fusion requires actual ProfileResult and QualityResult artifacts; no status-only substitute is accepted"] if not fusion_bound else [])}
+    missing_bindings = [key for key, value in bindings.items() if value.status != "EXECUTED"]
+    assessment = {"assessment_id":"step18-g5-assessment-v2","formal_gate":formal.value,"inference_validity_mode":mode,"gate_recommendation":gate.value,"automation_recommendation":"NOT_AUTHORIZED","automation_enabled":False,"held_out_test_status":"EXECUTED_UNTOUCHED_BY_TUNING","protocol_hash":protocol_hash,"dataset_hash":dataset.content_hash,"split_hash":split_hash,"required_provider_status":{key:value.status for key,value in bindings.items()},"provider_bindings":provider_bindings,"calibration_status":"INSUFFICIENT_CALIBRATION_DATA_EVIDENCE_DERIVED","threshold_study_status":"NO_AUTOMATION_THRESHOLD_SELECTED","negative_controls":{"receipt_only":"PASS","input_order":"PASS","truth_shuffle":"INSUFFICIENT_EVIDENCE" if not schema_rows else "PASS","population_identity":"PASS" if controls_pass else "FAIL"},"limitations":(["v1 evidence is superseded and not used as v2 quality input"] if not all_bound else []) + (["provider outputs are unavailable or unbound for: " + ", ".join(missing_bindings)] if missing_bindings else []) + (["Fusion requires actual ProfileResult and QualityResult artifacts; no status-only substitute is accepted"] if not fusion_bound else [])}
     report = {"report_id":"step18-inference-baseline-v2","protocol_hash":protocol_hash,"dataset_hash":dataset.content_hash,"split_hash":split_hash,"git_content_commit":content_commit,"assessment":assessment,"task_metrics":{"relationship":_load_json(RUN / "relationship" / "test_metrics.json"),"schema":schema_metrics,"entity_resolution":entity_metrics_payload},"slice_metrics":{"relationship":{group:{"candidate_recall":value} for group,value in test_group_metrics.items()}},"errors":[{"error_category":"CANDIDATE_NOT_GENERATED","query_id":query} for query in missing] + ([{"error_category":"INCOMPLETE_REQUIRED_EVIDENCE","component":"evidence_fusion"}] if not fusion_bound else []),"bootstrap":bootstrap}
     _write("g5/assessment.json", assessment)
     _write("report.json", report)

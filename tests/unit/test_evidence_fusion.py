@@ -214,7 +214,7 @@ def test_semantic_multiple_subject_refs_must_resolve_to_one_subject():
 
 def test_actual_profile_quality_and_repair_contracts_are_consumed_and_forwarded():
     from datetime import datetime, timezone
-    from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, ProfileMode, ProfileObservationScope, ProfileProvenance, ProfileRequest, ProfileResult, ProfileObservationStatus, TableProfile
+    from dirty_data_to_olap.domain.contracts.profiling import ColumnProfile, ProfileCompleteness, ProfileMode, ProfileObservationScope, ProfileProvenance, ProfileRequest, ProfileResult, ProfileObservationStatus, TableProfile
     from dirty_data_to_olap.domain.contracts.quality import DetectionBasis, QualityDimension, QualityIssue, QualityIssueStatus, QualityResult, QualitySeverity, MeasurementSemantics, RepairProposal, RepairProposalStatus, RepairValidationPlan, Repairability
     from dirty_data_to_olap.domain.contracts.source import AdapterReference, SourceTableKind, TableObservationStatus
 
@@ -244,6 +244,9 @@ def test_actual_profile_quality_and_repair_contracts_are_consumed_and_forwarded(
     source_bound = EvidenceFusionService().fuse(_request(), inputs, quality_results=(quality, same_topology_other_source))
     assert source_bound.forwarded_repair_proposal_refs == ("proposal-1",)
     assert any(item.metric_name.startswith("quality_coverage:") for item in source_bound.bundles[0].signals)
+    column = ColumnProfile.model_construct(profile_id="profile-orders-customer", source_id="src", snapshot_id="snap", table_id="orders", column_id="customer_id", observation_scope=scope, status=ProfileCompleteness.COMPLETE)
+    column_result = EvidenceFusionService().fuse(_request(), inputs, profile_result=profile.model_copy(update={"columns": (column,)}), quality_result=quality)
+    assert any(item.metric_name == "column_profile" for item in column_result.bundles[0].signals)
 
 
 def test_actual_schema_match_snapshot_mapping_is_source_specific():
