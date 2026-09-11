@@ -36,6 +36,7 @@ stage_test_requirements:
   - {stage_id: REVIEW_EVIDENCE_DECISIONS, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
   - {stage_id: CANONICAL_HYPOTHESES, required_categories: [contract, data, evaluation], owner: "Step19"}
   - {stage_id: ENTITY_RESOLUTION, required_categories: [adapter_contract, evaluation, data], owner: "Step14"}
+  - {stage_id: CANONICAL_IDENTITY_PREPARATION, required_categories: [contract, integration, evaluation, failure_recovery], owner: "Step19"}
   - {stage_id: LEARNED_EVIDENCE, required_categories: [unit, contract, integration, evaluation, security], owner: "Step15"}
   - {stage_id: REVIEW_CANONICAL_IDENTITY, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
   - {stage_id: CANONICAL_FINALIZATION, required_categories: [contract, data, integration], owner: "Step19"}

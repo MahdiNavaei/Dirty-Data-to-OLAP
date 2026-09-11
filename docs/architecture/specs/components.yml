@@ -258,7 +258,7 @@ components:
     name: Canonical Hypothesis Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [entity type hypotheses, attributes, identity candidates, ER specifications]
+    responsibilities: [entity type hypotheses, attributes, identity candidates, ER specifications, post-ER identity proposal preparation]
     input_contracts: [RelationshipDecision, SemanticMappingDecision, RepairProposal, ReviewDecision from REVIEW_EVIDENCE_DECISIONS, DomainAssertion]
     output_contracts: [CanonicalModelHypothesis, CanonicalIdentityProposal, EntityResolutionSpec]
     depends_on: [application.evidence_fusion, application.review_policy, domain.contracts]

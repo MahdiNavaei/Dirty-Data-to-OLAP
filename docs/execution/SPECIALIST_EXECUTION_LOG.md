@@ -1195,3 +1195,14 @@ handoff_to:
 - verification: unit `142 passed`; contract `9 passed`; integration `35 passed, 2 optional skips`; architecture `9 passed`; security `24 passed`; full regression `219 passed, 2 optional skips`; Step19 validator `18 checks PASS`; compileall and diff-check PASS
 - negative_controls: unrelated review, changed decision content, stale identity review, changed proposal membership, unrelated ER spec, missing ER, unsupported skip, and free-form membership finalization all fail closed
 - state: repair closure PASS; formal `G5_INFERENCE_VALIDITY=PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; automation=`NOT_AUTHORIZED`; `last_completed_step=19`; `current_step=20`; current_role=`olap_engineer`; `G6=PENDING`; Step20 not started
+
+## CRITICAL POST-STEP19 REPAIR 2 - ER-Required Guard and Identity Graph Integrity Closure
+
+- execution_step: `19` surgical repair only; Step20 implementation was not started; preserved untracked `tests/quality_unit_artifacts/` untouched
+- starting_head: `10d367e772dd4f16e5742547a97e5e6bc14a94b0` (`origin/main`); prior Step19 repair remains preserved
+- content_commit_sha: `c3550ac` + `fce2b03` (`fix: enforce Step19 required ER identity integrity`; `fix: account for Step19 identity preparation boundary`)
+- repaired: every `ER_REQUIRED` family requires a compatible COMPLETE ER result before proposal or finalization; HUMAN_DOMAIN_REVIEW is an explicit interpretation override only; override records are restricted to the evaluated ER population; ER membership edges must form one connected component covering exactly the proposal; proposal and identity review bind the ER semantic hash; canonical identity preparation is represented after ER and before review without adding a primary specialist step
+- reference_artifacts: `workspace/runs/step19-reference-run/canonical/`; Customer uses a connected authorized strong edge and Order uses `ER_NOT_REQUIRED` plus `SOURCE_LOCAL_EVENT_IDENTITY`
+- verification: unit `143 passed`; contract `9 passed`; integration `37 passed, 2 optional skips`; architecture `9 passed`; security `24 passed`; Step19 validator `24 checks PASS`; solution architecture validator passed with `CANONICAL_IDENTITY_PREPARATION`; compileall and diff-check PASS
+- negative_controls: required ER human bypass, outside-population override, disconnected graph, partial graph, outside endpoint, extraneous selected edge, incompatible ER spec, changed ER hash and missing finalization ER all fail closed
+- state: repair 2 PASS; formal `G5_INFERENCE_VALIDITY=PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; automation=`NOT_AUTHORIZED`; `last_completed_step=19`; `current_step=20`; current_role=`olap_engineer`; `G6=PENDING`; Step20 not started

@@ -9,9 +9,11 @@ inputs only.
 
 The runtime stage remains `ENTITY_RESOLUTION` after `CANONICAL_HYPOTHESES`.
 Step14 does not produce the `EntityResolutionSpec`; that producer remains
-owned by Step19. Step14 emits `EntityMatchEdge`, `EntityCluster`, diagnostics,
-capability and failure evidence. It never emits a canonical entity ID,
-survivorship value, accepted merge, or `SourceRecordCanonicalMap`.
+owned by Step19. Step14 emits `EntityMatchEdge`, `EntityCluster`, the normalized
+`EntityResolutionResult` envelope, diagnostics, capability and failure evidence.
+The result is consumed by the Step19 identity-proposal preparation boundary. It
+never emits a canonical entity ID, survivorship value, accepted merge, or
+`SourceRecordCanonicalMap`.
 
 Splink is isolated behind `SplinkEntityResolutionAdapter`. Raw identity values
 are read only from complete, hash-verified project staging into private local

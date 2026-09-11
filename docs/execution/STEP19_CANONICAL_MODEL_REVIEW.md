@@ -273,3 +273,35 @@ changed decision content, stale identity review, changed membership proposal,
 unrelated ER spec, missing required ER, unsupported skip, and free-form
 membership finalization. Step20 was not started; G5 remains PASS and G6 remains
 PENDING.
+
+## CRITICAL POST-STEP19 REPAIR 2 / ER-REQUIRED GUARD AND IDENTITY GRAPH INTEGRITY
+
+The first integrity closure left one temporal defect: a human/domain identity
+override could be proposed without an actual required ER result. It also did not
+prove that selected ER edges formed one connected identity component. This second
+repair is a surgical Step19 closure and does not start Primary Prompt 20/41.
+
+For every `ER_REQUIRED` family, proposal construction and finalization now require
+a `COMPLETE` `EntityResolutionResult` whose family, spec ID/fingerprint,
+source/snapshot/table scope and observation scope match the hypothesis. The
+required result semantic hash is stored in the identity proposal and included in
+the `REVIEW_CANONICAL_IDENTITY` context. Replacing that result invalidates the
+review. `HUMAN_DOMAIN_REVIEW` can override linkage interpretation only after this
+ER stage exists and its record refs are within the evaluated ER population.
+
+`ER_AUTHORIZED_LINKAGE` now requires selected authorized edges to have allowed
+bands, exact endpoints, exact proposal coverage and one connected component.
+Clique semantics are not required; connected chains and triangles are valid.
+Disconnected components, partial coverage, outside endpoints and extraneous
+selected edges fail closed.
+
+The machine-readable architecture now models a non-primary-step
+`CANONICAL_IDENTITY_PREPARATION` boundary after `ENTITY_RESOLUTION` and before
+`REVIEW_CANONICAL_IDENTITY`. The proposal is therefore not declared as produced
+before its conditional ER input. Event finalization and exact evidence-review
+binding remain unchanged and covered by direct tests.
+
+The regenerated reference flow remains synthetic and project-owned: one Customer
+identity from a connected authorized edge and one Order event from explicit
+source-local identity, producing two instances and three source maps. G5 remains
+PASS, G6 remains PENDING, and Step20 remains NOT STARTED.

@@ -36,3 +36,19 @@ source/snapshot/table scope, authorized edges and cluster policy; and
 
 The repair remains synthetic/reference evidence only. It does not promote G6,
 assign warehouse keys, or start Step20.
+
+## Critical Step19 repair 2
+
+The second integrity closure enforces the temporal ER guard. Every
+`ER_REQUIRED` family must have a `COMPLETE` result compatible with the exact
+declared spec before either an ER-derived membership or a human/domain override
+can be proposed or finalized. Human review can change membership interpretation,
+but cannot bypass ER execution, and its record refs must remain within the ER
+evaluated population. The proposal records the ER semantic hash used by the
+identity review.
+
+ER-derived membership edges are now required to form one connected component
+covering exactly the proposed records; disconnected components, partial groups,
+outside endpoints and extraneous selected edges fail closed. The machine-readable
+DAG records a non-primary-step `CANONICAL_IDENTITY_PREPARATION` boundary after
+conditional ER output and before `REVIEW_CANONICAL_IDENTITY`.
