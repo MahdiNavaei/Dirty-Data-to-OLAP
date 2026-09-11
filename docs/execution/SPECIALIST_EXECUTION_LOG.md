@@ -1103,6 +1103,7 @@ handoff_to:
 
 - execution_step: `18` only; Step19 was not started
 - starting_head: `ebdc365bc2275732f78c575ff1d68583113f7a30`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- content_commit_sha: `69692c9` (`fix: complete Step18 empirical inference evaluation`)
 - current_run: fresh `workspace/runs/step18-inference-baseline-v4/evaluation/`; v1-v3 evidence preserved
 - runtime: persistent project-local `matching-venv` and `er-venv`; `PYTHONNOUSERSITE=1`; local TEMP/TMP/PIP_CACHE_DIR; pinned Valentine/Splink install attempts failed before package availability
 - relationship: actual Desbordante `COMPLETE`; TEST candidate recall `5/7`, precision `5/17`, F1 `0.4167`; 17 candidates, 5 true, 12 false; missing positives `rq-orphan-10` and `rq-missing`
