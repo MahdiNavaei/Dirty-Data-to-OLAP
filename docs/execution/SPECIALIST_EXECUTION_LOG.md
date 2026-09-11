@@ -1183,3 +1183,15 @@ handoff_to:
 - blocking_issues: none within Step19 scope
 - handoff_to: `Step20 - Data Warehouse / OLAP Engineer`
 - next_state: `last_completed_step=19`, `current_step=20`, `current_role=olap_engineer`, `G5=PASS`, `G6=PENDING`, `blocked=false`; Step20 implementation not started
+
+## CRITICAL POST-STEP19 Canonical Review and Identity Membership Integrity Closure
+
+- execution_step: `19` surgical repair only; Step20 implementation was not started; preserved untracked `tests/quality_unit_artifacts/` untouched
+- starting_head: `5278bc2852fcdcec250ab1bcd6f6d5df2458d016` (`origin/main`); the previous Step19 handoff was reopened logically for this audit and is superseded by the repair closure
+- content_commit_sha: `ad68eb4` (`fix: bind Step19 reviews and canonical identity membership`)
+- repaired: exact per-decision review binding for relationship and semantic-mapping decisions; explicit versioned skip authorization; typed proposal-owned identity memberships; exact ER family/spec/scope/authorized-edge/policy validation; explicit human/domain identity basis; explicit source-local event finalization; no free-form post-review memberships
+- reference_artifacts: `workspace/runs/step19-reference-run/canonical/`; synthetic/domain-reviewed flow emitted two canonical instances, three source maps, one retained conflict and complete source-record accounting
+- evidence_boundary: scores remain evidence-only; Step18 evaluation truth is not runtime input; canonical IDs are project-owned and cluster IDs remain diagnostic evidence only
+- verification: unit `142 passed`; contract `9 passed`; integration `35 passed, 2 optional skips`; architecture `9 passed`; security `24 passed`; full regression `219 passed, 2 optional skips`; Step19 validator `18 checks PASS`; compileall and diff-check PASS
+- negative_controls: unrelated review, changed decision content, stale identity review, changed proposal membership, unrelated ER spec, missing ER, unsupported skip, and free-form membership finalization all fail closed
+- state: repair closure PASS; formal `G5_INFERENCE_VALIDITY=PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; automation=`NOT_AUTHORIZED`; `last_completed_step=19`; `current_step=20`; current_role=`olap_engineer`; `G6=PENDING`; Step20 not started

@@ -9,8 +9,8 @@ unresolved canonical ambiguity from:
 `workspace/runs/step19-reference-run/canonical/`
 
 The reference flow is synthetic and domain-reviewed. ER is linkage evidence
-bound to an exact identity review; `EntityCluster.cluster_id` is not a canonical
-ID, and source records are not deleted or overwritten.
+bound to an exact identity proposal and identity review; `EntityCluster.cluster_id`
+is not a canonical ID, and source records are not deleted or overwritten.
 
 Step20 must independently determine fact/dimension roles, explicit grain,
 measures, aggregation semantics, analytical surrogate keys and analytical SCD
@@ -21,3 +21,18 @@ warehouse keys.
 Historical boundary: before Step19, this file recorded that no review decision
 or canonical identity existed. That limitation is superseded by the Step19
 report; G5 remains review-only PASS and G6 remains PENDING.
+
+## Critical Step19 integrity repair
+
+The post-Step19 audit found that an umbrella evidence review could authorize an
+unrelated relationship or mapping, free-form memberships could be supplied after
+identity review, ER compatibility was under-checked, and event memberships could
+disappear during finalization. These defects are repaired in the current
+implementation. `CanonicalIdentityProposal` is now the sole membership input to
+finalization; every consumed `RelationshipDecision` and `SemanticMappingDecision`
+must bind to its exact accepted review context; required ER binds family, spec,
+source/snapshot/table scope, authorized edges and cluster policy; and
+`SOURCE_LOCAL_EVENT_IDENTITY` emits explicit event instances and maps.
+
+The repair remains synthetic/reference evidence only. It does not promote G6,
+assign warehouse keys, or start Step20.

@@ -260,7 +260,7 @@ components:
     ownership: Dirty Data to OLAP
     responsibilities: [entity type hypotheses, attributes, identity candidates, ER specifications]
     input_contracts: [RelationshipDecision, SemanticMappingDecision, RepairProposal, ReviewDecision from REVIEW_EVIDENCE_DECISIONS, DomainAssertion]
-    output_contracts: [CanonicalModelHypothesis, EntityResolutionSpec]
+    output_contracts: [CanonicalModelHypothesis, CanonicalIdentityProposal, EntityResolutionSpec]
     depends_on: [application.evidence_fusion, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
     implementation_owner: Step19 Canonical Model Engineer
@@ -312,14 +312,14 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [accepted canonical instances, mappings, survivorship and conflicts]
-    input_contracts: [CanonicalModelHypothesis, EntityMatchEdge, EntityCluster, ReviewDecision]
-    output_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]
+    input_contracts: [CanonicalModelHypothesis, CanonicalIdentityProposal, EntityResolutionResult, ReviewDecision]
+    output_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute, CanonicalIdentityMembership]
     depends_on: [application.canonical_hypotheses, application.review_policy, domain.contracts]
     conditional_dependencies:
       - dependency: application.entity_resolution
         scope: entity_family
         when: entity_resolution_required(entity_family) == true
-        requires: [complete EntityMatchEdge/EntityCluster artifact, post-ER REVIEW_CANONICAL_IDENTITY checkpoint, accepted_or_review_acceptable linkage decision bound to that artifact]
+        requires: [complete EntityResolutionResult compatible with the hypothesis spec, proposal-owned membership edges, post-ER REVIEW_CANONICAL_IDENTITY checkpoint, accepted_or_review_acceptable identity decision bound to that proposal]
         on_failure: family_scoped BLOCKED or NEEDS_REVIEW; no SourceRecordCanonicalMap is published
       - dependency: application.entity_resolution
         scope: entity_family

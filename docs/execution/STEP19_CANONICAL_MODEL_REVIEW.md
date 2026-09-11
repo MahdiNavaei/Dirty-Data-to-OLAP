@@ -235,3 +235,41 @@ inference automation threshold was selected or enabled. EntityCluster IDs were
 not used as canonical entity IDs. Source records were not destructively
 deduplicated. No Step18 evaluation truth was used as runtime canonicalization
 truth. No fact/dimension/grain/measure implementation was started.
+
+## CRITICAL POST-STEP19 REPAIR / INTEGRITY CLOSURE
+
+The prior Step19 PASS was independently audited before downstream work. The
+audit found four integrity gaps: an umbrella `ReviewDecision` could authorize a
+different relationship or mapping; finalization accepted free-form memberships
+after identity review; ER validation checked completion without binding the exact
+family/spec/sources/snapshots/tables/authorized edges and clustering policy; and
+event memberships were skipped instead of being finalized. The prior report is
+retained as historical evidence, with this section superseding those statements.
+
+The repair adds typed `CanonicalIdentityMembership` and
+`CanonicalIdentityProposal` contracts. Hypothesis construction now requires the
+exact concrete `RelationshipDecision` or `SemanticMappingDecision` and derives
+the exact review context from that object, including artifact/content, semantic
+subject, input/scope, policy, applicability and domain bindings. Bare `SKIPPED`
+reviews are rejected; skips require explicit versioned, checkpoint- and
+applicability-bound authorization.
+
+Finalization now accepts only the reviewed `CanonicalIdentityProposal`. ER-derived
+memberships are validated against the hypothesis family and exact ER spec/result
+scope, permitted edge bands, and authorized edge population. Canonical IDs remain
+project-owned `cent_` values and never use cluster IDs. Human/domain-reviewed
+identity is explicit and actor/source/domain-bound. `ER_NOT_REQUIRED` event
+memberships use explicit `SOURCE_LOCAL_EVENT_IDENTITY` and emit terminal maps;
+they are not silently dropped.
+
+The repaired reference flow produced two canonical instances (Customer and
+Order), three source-record maps, one retained conflict, and complete accounting
+for the two linked Customer records plus the Order event. It uses an explicit
+synthetic project-owned ER contract fixture only; Step18 evaluation truth is not
+runtime canonicalization input.
+
+Focused negative controls now fail closed for wrong relationship/mapping review,
+changed decision content, stale identity review, changed membership proposal,
+unrelated ER spec, missing required ER, unsupported skip, and free-form
+membership finalization. Step20 was not started; G5 remains PASS and G6 remains
+PENDING.
