@@ -225,7 +225,7 @@ stages:
     required: true
     dependencies: [CANONICAL_FINALIZATION]
     optional_dependencies: []
-    input_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalRelationship, DomainAssertion]
+    input_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalRelationship, DomainAssertion, AnalyticalInputDataset, AnalyticalPlanningRequest]
     output_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
     failure_consequence: NEEDS_REVIEW
     cacheable: true
@@ -241,15 +241,15 @@ stages:
     output_artifact_types: [ReviewDecision]
     failure_consequence: NEEDS_REVIEW
     cacheable: false
-    idempotency: subject plan identity and compatibility fingerprint
-    review_boundary: fact/dimension interpretation, grain, measures and aggregation semantics
+    idempotency: subject plan identity, exact spec content package and compatibility fingerprint
+    review_boundary: fact/dimension interpretation, grain, measures, aggregation semantics and exact content of every material spec
     review_checkpoint_id: REVIEW_ANALYTICAL_PLAN
     skip_semantics: SKIPPED only when versioned policy records that analytical-plan review is not required; no arbitrary confidence threshold
   - stage_id: COMPILATION
     required: true
     dependencies: [ANALYTICAL_PLANNING, REVIEW_ANALYTICAL_PLAN]
     optional_dependencies: []
-    input_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, ReviewDecision]
+    input_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, AnalyticalInputDataset, ReviewDecision]
     output_artifact_types: [CompiledPlan, GeneratedSQL]
     failure_consequence: FAILED
     cacheable: true
@@ -274,7 +274,7 @@ stages:
     required: true
     dependencies: [COMPILATION, REVIEW_MATERIALIZATION_PLAN]
     optional_dependencies: []
-    input_artifact_types: [CompiledPlan, GeneratedSQL, ReviewDecision]
+    input_artifact_types: [CompiledPlan, GeneratedSQL, AnalyticalInputDataset, ReviewDecision]
     output_artifact_types: [MaterializationArtifact]
     failure_consequence: FAILED
     cacheable: false

@@ -59,8 +59,8 @@ checkpoints:
     required_when: policy requires review of the analytical interpretation or unresolved model semantics
     downstream_guarded_stage: COMPILATION
     decision_contract: ReviewDecision
-    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id]
-    invalidating_changes: [analytical_plan_change, fact_grain_change, measure_semantics_change, dimensional_interpretation_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
+    compatibility_fields: [subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, analytical_spec_package_hash, fact_spec_content_hashes, dimension_spec_content_hashes, grain_spec_content_hashes, measure_spec_content_hashes]
+    invalidating_changes: [analytical_plan_change, analytical_spec_package_change, fact_spec_change, dimension_spec_change, grain_spec_change, measure_spec_change, fact_grain_change, measure_semantics_change, dimensional_interpretation_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
     unresolved_run_state: NEEDS_REVIEW
     reject_behavior: rejected plan review prevents compilation; revise the analytical plan and create a new review decision
     skip_or_auto_policy: versioned policy may record SKIPPED when manual analytical review is not required; no arbitrary numeric confidence threshold is defined

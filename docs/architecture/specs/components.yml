@@ -338,8 +338,8 @@ components:
     name: Analytical Planner
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [facts, dimensions, grain, measures, keys and mappings]
-    input_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalRelationship, DomainAssertion]
+    responsibilities: [generic facts, dimensions, grain, measures, warehouse keys, input bindings and mappings]
+    input_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalRelationship, DomainAssertion, AnalyticalInputDataset, AnalyticalPlanningRequest]
     output_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
     depends_on: [application.canonical_finalization, domain.contracts]
     ports_used: [ArtifactStorePort]
@@ -349,13 +349,13 @@ components:
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: ambiguous grain or semantics becomes NEEDS_REVIEW
+    failure_behavior: missing input evidence, unsupported types or ambiguous semantics becomes NEEDS_REVIEW; no fact/dimension meaning is inferred from names
   - component_id: application.compiler
     name: Compiler
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [compile approved analytical plan into execution artifacts]
-    input_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
+    responsibilities: [compile any bounded reviewed V1 analytical plan into deterministic execution artifacts]
+    input_contracts: [AnalyticalPlan with exact spec package, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, AnalyticalInputDataset, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
     output_contracts: [CompiledPlan, GeneratedSQL]
     depends_on: [application.analytical_planner, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
@@ -365,13 +365,13 @@ components:
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: unresolved or incompatible analytical-plan review is NEEDS_REVIEW; compilation failure is FAILED; no execution occurs
+    failure_behavior: unresolved or incompatible analytical-plan/spec-package review is NEEDS_REVIEW; unsupported logical types, stale specs or compilation failure are FAILED; no execution occurs
   - component_id: application.materializer
     name: Materializer Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [execute approved compiled plan into controlled target]
-    input_contracts: [CompiledPlan, GeneratedSQL, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
+    responsibilities: [execute any approved compiled V1 plan into its exact reviewed controlled target]
+    input_contracts: [CompiledPlan, GeneratedSQL, AnalyticalInputDataset, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
     output_contracts: [MaterializationArtifact]
     depends_on: [application.compiler, application.review_policy, domain.contracts]
     ports_used: [MaterializerPort, ArtifactStorePort]
@@ -381,7 +381,7 @@ components:
     side_effect_class: controlled_target_write
     persistence_access: ArtifactStorePort
     optional: false
-    failure_behavior: unresolved or incompatible materialization approval is NEEDS_REVIEW; incomplete target is non-consumable and stage FAILED
+    failure_behavior: unresolved or incompatible materialization approval, target traversal or input mismatch is NEEDS_REVIEW/FAILED; incomplete target is non-consumable; orphan policies are recorded behaviorally
   - component_id: application.validation
     name: Validation and Reconciliation Service
     layer: application

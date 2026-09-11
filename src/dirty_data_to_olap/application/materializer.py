@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Protocol
 
 from dirty_data_to_olap.application.compiler import AnalyticalCompilationError
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
 from dirty_data_to_olap.domain.contracts.analytical import (
     AnalyticalInputBinding,
-    AnalyticalInputFixture,
+    AnalyticalInputDataset,
     CompiledPlan,
     GeneratedSQL,
     MaterializationArtifact,
     TargetConfig,
+    as_analytical_dataset,
 )
 
 
@@ -24,7 +24,7 @@ class MaterializerPort(Protocol):
         self,
         compiled_plan: CompiledPlan,
         generated_sql: GeneratedSQL,
-        fixture: AnalyticalInputFixture,
+        input_data: AnalyticalInputDataset,
         target_config: TargetConfig,
         *,
         run_id: str,
@@ -44,7 +44,7 @@ class MaterializationService:
         generated_sql: GeneratedSQL,
         review_decision,
         binding: AnalyticalInputBinding,
-        fixture: AnalyticalInputFixture,
+        input_data: AnalyticalInputDataset,
         target_config: TargetConfig,
         *,
         run_id: str,
@@ -55,10 +55,14 @@ class MaterializationService:
             raise AnalyticalCompilationError("target configuration does not match compiled plan")
         if binding.binding_id != compiled_plan.input_binding_id or binding.content_hash != compiled_plan.input_binding_content_hash:
             raise AnalyticalCompilationError("compiled plan input binding is stale")
-        if fixture.fixture_id != binding.fixture_id or fixture.content_hash != binding.fixture_content_hash:
-            raise AnalyticalCompilationError("materialization fixture is stale")
-        if fixture.canonical_model_id != compiled_plan.canonical_model_id or fixture.canonical_model_content_hash != compiled_plan.canonical_model_content_hash:
-            raise AnalyticalCompilationError("materialization fixture is not bound to the compiled canonical model")
+        dataset = as_analytical_dataset(input_data)
+        if binding.dataset_id is not None:
+            if dataset.dataset_id != binding.dataset_id or dataset.content_hash != binding.dataset_content_hash:
+                raise AnalyticalCompilationError("materialization dataset is stale")
+        elif dataset.dataset_id != binding.fixture_id:
+            raise AnalyticalCompilationError("materialization input does not match the binding")
+        if dataset.canonical_model_id != compiled_plan.canonical_model_id or dataset.canonical_model_content_hash != compiled_plan.canonical_model_content_hash:
+            raise AnalyticalCompilationError("materialization input is not bound to the compiled canonical model")
         try:
             ReviewPolicyService().require_compatible(
                 review_decision,
@@ -66,4 +70,4 @@ class MaterializationService:
             )
         except ReviewCompatibilityError as exc:
             raise AnalyticalCompilationError("REVIEW_MATERIALIZATION_PLAN_INCOMPATIBLE:" + ",".join(exc.errors)) from exc
-        return self.materializer.materialize(compiled_plan, generated_sql, fixture, target_config, run_id=run_id)
+        return self.materializer.materialize(compiled_plan, generated_sql, dataset, target_config, run_id=run_id)

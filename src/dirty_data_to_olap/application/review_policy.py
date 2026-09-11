@@ -118,6 +118,10 @@ class ReviewPolicyService:
             "dimensions": plan.materialized_dimension_ids,
             "grains": plan.grain_spec_ids,
             "measures": plan.measure_spec_ids,
+            "dimension_spec_content_hashes": dict(sorted(plan.dimension_spec_content_hashes.items())),
+            "fact_spec_content_hashes": dict(sorted(plan.fact_spec_content_hashes.items())),
+            "grain_spec_content_hashes": dict(sorted(plan.grain_spec_content_hashes.items())),
+            "measure_spec_content_hashes": dict(sorted(plan.measure_spec_content_hashes.items())),
         }
         applicability = stable_id("analytical-review-applicability", {
             "plan_id": plan.plan_id,
@@ -126,6 +130,7 @@ class ReviewPolicyService:
             "canonical_model_content_hash": plan.canonical_model_content_hash,
             "binding": plan.input_binding_content_hash,
             "policy": plan.policy_version,
+            "spec_package": plan.analytical_spec_package_hash,
         })
         return ReviewCompatibilityContext(
             review_checkpoint_id=ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN,
@@ -138,6 +143,7 @@ class ReviewPolicyService:
                 "canonical_model_id": plan.canonical_model_id,
                 "canonical_model_content_hash": plan.canonical_model_content_hash,
                 "canonical_model_fingerprint": plan.canonical_model_fingerprint,
+                "analytical_spec_package_hash": plan.analytical_spec_package_hash,
                 **dict(plan.source_schema_fingerprints),
             },
             policy_version=plan.policy_version,

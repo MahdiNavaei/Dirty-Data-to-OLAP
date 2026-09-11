@@ -9,13 +9,11 @@ from dirty_data_to_olap.domain.contracts.analytical import TargetConfig
 from tests.step20_support import planned_flow
 
 
-def test_materializer_rejects_target_outside_controlled_reference_path(tmp_path):
+def test_materializer_accepts_alternate_target_inside_controlled_root_and_rejects_traversal(tmp_path):
     with pytest.raises(ValueError):
         TargetConfig(relative_path="../../private.duckdb")
     materializer = DuckDBMaterializer(tmp_path, repository_root=tmp_path)
-    _, _, _, _, _, _, _, _ = planned_flow()
-    with pytest.raises(ValueError, match="controlled target"):
-        materializer._target_path(TargetConfig(relative_path="other.duckdb"))
+    assert materializer._target_path(TargetConfig(relative_path="alternate/target.duckdb")) == (tmp_path / "alternate" / "target.duckdb").resolve()
 
 
 def test_materialization_service_requires_exact_binding_and_review():

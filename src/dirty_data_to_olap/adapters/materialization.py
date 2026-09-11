@@ -1,4 +1,4 @@
-"""Controlled DuckDB materializer for the Step20 reference target."""
+"""Controlled DuckDB materializer for reviewed analytical V1 targets."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from pathlib import Path
 
 import duckdb
 
+from dirty_data_to_olap.application.compiler import AnalyticalCompilerService
 from dirty_data_to_olap.domain.contracts.analytical import (
-    AnalyticalInputFixture,
+    AnalyticalInputDataset,
     CompiledPlan,
     GeneratedSQL,
     MaterializationArtifact,
@@ -17,13 +18,11 @@ from dirty_data_to_olap.domain.contracts.analytical import (
     TargetConfig,
     materialization_artifact_id,
 )
-from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
+from dirty_data_to_olap.domain.contracts.source import utc_now
 
 
 class DuckDBMaterializer:
-    """Publish only inside a caller-owned controlled root using atomic replace."""
-
-    EXPECTED_TABLES = tuple(sorted(("dim_customer", "dim_product", "dim_branch", "dim_date", "fact_order_line")))
+    """Publish a reviewed plan only inside its injected controlled root."""
 
     def __init__(self, controlled_root: Path, *, repository_root: Path):
         self.controlled_root = controlled_root.resolve()
@@ -35,22 +34,28 @@ class DuckDBMaterializer:
             target.relative_to(self.controlled_root)
         except ValueError as exc:
             raise ValueError("DuckDB target escapes the controlled root") from exc
-        expected = (self.repository_root / "workspace" / "runs" / "step20-reference-run" / "olap" / "target.duckdb").resolve()
-        if target != expected:
-            raise ValueError("Step20 reference materializer permits only the controlled target.duckdb path")
+        if target.suffix.casefold() != ".duckdb":
+            raise ValueError("DuckDB target must use the .duckdb extension")
         return target
+
+    def _target_relative_path(self, target: Path) -> str:
+        try:
+            return target.relative_to(self.repository_root).as_posix()
+        except ValueError as exc:
+            raise ValueError("controlled target must be project-local") from exc
 
     def materialize(
         self,
         compiled_plan: CompiledPlan,
         generated_sql: GeneratedSQL,
-        fixture: AnalyticalInputFixture,
+        input_data: AnalyticalInputDataset,
         target_config: TargetConfig,
         *,
         run_id: str,
     ) -> MaterializationArtifact:
         attempted_at = utc_now()
         target = self._target_path(target_config)
+        target_relative_path = self._target_relative_path(target)
         artifact_id = materialization_artifact_id({
             "run_id": run_id,
             "compiled_plan_id": compiled_plan.compiled_plan_id,
@@ -62,15 +67,25 @@ class DuckDBMaterializer:
         target.parent.mkdir(parents=True, exist_ok=True)
         connection = None
         try:
+            runtime_sql = generated_sql
+            if not input_data.allow_literal_sql and any("?" in statement for statement in (generated_sql.load_date_sql, generated_sql.load_dimensions_sql, generated_sql.load_facts_sql)):
+                runtime_sql = AnalyticalCompilerService()._generate_sql(
+                    compiled_plan.dimension_specs,
+                    compiled_plan.fact_specs,
+                    compiled_plan.grain_specs,
+                    compiled_plan.measure_specs,
+                    input_data.model_copy(update={"allow_literal_sql": True}),
+                )
             if temp.exists():
                 temp.unlink()
             connection = duckdb.connect(str(temp))
             connection.execute("BEGIN TRANSACTION")
-            for statement in (generated_sql.create_schema_sql, generated_sql.load_date_sql, generated_sql.load_dimensions_sql, generated_sql.load_facts_sql):
-                connection.execute(statement)
+            for statement in (generated_sql.create_schema_sql, runtime_sql.load_date_sql, runtime_sql.load_dimensions_sql, runtime_sql.load_facts_sql):
+                if statement.strip():
+                    connection.execute(statement)
             connection.execute("COMMIT")
             table_names = tuple(sorted(row[0] for row in connection.execute("SHOW TABLES").fetchall()))
-            if table_names != self.EXPECTED_TABLES:
+            if table_names != tuple(sorted(compiled_plan.table_names)):
                 raise RuntimeError("materialized table set does not match the reviewed plan")
             row_counts = {
                 table: int(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
@@ -83,12 +98,12 @@ class DuckDBMaterializer:
             return MaterializationArtifact(
                 artifact_id=artifact_id,
                 run_id=run_id,
-                plan_id=generated_sql.plan_id,
-                plan_content_hash=generated_sql.plan_content_hash,
+                plan_id=compiled_plan.plan_id,
+                plan_content_hash=compiled_plan.plan_content_hash,
                 compiled_plan_id=compiled_plan.compiled_plan_id,
                 compiled_plan_content_hash=compiled_plan.content_hash,
                 target_type=target_config.target_type,
-                target_relative_path="workspace/runs/step20-reference-run/olap/target.duckdb",
+                target_relative_path=target_relative_path,
                 target_config_fingerprint=target_config.config_fingerprint,
                 generated_sql_hash=generated_sql.sql_hash,
                 table_names=table_names,
@@ -96,8 +111,10 @@ class DuckDBMaterializer:
                 status=MaterializationStatus.SUCCEEDED,
                 usable=True,
                 attempted_at=attempted_at,
-                provenance_refs=("adapter:duckdb", "target:controlled-reference-root", "publication:atomic-replace"),
+                provenance_refs=("adapter:duckdb", "target:injected-controlled-root", "publication:atomic-replace"),
                 target_file_sha256=file_hash,
+                quarantined_record_count=len(generated_sql.quarantine_records),
+                quarantine_records=generated_sql.quarantine_records,
             )
         except Exception as exc:
             if connection is not None:
@@ -116,14 +133,16 @@ class DuckDBMaterializer:
                 compiled_plan_id=compiled_plan.compiled_plan_id,
                 compiled_plan_content_hash=compiled_plan.content_hash,
                 target_type=target_config.target_type,
-                target_relative_path="workspace/runs/step20-reference-run/olap/target.duckdb",
+                target_relative_path=target_relative_path,
                 target_config_fingerprint=target_config.config_fingerprint,
                 generated_sql_hash=generated_sql.sql_hash,
-                table_names=self.EXPECTED_TABLES,
+                table_names=tuple(sorted(compiled_plan.table_names)) or ("invalid_target",),
                 row_counts={},
                 status=MaterializationStatus.FAILED,
                 usable=False,
                 attempted_at=attempted_at,
-                provenance_refs=("adapter:duckdb", "target:controlled-reference-root", "publication:not-published"),
+                provenance_refs=("adapter:duckdb", "target:injected-controlled-root", "publication:not-published"),
                 failure_reason=type(exc).__name__ + ": " + str(exc)[:240],
+                quarantined_record_count=len(generated_sql.quarantine_records),
+                quarantine_records=generated_sql.quarantine_records,
             )

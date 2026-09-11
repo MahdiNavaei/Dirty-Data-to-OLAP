@@ -115,13 +115,13 @@ interfaces:
     forbidden_behavior: [raw staged values in model features or artifacts, identifier features, label leakage, pickle/joblib persistence, acceptance or canonical truth output, silent probability claim]
   - interface_id: MaterializerPort
     purpose: Execute an approved compiled plan into a controlled target.
-    input_contracts: [CompiledPlan, GeneratedSQL, ReviewDecision]
+    input_contracts: [CompiledPlan, GeneratedSQL, AnalyticalInputDataset, ReviewDecision]
     output_contracts: [MaterializationArtifact]
     side_effects: [write_controlled_target, write_artifacts]
     idempotency: attempt-scoped target and atomic publication
     optional: false
     capability_id: target.materializer
-    failure_mode: incomplete target non-consumable; stage FAILED
+    failure_mode: target traversal, input mismatch or incomplete target is non-consumable; stage FAILED; quarantine accounting remains explicit
     adapter_component: adapters.materialization
     forbidden_behavior: [source writes, grain redefinition, measure redefinition]
   - interface_id: ControlStorePort

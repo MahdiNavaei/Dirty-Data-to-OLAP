@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from dirty_data_to_olap.domain.contracts.analytical import AnalyticalInputBinding
 from dirty_data_to_olap.domain.contracts.source import stable_id
-from tools.run_step20_reference import build_canonical_model, build_fixture
+from tools.run_step20_reference import build_canonical_model, build_fixture, build_reference_plan
 
 
 def planned_flow():
@@ -20,6 +20,4 @@ def planned_flow():
         row_counts=fixture.row_counts,
         provenance_refs=("test-binding",),
     )
-    from dirty_data_to_olap.application.analytical_planner import AnalyticalPlannerService
-
-    return (model, fixture, binding, *AnalyticalPlannerService().build_reference_plan(model, binding, fixture, created_at=datetime(2026, 9, 11, tzinfo=timezone.utc)))
+    return (model, fixture, binding, *build_reference_plan(model, binding, fixture, created_at=datetime(2026, 9, 11, tzinfo=timezone.utc)))

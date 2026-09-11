@@ -31,6 +31,7 @@ from dirty_data_to_olap.domain.contracts.source import stable_digest
 
 
 RUN = ROOT / "workspace" / "runs" / "step20-reference-run" / "olap"
+GENERIC_RUN = ROOT / "workspace" / "runs" / "step20-generic-reference-run" / "olap"
 
 
 class ValidationFailure(RuntimeError):
@@ -113,6 +114,32 @@ def main() -> int:
         connection.close()
     check(manifest["step21_semantic_layer"] == "NOT_IMPLEMENTED" and manifest["g6_data_correctness"] == "PENDING_STEP22", "Step20 claims a later step or gate"); checks += 1
     check(stable_digest(generated_manifest) == stable_digest(load("generated_sql_manifest.json")), "generated SQL manifest is not stable"); checks += 1
+    generic_required = ("run_manifest.json", "analytical_plan.json", "dimension_specs.json", "fact_specs.json", "grain_specs.json", "measure_specs.json", "review_analytical_plan.json", "compiled_plan.json", "create_schema.sql", "load_date.sql", "load_dimensions.sql", "load_facts.sql", "review_materialization_plan.json", "materialization_artifact.json", "target_inspection.json", "target.duckdb")
+    for name in generic_required:
+        check((GENERIC_RUN / name).is_file(), "missing generic Step20 artifact: " + name); checks += 1
+    generic_plan = AnalyticalPlan.model_validate(json.loads((GENERIC_RUN / "analytical_plan.json").read_text(encoding="utf-8")))
+    generic_dimensions = tuple(DimensionSpec.model_validate(item) for item in json.loads((GENERIC_RUN / "dimension_specs.json").read_text(encoding="utf-8")))
+    generic_facts = tuple(FactSpec.model_validate(item) for item in json.loads((GENERIC_RUN / "fact_specs.json").read_text(encoding="utf-8")))
+    generic_grains = tuple(GrainSpec.model_validate(item) for item in json.loads((GENERIC_RUN / "grain_specs.json").read_text(encoding="utf-8")))
+    generic_measures = tuple(MeasureSpec.model_validate(item) for item in json.loads((GENERIC_RUN / "measure_specs.json").read_text(encoding="utf-8")))
+    check(generic_plan.dimension_spec_content_hashes == {item.dimension_id: item.semantic_content_hash for item in generic_dimensions}, "generic dimension spec package is not exact"); checks += 1
+    check(generic_plan.fact_spec_content_hashes == {item.fact_id: item.semantic_content_hash for item in generic_facts}, "generic fact spec package is not exact"); checks += 1
+    check(generic_plan.grain_spec_content_hashes == {item.grain_id: item.semantic_content_hash for item in generic_grains}, "generic grain spec package is not exact"); checks += 1
+    check(generic_plan.measure_spec_content_hashes == {item.measure_id: item.semantic_content_hash for item in generic_measures}, "generic measure spec package is not exact"); checks += 1
+    generic_manifest = json.loads((GENERIC_RUN / "run_manifest.json").read_text(encoding="utf-8"))
+    generic_artifact = MaterializationArtifact.model_validate(json.loads((GENERIC_RUN / "materialization_artifact.json").read_text(encoding="utf-8")))
+    check(generic_artifact.usable and generic_artifact.target_relative_path == "workspace/runs/step20-generic-reference-run/olap/target.duckdb", "generic target artifact is not usable or is hard-coded incorrectly"); checks += 1
+    generic_load_sql = (GENERIC_RUN / "load_dimensions.sql").read_text(encoding="utf-8") + (GENERIC_RUN / "load_facts.sql").read_text(encoding="utf-8")
+    check("?" in generic_load_sql and "Pump A" not in generic_load_sql, "generic generated SQL exposes row literals"); checks += 1
+    check(generic_manifest["step21_semantic_layer"] == "NOT_IMPLEMENTED" and generic_manifest["g6_data_correctness"] == "PENDING_STEP22", "generic reference claims Step21 or G6"); checks += 1
+    generic_connection = duckdb.connect(str(GENERIC_RUN / "target.duckdb"), read_only=True)
+    try:
+        generic_tables = tuple(sorted(row[0] for row in generic_connection.execute("SHOW TABLES").fetchall()))
+        generic_counts = {table: int(generic_connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]) for table in generic_tables}
+        check(generic_tables == ("dim_device", "dim_location", "dim_observed_date", "fact_device_reading"), "generic DuckDB table set mismatch"); checks += 1
+        check(generic_counts["fact_device_reading"] == 3 and generic_connection.execute("SELECT COUNT(*) FROM fact_device_reading f LEFT JOIN dim_device d ON f.device_key=d.device_key LEFT JOIN dim_location l ON f.location_key=l.location_key LEFT JOIN dim_observed_date dt ON f.observed_date_key=dt.observed_date_key WHERE d.device_key IS NULL OR l.location_key IS NULL OR dt.observed_date_key IS NULL").fetchone()[0] == 0, "generic output inspection failed"); checks += 1
+    finally:
+        generic_connection.close()
     print(f"PASS: step20_olap_checks={checks} plan={plan.plan_id} compiled={compiled.compiled_plan_id} artifact={artifact.artifact_id}")
     return 0
 

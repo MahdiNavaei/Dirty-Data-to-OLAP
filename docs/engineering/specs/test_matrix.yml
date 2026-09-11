@@ -40,11 +40,11 @@ stage_test_requirements:
   - {stage_id: LEARNED_EVIDENCE, required_categories: [unit, contract, integration, evaluation, security], owner: "Step15"}
   - {stage_id: REVIEW_CANONICAL_IDENTITY, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
   - {stage_id: CANONICAL_FINALIZATION, required_categories: [contract, data, integration], owner: "Step19"}
-  - {stage_id: ANALYTICAL_PLANNING, required_categories: [contract, data, evaluation], owner: "Step20"}
-  - {stage_id: REVIEW_ANALYTICAL_PLAN, required_categories: [contract, integration], owner: "Step27"}
-  - {stage_id: COMPILATION, required_categories: [contract, integration, security], owner: "Step20"}
+  - {stage_id: ANALYTICAL_PLANNING, required_categories: [contract, data, evaluation, integration], owner: "Step20"}
+  - {stage_id: REVIEW_ANALYTICAL_PLAN, required_categories: [contract, integration, failure_recovery], owner: "Step27"}
+  - {stage_id: COMPILATION, required_categories: [contract, integration, security, data], owner: "Step20"}
   - {stage_id: REVIEW_MATERIALIZATION_PLAN, required_categories: [contract, security, failure_recovery], owner: "Step27"}
-  - {stage_id: MATERIALIZATION, required_categories: [adapter_contract, integration, data], owner: "Step20"}
+  - {stage_id: MATERIALIZATION, required_categories: [adapter_contract, integration, data, security, failure_recovery], owner: "Step20"}
   - {stage_id: VALIDATION_RECONCILIATION, required_categories: [data, e2e, failure_recovery], owner: "Step22"}
 
 interface_test_requirements:

@@ -16,3 +16,17 @@ def test_step20_contracts_do_not_import_provider_or_evaluation_runtime():
 def test_step20_artifact_package_has_no_step21_runtime_module():
     root = Path(__file__).parents[2]
     assert not any(path.name.lower().startswith("step21") for path in (root / "src").rglob("*"))
+
+
+def test_generic_application_paths_do_not_import_reference_fixture_types_or_names():
+    root = Path(__file__).parents[2]
+    paths = (
+        root / "src" / "dirty_data_to_olap" / "application" / "analytical_planner.py",
+        root / "src" / "dirty_data_to_olap" / "application" / "compiler.py",
+        root / "src" / "dirty_data_to_olap" / "application" / "materializer.py",
+        root / "src" / "dirty_data_to_olap" / "adapters" / "materialization.py",
+    )
+    forbidden = ("CustomerFixtureRow", "ProductFixtureRow", "BranchFixtureRow", "OrderFixtureRow", "OrderLineFixtureRow", "dim_customer", "dim_product", "dim_branch", "dim_date", "fact_order_line")
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        assert not any(token in source for token in forbidden), path

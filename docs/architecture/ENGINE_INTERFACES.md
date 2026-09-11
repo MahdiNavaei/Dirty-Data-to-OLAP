@@ -121,7 +121,7 @@ directly.
 ## MaterializerPort
 
 - Purpose: execute an approved compiled analytical plan into a controlled target.
-- Input: project-owned `CompiledPlan`, `GeneratedSQL` and the exact
+- Input: project-owned `CompiledPlan`, `GeneratedSQL`, typed `AnalyticalInputDataset` and the exact
   `REVIEW_MATERIALIZATION_PLAN` `ReviewDecision`.
 - Output: project-owned `MaterializationArtifact` with target, hash, row-count
   and usability evidence.
