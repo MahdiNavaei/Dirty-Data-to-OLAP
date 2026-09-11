@@ -66,6 +66,8 @@ CRITICAL_TOPOLOGY = {
     "TableProfile": ("application.profiling", "PROFILING"),
     "EntityMatchEdge": ("application.entity_resolution", "ENTITY_RESOLUTION"),
     "EntityCluster": ("application.entity_resolution", "ENTITY_RESOLUTION"),
+    "EntityResolutionResult": ("application.entity_resolution", "ENTITY_RESOLUTION"),
+    "CanonicalIdentityProposal": ("application.canonical_hypotheses", "CANONICAL_IDENTITY_PREPARATION"),
     "SourceRecordCanonicalMap": ("application.canonical_finalization", "CANONICAL_FINALIZATION"),
     "AnalyticalPlan": ("application.analytical_planner", "ANALYTICAL_PLANNING"),
     "GrainSpec": ("application.analytical_planner", "ANALYTICAL_PLANNING"),
@@ -316,7 +318,8 @@ def main() -> int:
     owned_stages = {item.get("stage_id") for item in ownership.get("stages", [])}
     check("ownership covers exactly all 40 components", len(component_ids) == 40 and owned_components == component_ids)
     check("ownership covers exactly all 13 interfaces", len(interface_ids) == 13 and owned_interfaces == interface_ids)
-    check("ownership covers exactly all 20 stages", len(stage_ids) == 20 and owned_stages == stage_ids)
+    non_primary_subboundaries = {"CANONICAL_IDENTITY_PREPARATION"}
+    check("ownership covers 20 primary stages plus declared sub-boundaries", len(stage_ids - non_primary_subboundaries) == 20 and owned_stages == stage_ids)
     check("every component has owner and test strategy", all(item.get("primary_specialist") and item.get("test_strategy") for item in ownership.get("components", [])))
     check("every interface has owner and test strategy", all(item.get("owner_component") and item.get("test_strategy") for item in ownership.get("interfaces", [])))
     check("every stage has owner, step and test strategy", all(item.get("owner_component") and item.get("implementation_step") and item.get("test_strategy") for item in ownership.get("stages", [])))
@@ -337,7 +340,7 @@ def main() -> int:
         "FunctionalDependencyEvidence", "InclusionDependencyEvidence", "RelationshipCandidate",
         "SchemaMatchCandidate", "QualityIssue", "RepairProposal", "RelationshipDecision",
         "SemanticMappingDecision", "ReviewDecision", "CanonicalModelHypothesis", "EntityResolutionSpec",
-        "EntityMatchEdge", "EntityCluster", "SourceRecordCanonicalMap", "CanonicalModel",
+        "CanonicalIdentityProposal", "CanonicalIdentityMembership", "EntityMatchEdge", "EntityCluster", "EntityResolutionResult", "SourceRecordCanonicalMap", "CanonicalModel",
         "AnalyticalPlan", "FactSpec", "DimensionSpec", "GrainSpec", "MeasureSpec", "CompiledPlan",
         "GeneratedSQL", "MaterializationArtifact", "ValidationReport", "ReconciliationResult", "RecordAccounting",
     }
