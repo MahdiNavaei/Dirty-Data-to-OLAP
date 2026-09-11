@@ -19,6 +19,7 @@ from dirty_data_to_olap.domain.contracts.entity_resolution import (
     EntityResolutionSpec,
     IdentityFieldSpecification,
 )
+from dirty_data_to_olap.domain.contracts.privacy import PrivacyPolicy, SensitivityLevel, ClassificationState
 from dirty_data_to_olap.domain.contracts.source import (
     AdapterReference,
     BatchReference,
@@ -44,6 +45,24 @@ from dirty_data_to_olap.domain.contracts.source import (
     TableObservationStatus,
     TableSnapshotObservation,
 )
+
+
+def step18_privacy_policy() -> PrivacyPolicy:
+    """Represent the checked-in safe policy without requiring a YAML parser in provider venvs."""
+    return PrivacyPolicy(
+        policy_id="privacy-v1",
+        version="1.0",
+        unknown_state=ClassificationState.UNKNOWN,
+        unknown_sensitivity=SensitivityLevel.SENSITIVE,
+        raw_staging_sensitivity=SensitivityLevel.RESTRICTED,
+        raw_staging_allowed=True,
+        logs_allow_raw=False,
+        debug_allow_raw_staging=False,
+        export_allow_raw=False,
+        external_allow_raw_sensitive=False,
+        external_allow_unknown=False,
+        future_llm_requires_guard=True,
+    )
 
 
 def schema_source(
@@ -99,7 +118,7 @@ def entity_spec(table_suffix: str = "v4") -> EntityResolutionSpec:
         normalization_rules=tuple(EntityResolutionNormalizationRule(rule_id=f"norm-{field}", version="1", applies_to=(field,)) for field in ("name", "email", "phone")),
         blocking_rules=(ERBlockingRule(rule_id="block-email", version="1", field_ids=("email",), sql_expression="l.email = r.email"), ERBlockingRule(rule_id="block-phone", version="1", field_ids=("phone",), sql_expression="l.phone = r.phone")),
         comparisons=(ERComparisonSpecification(comparison_id="cmp-name", field_id="name", method="exact"), ERComparisonSpecification(comparison_id="cmp-email", field_id="email", method="exact")),
-        training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-phone",), max_u_pairs=500),
+        training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-email",), max_u_pairs=500),
         threshold_policy=ERThresholdPolicy(match_probability_threshold=0.8, review_probability_threshold=0.5),
         clustering_policy=ERClusteringPolicy(threshold_policy_id="er-threshold-v1"),
     )

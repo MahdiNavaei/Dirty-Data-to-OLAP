@@ -33,6 +33,7 @@ def bind_provider_output(
     content_commit: str,
     expected_fixture_hashes: Mapping[str, str],
     expected_population: Mapping[str, Any] | None = None,
+    runtime_metadata: Mapping[str, Any] | None = None,
 ) -> ProviderEvaluationBinding:
     project_root = root.parents[3]
     reasons: list[str] = []
@@ -95,5 +96,6 @@ def bind_provider_output(
         population_match=population_match,
         expected_population_fingerprint=str(expected_population.get("fingerprint", "")) if expected_population else "",
         observed_population_fingerprint=observed_population,
+        runtime_metadata=dict(runtime_metadata or {}),
         failure_reasons=tuple(dict.fromkeys(reasons)),
     )

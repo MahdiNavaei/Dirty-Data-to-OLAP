@@ -260,6 +260,7 @@ class ProviderEvaluationBinding(_SourceModel):
     population_match: bool = False
     expected_population_fingerprint: str = ""
     observed_population_fingerprint: str = ""
+    runtime_metadata: Mapping[str, Any] = Field(default_factory=dict)
     failure_reasons: tuple[str, ...] = ()
 
     @model_validator(mode="after")

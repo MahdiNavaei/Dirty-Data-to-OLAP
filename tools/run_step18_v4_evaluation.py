@@ -55,7 +55,8 @@ def _write(relative: str, value: Any) -> None:
 
 
 def _schema_endpoint(candidate: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(str(candidate.get(key, "")) for key in ("source_id", "source_table_id", "source_column_id", "target_source_id", "target_table_id", "target_column_id"))
+    data = candidate.model_dump(mode="json") if hasattr(candidate, "model_dump") else candidate
+    return tuple(str(data.get(key, "")) for key in ("source_id", "source_table_id", "source_column_id", "target_source_id", "target_table_id", "target_column_id"))
 
 
 def _schema_truth_endpoint(row: dict[str, Any]) -> tuple[str, ...]:
@@ -89,8 +90,22 @@ def _provider_specs(rel_manifest: dict[str, Any], schema_manifest: dict[str, Any
         ("profiling", "profiling_quality/profiling_receipt.json", {"manifest": rel_hash}, population_fingerprint(rel_manifest["scenarios"]), dataset.truth_artifact_hashes["relationship"]),
         ("quality", "profiling_quality/quality_receipt.json", {"manifest": rel_hash}, population_fingerprint(rel_manifest["scenarios"]), dataset.truth_artifact_hashes["relationship"]),
         ("schema_matching", "schema_matching/provider_receipt.json", {"manifest": schema_hash}, _schema_population(schema_manifest), dataset.truth_artifact_hashes["schema"]),
+        ("schema_profiling", "schema_contracts/profiling_receipt.json", {"manifest": schema_hash}, _schema_population(schema_manifest), dataset.truth_artifact_hashes["schema"]),
+        ("schema_quality", "schema_contracts/quality_receipt.json", {"manifest": schema_hash}, _schema_population(schema_manifest), dataset.truth_artifact_hashes["schema"]),
+        ("schema_dependency", "schema_contracts/dependency_receipt.json", {"manifest": schema_hash}, _schema_population(schema_manifest), dataset.truth_artifact_hashes["schema"]),
         ("entity_resolution", "entity_resolution/provider_receipt.json", {"fixture": fixture_hash}, _entity_population(_json(ER_FIXTURE), fixture_hash), dataset.truth_artifact_hashes["entity"]),
     )
+
+
+def _runtime_metadata(component: str) -> dict[str, Any]:
+    report = RUN / "provisioning" / "provisioning.json"
+    if not report.is_file():
+        return {}
+    target = "matching-venv" if component == "schema_matching" else "er-venv" if component == "entity_resolution" else ""
+    record = next((item for item in _json(report).get("records", ()) if item.get("runtime") == target), None)
+    if not record:
+        return {}
+    return {key: record[key] for key in ("runtime", "path", "package_name", "expected_version", "interpreter_path_relative", "provider_version", "module_location_relative", "status") if key in record}
 
 
 def _relationship_metrics(payload: dict[str, Any] | None, truth: dict[str, Any], test_groups: set[str]) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
@@ -178,6 +193,7 @@ def _schema_metrics(payload: dict[str, Any] | None, truth: dict[str, Any], test_
     labels = {row["scenario_group_id"]: row for row in truth["labels"]}
     matcher_rows: dict[str, dict[str, list[tuple[str, float]]]] = {}
     matcher_truth: dict[str, dict[str, set[str]]] = {}
+    matcher_status: dict[str, dict[str, int]] = {}
     all_candidates: list[dict[str, Any]] = []
     mapping_rows: list[dict[str, Any]] = []
     if payload:
@@ -185,29 +201,37 @@ def _schema_metrics(payload: dict[str, Any] | None, truth: dict[str, Any], test_
             group = item["scenario_group_id"]
             if group not in test_groups:
                 continue
-            result = SchemaMatchResult.model_validate(item["result"])
             label = labels[group]
-            candidate_by_pair = {_schema_endpoint(candidate): candidate for candidate in result.candidates}
-            for candidate in result.candidates:
-                all_candidates.append({"group": group, "query_id": label["query_id"], "candidate_id": candidate.candidate_id, "endpoint": _schema_endpoint(candidate), "is_true": label["expected"] == "MATCH" and _schema_endpoint(candidate) == _schema_truth_endpoint(label)})
-            for score in result.scores:
-                endpoint = next((key for key in candidate_by_pair if key[2] == score.source_column_id and key[5] == score.target_column_id), None)
-                if endpoint is None:
-                    continue
-                candidate_id = candidate_by_pair[endpoint].candidate_id
-                family = score.matcher.matcher_id
-                matcher_rows.setdefault(family, {}).setdefault(label["query_id"], []).append((candidate_id, float(score.raw_native_score)))
-                matcher_truth.setdefault(family, {}).setdefault(label["query_id"], set())
-                if label["expected"] == "MATCH" and endpoint == _schema_truth_endpoint(label):
-                    matcher_truth[family][label["query_id"]].add(candidate_id)
-            mapping_rows.append({"group": group, "result": result, "label": label})
+            family_payloads = item.get("matcher_results") or [{"matcher_id": "combined", "result": item["result"]}]
+            for family_payload in family_payloads:
+                result = SchemaMatchResult.model_validate(family_payload["result"])
+                family = family_payload["matcher_id"]
+                status_bucket = "complete" if result.status.value == "COMPLETE" else "failed" if result.status.value == "FAILED" else "incomplete"
+                matcher_status.setdefault(family, {}).setdefault(status_bucket, 0)
+                matcher_status[family][status_bucket] += 1
+                candidate_by_pair = {_schema_endpoint(candidate): candidate for candidate in result.candidates}
+                for candidate in result.candidates:
+                    all_candidates.append({"group": group, "query_id": label["query_id"], "candidate_id": candidate.candidate_id, "endpoint": _schema_endpoint(candidate), "is_true": label["expected"] == "MATCH" and _schema_endpoint(candidate) == _schema_truth_endpoint(label)})
+                for score in result.scores:
+                    endpoint = next((key for key in candidate_by_pair if key[2] == score.source_column_id and key[5] == score.target_column_id), None)
+                    if endpoint is None:
+                        continue
+                    candidate_id = candidate_by_pair[endpoint].candidate_id
+                    family = score.matcher.matcher_id
+                    matcher_rows.setdefault(family, {}).setdefault(label["query_id"], []).append((candidate_id, float(score.raw_native_score)))
+                    matcher_truth.setdefault(family, {}).setdefault(label["query_id"], set())
+                    if label["expected"] == "MATCH" and endpoint == _schema_truth_endpoint(label):
+                        matcher_truth[family][label["query_id"]].add(candidate_id)
+                if result.status.value == "COMPLETE":
+                    mapping_rows.append({"group": group, "result": result, "label": label, "matcher_id": family_payload["matcher_id"]})
+    all_candidates = list({(item["group"], item["endpoint"]): item for item in all_candidates}.values())
     positive = [row for row in labels.values() if row["scenario_group_id"] in test_groups and row["expected"] == "MATCH"]
     true_queries = {row["query_id"] for row in all_candidates if row["is_true"]}
     fp = sum(not row["is_true"] for row in all_candidates)
     recall = _safe_ratio(len(true_queries), len(positive), "NO_SCHEMA_MATCH_QUERIES").model_dump(mode="json")
     if not payload:
         recall = {"value": None, "numerator": 0, "denominator": len(positive), "undefined_reason": "PROVIDER_OUTPUT_UNAVAILABLE"}
-    metric = {"split": "TEST", "status": "EVALUATED" if payload else "INSUFFICIENT_EVIDENCE", "truth_match_query_count": len(positive), "true_match_generated_count": sum(row["is_true"] for row in all_candidates), "candidate_generation_precision": _safe_ratio(sum(row["is_true"] for row in all_candidates), len(all_candidates), "NO_SCHEMA_CANDIDATES").model_dump(mode="json"), "candidate_generation_recall": recall, "generated_false_candidate_count": fp, "no_match_false_positive_count": sum(1 for row in all_candidates if not row["is_true"] and labels[row["group"]]["expected"] == "NO_MATCH"), "candidate_count_per_source_query": {row["query_id"]: sum(item["query_id"] == row["query_id"] for item in all_candidates) for row in labels.values() if row["scenario_group_id"] in test_groups}, "matchers": {family: ranking_metrics(queries, matcher_truth[family]).model_dump(mode="json") for family, queries in matcher_rows.items()}, "actual_candidate_ids": bool(payload)}
+    metric = {"split": "TEST", "status": "EVALUATED" if payload else "INSUFFICIENT_EVIDENCE", "truth_match_query_count": len(positive), "true_match_generated_count": sum(row["is_true"] for row in all_candidates), "candidate_generation_precision": _safe_ratio(sum(row["is_true"] for row in all_candidates), len(all_candidates), "NO_SCHEMA_CANDIDATES").model_dump(mode="json"), "candidate_generation_recall": recall, "generated_false_candidate_count": fp, "no_match_false_positive_count": sum(1 for row in all_candidates if not row["is_true"] and labels[row["group"]]["expected"] == "NO_MATCH"), "candidate_count_per_source_query": {row["query_id"]: sum(item["query_id"] == row["query_id"] for item in all_candidates) for row in labels.values() if row["scenario_group_id"] in test_groups}, "matchers": {family: ranking_metrics(queries, matcher_truth[family]).model_dump(mode="json") for family, queries in matcher_rows.items()}, "matcher_execution_status": matcher_status, "actual_candidate_ids": bool(payload)}
     return metric, mapping_rows, all_candidates
 
 
@@ -259,7 +283,7 @@ def main() -> int:
     test_groups, calibration_groups = set(split.group_ids_by_split.get("TEST", ())), set(split.group_ids_by_split.get("CALIBRATION", ()))
     bindings = {}
     for component, relative, fixtures, population, truth_hash in _provider_specs(rel_manifest, schema_manifest, fixture_hash, dataset):
-        bindings[component] = bind_provider_output(root=RUN, component=component, receipt_path=RUN / relative, protocol_hash=protocol_hash, dataset_manifest_hash=dataset.content_hash, truth_artifact_hash=truth_hash, split_hash=split.content_hash, content_commit=content_commit, expected_fixture_hashes=fixtures, expected_population={"fingerprint":population})
+        bindings[component] = bind_provider_output(root=RUN, component=component, receipt_path=RUN / relative, protocol_hash=protocol_hash, dataset_manifest_hash=dataset.content_hash, truth_artifact_hash=truth_hash, split_hash=split.content_hash, content_commit=content_commit, expected_fixture_hashes=fixtures, expected_population={"fingerprint":population}, runtime_metadata=_runtime_metadata(component))
     _write("manifest/provider_evaluation_bindings.json", {key:value.model_dump(mode="json") for key, value in bindings.items()})
     payloads = {key: _load_payload(value) for key, value in bindings.items()}
     rel_metric, rel_queries = _relationship_metrics(payloads.get("dependency_discovery"), rel_truth, test_groups)
@@ -268,15 +292,38 @@ def main() -> int:
     fusion_metric, calibration, fusion_rows, calibration_rows = _fusion_metrics(payloads.get("dependency_discovery"), profiles, qualities, test_groups, calibration_groups, rel_truth)
     _write("relationship/test_metrics.json", rel_metric); _write("fusion/test_metrics.json", fusion_metric)
     schema_metric, schema_rows, schema_candidates = _schema_metrics(payloads.get("schema_matching"), schema_truth, test_groups, EvidenceFusionService.load_policy("mapping")); _write("schema_matching/test_metrics.json", schema_metric)
+    schema_profiles = {(item["scenario_group_id"], item["source_id"]): ProfileResult.model_validate(item["result"]) for item in (payloads.get("schema_profiling") or {}).get("results", ())}
+    schema_qualities = {(item["scenario_group_id"], item["source_id"]): QualityResult.model_validate(item["result"]) for item in (payloads.get("schema_quality") or {}).get("results", ())}
+    schema_dependencies = {(item["scenario_group_id"], item["source_id"]): DependencyResult.model_validate(item["result"]) for item in (payloads.get("schema_dependency") or {}).get("results", ())}
     schema_fusion_rows = []
     schema_fusion_failures = []
     if schema_rows:
         for row in schema_rows:
             result = row["result"]
             request = EvidenceFusionRequest(request_id=f"step18-v4-schema-fusion-{row['group']}", execution_context_id=f"step18-v4-schema-fusion-{row['group']}", mapping_candidate_ids=tuple(candidate.candidate_id for candidate in result.candidates), cross_source_mapping_scope=True, policy=EvidenceFusionService.load_policy("mapping"))
-            fused = EvidenceFusionService().fuse(request, schema_match_result=result)
+            group = row["group"]
+            producer_profiles = tuple(schema_profiles[(group, source)] for source in ("crm-v3", "erp-v3") if (group, source) in schema_profiles)
+            producer_qualities = tuple(schema_qualities[(group, source)] for source in ("crm-v3", "erp-v3") if (group, source) in schema_qualities)
+            producer_dependencies = tuple(schema_dependencies[(group, source)] for source in ("crm-v3", "erp-v3") if (group, source) in schema_dependencies)
+            fused = EvidenceFusionService().fuse(request, schema_match_result=result, profile_results=producer_profiles, quality_results=producer_qualities, dependency_results=producer_dependencies)
             schema_fusion_rows.extend({"scenario_group_id":row["group"],"decision":decision.model_dump(mode="json")} for decision in fused.mappings); schema_fusion_failures.extend(item.kind.value for item in fused.failures)
-    schema_metric["fusion"] = {"status":"EVALUATED" if schema_fusion_rows and not schema_fusion_failures else "INSUFFICIENT_EVIDENCE","decision_count":len(schema_fusion_rows),"failures":sorted(set(schema_fusion_failures)),"mapping_decision_bands":{band:sum(row["decision"]["confidence_band"] == band for row in schema_fusion_rows) for band in {row["decision"]["confidence_band"] for row in schema_fusion_rows}}}
+    schema_fusion_status = bool(schema_fusion_rows and not schema_fusion_failures and len(schema_profiles) == len(schema_qualities) == len(schema_dependencies) == 22)
+    schema_by_query: dict[str, list[tuple[str, float]]] = {}
+    schema_targets: dict[str, set[str]] = {}
+    schema_labels_by_group = {row["scenario_group_id"]: row for row in schema_truth["labels"]}
+    candidate_ids_by_group = {row["group"]: {candidate.candidate_id: candidate for candidate in row["result"].candidates} for row in schema_rows}
+    for item in schema_fusion_rows:
+        decision = item["decision"]
+        group = item["scenario_group_id"]
+        label = schema_labels_by_group[group]
+        score = decision.get("score", {}).get("value")
+        if score is not None:
+            schema_by_query.setdefault(label["query_id"], []).append((decision["candidate_id"], float(score)))
+        candidate = candidate_ids_by_group.get(group, {}).get(decision["candidate_id"])
+        if label["expected"] == "MATCH" and candidate is not None and _schema_endpoint(candidate.model_dump(mode="json")) == _schema_truth_endpoint(label):
+            schema_targets.setdefault(label["query_id"], set()).add(decision["candidate_id"])
+    schema_fusion_metric = {"status":"EVALUATED" if schema_fusion_status else "INSUFFICIENT_EVIDENCE", "decision_count":len(schema_fusion_rows), "failures":sorted(set(schema_fusion_failures)), "candidate_conditional_classification":binary_classification_metrics([(candidate, int(candidate in schema_targets.get(query, set())), int(score >= 0.5), score) for query, rows in schema_by_query.items() for candidate, score in rows]).model_dump(mode="json") if schema_by_query else {"status":"INSUFFICIENT_EVIDENCE"}, "ranking":ranking_metrics(schema_by_query, schema_targets).model_dump(mode="json") if schema_by_query else {"status":"INSUFFICIENT_EVIDENCE"}, "no_match_decision_count":sum(1 for item in schema_fusion_rows if schema_labels_by_group[item["scenario_group_id"]]["expected"] == "NO_MATCH"), "mapping_decision_bands":{band:sum(row["decision"]["confidence_band"] == band for row in schema_fusion_rows) for band in {row["decision"]["confidence_band"] for row in schema_fusion_rows}}, "conflict_count":sum(bool(row["decision"].get("conflict_refs")) for row in schema_fusion_rows), "incomplete_count":sum(row["decision"]["decision_state"] == "INCOMPLETE_REQUIRED_EVIDENCE" for row in schema_fusion_rows), "review_required_count":sum(row["decision"]["decision_state"] == "REVIEW_REQUIRED" for row in schema_fusion_rows)}
+    schema_metric["fusion"] = schema_fusion_metric
     _write("schema_matching/test_metrics.json", schema_metric)
     er_metric = _er_metrics(payloads.get("entity_resolution"), er_truth, group_rows, test_groups); _write("entity_resolution/test_metrics.json", er_metric)
     baselines = {"split":"TEST","source":"actual DependencyResult RelationshipCandidate/InclusionDependencyEvidence fields","ind_inclusion_coverage":[],"target_uniqueness":[],"type_compatibility":[],"declared_fk":{"status":"NOT_OBSERVED","count":0}}
@@ -343,13 +390,30 @@ def main() -> int:
         input_order_same = rerun_fusion.get("candidate_conditional_classification") == fusion_metric.get("candidate_conditional_classification") and rerun_fusion.get("ranking") == fusion_metric.get("ranking")
     repro_path = RUN / "reproducibility" / "relationship_provider.json"
     reproducibility = _json(repro_path) if repro_path.exists() else {"status":"NOT_RUN","reason":"second provider execution receipt is absent"}
-    controls = {"split":"TEST","truth_shuffle":truth_shuffle,"input_order":{"status":"PASS" if input_order_same else "EXECUTED_UNCHANGED","rerun":input_order_same is not None,"metrics_semantically_identical":input_order_same},"provider_output_mutation":{"status":"PASS" if mutation_changed else "FAIL","metric_input_changed":mutation_changed,"original_candidate_count":rel_metric["generated_candidate_count"],"mutated_candidate_count":mutation_metric["generated_candidate_count"]},"schema_provider_mutation":{"status":"PASS" if payloads.get("schema_matching") else "NOT_RUN","metric_input_changed":bool(payloads.get("schema_matching"))},"entity_provider_mutation":{"status":"PASS" if payloads.get("entity_resolution") else "NOT_RUN","metric_input_changed":bool(payloads.get("entity_resolution"))},"receipt_only":{"status":"PASS","formal_gate_without_loaded_output":"PENDING"},"population_identity":{"status":"PASS","exact_population_binding":all(value.population_match for value in bindings.values() if value.status == "EXECUTED")},"reproducibility":reproducibility}
+    schema_mutation_changed = False
+    if payloads.get("schema_matching"):
+        mutated_schema = json.loads(json.dumps(payloads["schema_matching"]))
+        target_schema = next((item for item in mutated_schema.get("results", ()) if item["scenario_group_id"] in test_groups and item["result"].get("candidates")), None)
+        if target_schema is not None:
+            target_schema["result"]["candidates"] = []
+            target_schema["result"]["scores"] = []
+            mutated_schema_metric, _, _ = _schema_metrics(mutated_schema, schema_truth, test_groups, EvidenceFusionService.load_policy("mapping"))
+            schema_mutation_changed = mutated_schema_metric["true_match_generated_count"] != schema_metric["true_match_generated_count"] or mutated_schema_metric["candidate_generation_recall"] != schema_metric["candidate_generation_recall"]
+    er_mutation_changed = False
+    if payloads.get("entity_resolution"):
+        mutated_entity = json.loads(json.dumps(payloads["entity_resolution"]))
+        mutated_entity["result"]["edges"] = []
+        mutated_entity["result"]["clusters"] = []
+        mutated_er_metric = _er_metrics(mutated_entity, er_truth, group_rows, test_groups)
+        er_mutation_changed = mutated_er_metric["metrics"] != er_metric["metrics"]
+    controls = {"split":"TEST","truth_shuffle":truth_shuffle,"input_order":{"status":"PASS" if input_order_same else "EXECUTED_UNCHANGED","rerun":input_order_same is not None,"metrics_semantically_identical":input_order_same},"provider_output_mutation":{"status":"PASS" if mutation_changed else "FAIL","metric_input_changed":mutation_changed,"original_candidate_count":rel_metric["generated_candidate_count"],"mutated_candidate_count":mutation_metric["generated_candidate_count"]},"schema_provider_mutation":{"status":"PASS" if schema_mutation_changed else "FAIL" if payloads.get("schema_matching") else "NOT_RUN","metric_input_changed":schema_mutation_changed},"entity_provider_mutation":{"status":"PASS" if er_mutation_changed else "FAIL" if payloads.get("entity_resolution") else "NOT_RUN","metric_input_changed":er_mutation_changed},"receipt_only":{"status":"PASS","formal_gate_without_loaded_output":"PENDING"},"population_identity":{"status":"PASS","exact_population_binding":all(value.population_match for value in bindings.values() if value.status == "EXECUTED")},"reproducibility":reproducibility}
     _write("controls/negative_controls.json", controls)
-    task_completion = {"RELATIONSHIP_CANDIDATE_EVALUATED": rel_metric["candidate_generation_recall"]["value"] is not None,"RELATIONSHIP_FUSION_EVALUATED": fusion_metric["status"] == "EVALUATED" and fusion_metric.get("candidate_conditional_classification", {}).get("average_precision", {}).get("value") is not None,"SCHEMA_CANDIDATE_EVALUATED": schema_metric["status"] == "EVALUATED" and schema_metric["candidate_generation_recall"]["value"] is not None,"SCHEMA_MATCHER_RANKING_EVALUATED": schema_metric["status"] == "EVALUATED" and bool(schema_metric["matchers"]),"SCHEMA_FUSION_EVALUATED": schema_metric["fusion"]["status"] == "EVALUATED","ER_PAIRWISE_EVALUATED": er_metric["status"] == "EVALUATED" and er_metric["metrics"] is not None,"ER_CLUSTER_EVALUATED": er_metric["status"] == "EVALUATED" and er_metric["metrics"] is not None and er_metric["metrics"].get("mean_predicted_cluster_purity") is not None,"NEGATIVE_CONTROLS_PASS": all(item.get("status") in {"PASS","EXECUTED"} for item in controls.values() if isinstance(item, dict) and item.get("status") != "NOT_RUN"),"REPRODUCIBILITY_PASS": reproducibility.get("status") == "PASS","LEAKAGE_AUDIT_PASS": leakage["truth_cluster_leakage"] and leakage["case_pair_role_consistent"]}
+    matcher_status_complete = all(schema_metric.get("matcher_execution_status", {}).get(family, {}).get("complete", 0) == len(schema_manifest["scenarios"]) for family in ("coma-schema", "cupid-schema"))
+    task_completion = {"RELATIONSHIP_CANDIDATE_EVALUATED": rel_metric["candidate_generation_recall"]["value"] is not None,"RELATIONSHIP_FUSION_EVALUATED": fusion_metric["status"] == "EVALUATED" and fusion_metric.get("candidate_conditional_classification", {}).get("average_precision", {}).get("value") is not None,"SCHEMA_CANDIDATE_EVALUATED": schema_metric["status"] == "EVALUATED" and schema_metric["candidate_generation_recall"]["value"] is not None,"SCHEMA_MATCHER_RANKING_EVALUATED": matcher_status_complete and all(family in schema_metric["matchers"] for family in ("coma-schema", "cupid-schema")),"SCHEMA_FUSION_EVALUATED": schema_metric["fusion"]["status"] == "EVALUATED" and schema_metric["fusion"].get("candidate_conditional_classification", {}).get("average_precision", {}).get("value") is not None,"ER_PAIRWISE_EVALUATED": er_metric["status"] == "EVALUATED" and er_metric["metrics"] is not None,"ER_CLUSTER_EVALUATED": er_metric["status"] == "EVALUATED" and er_metric["metrics"] is not None and er_metric["metrics"].get("mean_predicted_cluster_purity") is not None,"NEGATIVE_CONTROLS_PASS": all(item.get("status") in {"PASS","EXECUTED"} for item in controls.values() if isinstance(item, dict) and item.get("status") != "NOT_RUN"),"REPRODUCIBILITY_PASS": reproducibility.get("status") == "PASS","LEAKAGE_AUDIT_PASS": leakage["truth_cluster_leakage"] and leakage["case_pair_role_consistent"]}
     required_complete = all(task_completion.values()) and all(value.status == "EXECUTED" for value in bindings.values())
     formal = FormalGateStatus.PASS if required_complete else FormalGateStatus.PENDING
     assessment = {"assessment_id":"step18-g5-assessment-v4","formal_gate":formal.value,"inference_validity_mode":"REVIEW_ONLY_VALIDATED" if formal is FormalGateStatus.PASS else "UNVALIDATED","automation_recommendation":"NOT_AUTHORIZED","automation_enabled":False,"required_task_completion":task_completion,"required_provider_status":{key:value.status for key,value in bindings.items()},"headline_split":"TEST","calibration_use":"CALIBRATION_ONLY","limitations":["Step19 implementation not started"] + ([] if required_complete else ["one or more required empirical tasks remain incomplete or unavailable"])}
-    report = {"report_id":"step18-inference-baseline-v4","git_content_commit":content_commit,"formal_gate":formal.value,"inference_validity_mode":assessment["inference_validity_mode"],"assessment":assessment,"task_metrics":{"relationship":rel_metric,"fusion":fusion_metric,"schema":schema_metric,"entity_resolution":er_metric},"slice_metrics":{"split":"TEST","relationship":[{"scenario_group_id":truth_by_query[query]["scenario_group_id"],"query_id":query,"candidate_count":len(rows),"generated_true_count":sum(row["is_true"] for row in rows),"denominator":int(truth_by_query[query]["expected"] == "MATCH")} for query, rows in rel_queries.items()],"schema":{"status":schema_metric["status"],"groups":[row["scenario_group_id"] for row in schema_truth["labels"] if row["scenario_group_id"] in test_groups]},"entity_resolution":{"status":er_metric["status"],"groups":[item["group_id"] for item in group_rows if item["task"] == "ENTITY_RESOLUTION" and item["group_id"] in test_groups]}},"baselines":baselines,"bootstrap":[bootstrap],"calibration":calibration_status,"threshold_study":{"status":"STUDIED_ONLY" if points else "INSUFFICIENT_EVIDENCE","selected_threshold":None,"automation_enabled":False},"controls":controls,"errors":[{"error_category":"CANDIDATE_NOT_GENERATED","query_id":query} for query in rel_metric["zero_candidate_truth_queries"]]}
+    report = {"report_id":"step18-inference-baseline-v4","git_content_commit":content_commit,"formal_gate":formal.value,"inference_validity_mode":assessment["inference_validity_mode"],"provider_status":assessment["required_provider_status"],"provisioning":_json(RUN / "provisioning/provisioning.json") if (RUN / "provisioning/provisioning.json").is_file() else {},"assessment":assessment,"task_metrics":{"relationship":rel_metric,"fusion":fusion_metric,"schema":schema_metric,"entity_resolution":er_metric},"slice_metrics":{"split":"TEST","relationship":[{"scenario_group_id":truth_by_query[query]["scenario_group_id"],"query_id":query,"candidate_count":len(rows),"generated_true_count":sum(row["is_true"] for row in rows),"denominator":int(truth_by_query[query]["expected"] == "MATCH")} for query, rows in rel_queries.items()],"schema":{"status":schema_metric["status"],"groups":[row["scenario_group_id"] for row in schema_truth["labels"] if row["scenario_group_id"] in test_groups]},"entity_resolution":{"status":er_metric["status"],"groups":[item["group_id"] for item in group_rows if item["task"] == "ENTITY_RESOLUTION" and item["group_id"] in test_groups]}},"baselines":baselines,"bootstrap":[bootstrap],"calibration":calibration_status,"threshold_study":{"status":"STUDIED_ONLY" if points else "INSUFFICIENT_EVIDENCE","selected_threshold":None,"automation_enabled":False},"controls":controls,"errors":[{"error_category":"CANDIDATE_NOT_GENERATED","query_id":query} for query in rel_metric["zero_candidate_truth_queries"]]}
     _write("g5/assessment.json", assessment); _write("report.json", report); _write("manifest/task_completion.json", task_completion)
     print(json.dumps({"formal_gate":formal.value,"mode":assessment["inference_validity_mode"],"task_completion":task_completion,"provider_status":assessment["required_provider_status"],"relationship_recall":rel_metric["candidate_generation_recall"]}, indent=2))
     return 0 if formal is FormalGateStatus.PASS else 2

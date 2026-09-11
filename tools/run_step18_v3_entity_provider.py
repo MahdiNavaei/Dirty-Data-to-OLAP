@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from dirty_data_to_olap.adapters.entity_resolution import SplinkEntityResolutionAdapter
 from dirty_data_to_olap.application.privacy_policy import PrivacyPolicyService
 from dirty_data_to_olap.domain.contracts.entity_resolution import ERBlockingRule, ERClusteringPolicy, ERComparisonSpecification, ERThresholdPolicy, ERTrainingPolicy, EntityResolutionMode, EntityResolutionNormalizationRule, EntityResolutionSpec, IdentityFieldSpecification
-from step18_provider_fixtures import entity_source, entity_spec
+from step18_provider_fixtures import entity_source, entity_spec, step18_privacy_policy
 
 
 FIXTURE = ROOT / "benchmarks" / "entity_resolution" / "step14_labeled_fixture.json"
@@ -45,7 +45,7 @@ def main() -> int:
     for source, rows in rows_by_source.items():
         catalogs[source], snapshots[source] = entity_source(source, f"{source}_customers_v4", RUN, rows)
     spec = entity_spec("v4")
-    policy = PrivacyPolicyService(project_root=RUN)
+    policy = PrivacyPolicyService(policy=step18_privacy_policy(), project_root=RUN)
     decision = policy.authorize_entity_resolution_analysis(spec.privacy_context, spec=spec, source_ids=spec.source_ids, snapshot_ids=spec.snapshot_ids, table_ids_by_source=spec.table_ids_by_source, identity_column_ids=tuple(field.column_id for field in spec.identity_fields), batch_ids=tuple(f"batch-{source}_customers_v4" for source in ("crm","erp")))
     if not decision.allowed:
         raise RuntimeError(f"entity-resolution authorization denied: {decision.reason}")

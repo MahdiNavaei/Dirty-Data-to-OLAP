@@ -3,6 +3,10 @@ from __future__ import annotations
 import inspect
 import json
 from pathlib import Path
+import hashlib
+import subprocess
+
+import pytest
 
 from tools.provision_step18_v4_runtimes import _child_environment
 from tools.step18_provider_fixtures import entity_spec
@@ -43,6 +47,37 @@ def test_v4_provider_runners_are_decoupled_from_optional_test_modules_and_sentin
         assert "tests/integration" not in source
         assert "valentine-runtime" not in source
         assert "splink-runtime" not in source
+
+
+def test_v4_available_valentine_path_executes_without_import_nameerror():
+    runtime = ROOT / "workspace/test-temp/step18-runtimes/matching-venv/Scripts/python.exe"
+    if not runtime.is_file():
+        pytest.skip("dedicated Step18 matching runtime is not provisioned")
+    completed = subprocess.run(
+        [str(runtime), str(ROOT / "tools/run_step18_v4_schema_provider.py")],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert '"scenario_count": 11' in completed.stdout
+    assert "NameError" not in completed.stdout + completed.stderr
+    receipt = _json("workspace/runs/step18-inference-baseline-v4/evaluation/schema_matching/provider_receipt.json")
+    output = ROOT / receipt["output_artifact"]
+    assert receipt["output_hash"] == hashlib.sha256(output.read_bytes()).hexdigest()
+
+
+def test_v4_provider_receipts_are_immutable_execution_evidence():
+    for name in ("schema_matching", "entity_resolution"):
+        receipt = _json(f"workspace/runs/step18-inference-baseline-v4/evaluation/{name}/provider_receipt.json")
+        assert receipt["receipt_content_hash"] == hashlib.sha256(
+            (json.dumps({key: value for key, value in receipt.items() if key != "receipt_content_hash"}, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        ).hexdigest()
+        assert not {"content_commit", "protocol_hash", "dataset_manifest_hash", "truth_artifact_hash", "split_hash"}.intersection(receipt)
+    for name in ("tools.run_step18_v4_schema_provider", "tools.run_step18_v4_entity_provider"):
+        assert "_annotate_receipt" not in inspect.getsource(__import__(name, fromlist=["main"]))
 
 
 def test_v4_er_spec_includes_same_source_duplicate_capability():

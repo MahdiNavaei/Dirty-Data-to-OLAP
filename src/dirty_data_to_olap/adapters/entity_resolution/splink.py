@@ -208,6 +208,8 @@ class SplinkEntityResolutionAdapter:
                 linker.training.estimate_parameters_using_expectation_maximisation(self._safe_blocking_sql(rule, field_map))
             if not bool(getattr(linker._settings_obj, "_is_fully_trained", False)):
                 raise _ERTraining("Splink completed without estimates for every comparison; default parameters are not accepted")
+        except _ERTraining:
+            raise
         except Exception as error:
             raise _ERTraining(f"Splink u/m training failed: {error.__class__.__name__}") from None
         predictions = linker.inference.predict()
