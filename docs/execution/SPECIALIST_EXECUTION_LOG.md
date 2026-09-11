@@ -1086,6 +1086,7 @@ handoff_to:
 
 - execution_step: `18` surgical closure only; Step19 implementation was not started
 - starting_head: `1ef3f7e013ea4e0133211a46aa5c26ced7a394eb`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- content_commit_sha: `9218ad9fc8b8017fcfc1332f9735b5eeee7e6098`
 - current_run: fresh `workspace/runs/step18-inference-baseline-v3/evaluation/`; v2 run and v2 manifests remain historical and were not overwritten
 - protocol: explicit 13 relationship, 11 schema, and 11 ER groups; TEST-only headline metrics; shared relationship generator; exact orphan rates; complete cluster-derived ER truth; order-safe composite endpoint identity; calibration-only threshold study
 - relationship_provider: Desbordante `2.4.1` `COMPLETE`; 13 scenarios executed; TEST candidate-generation recall `5/7 = 0.7143`; 17 candidates, 5 true, 12 false; missing positives `rq-orphan-10` and `rq-missing`

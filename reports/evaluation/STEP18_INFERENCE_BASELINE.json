@@ -1,15 +1,14 @@
 {
-  "report_id": "step18-inference-baseline-v2",
-  "git_content_commit": "7571f728e561c087d64340b1c4414a3c28e582b2",
-  "dataset_id": "step18-inference-quality-v2",
-  "protocol_version": "step18-evaluation-protocol-v2",
+  "report_id": "step18-inference-baseline-v3",
+  "git_content_commit": "9218ad9fc8b8017fcfc1332f9735b5eeee7e6098",
+  "dataset_id": "step18-inference-quality-v3",
+  "protocol_version": "step18-evaluation-protocol-v3",
   "formal_gate": "PENDING",
   "inference_validity_mode": "UNVALIDATED",
   "gate_recommendation": "INSUFFICIENT_EVIDENCE",
   "automation_recommendation": "NOT_AUTHORIZED",
   "automation_enabled": false,
-  "calibration_status": "INSUFFICIENT_CALIBRATION_DATA_EVIDENCE_DERIVED",
-  "threshold_study_status": "NO_AUTOMATION_THRESHOLD_SELECTED",
+  "headline_split": "TEST",
   "provider_status": {
     "dependency_discovery": "EXECUTED",
     "profiling": "EXECUTED",
@@ -18,11 +17,15 @@
     "entity_resolution": "INSUFFICIENT_EVIDENCE"
   },
   "metrics": {
-    "relationship_candidate_generation": {"candidate_recall": 0.15384615384615385, "truth_query_count": 13, "generated_true_candidate_count": 2, "generated_false_candidate_count": 9, "missing_candidate_query_count": 11},
-    "relationship_fusion": {"status": "EVALUATED", "decision_count": 11, "failures": []},
-    "schema_matching": {"status": "INSUFFICIENT_EVIDENCE", "no_match_false_positive_count": 0},
-    "entity_resolution": {"status": "INSUFFICIENT_EVIDENCE"}
+    "relationship_candidate_generation": {"split":"TEST","candidate_recall":{"value":0.7142857142857143,"numerator":5,"denominator":7},"generated_candidate_count":17,"generated_true_candidate_count":5,"generated_false_candidate_count":12,"missing_candidate_query_ids":["rq-orphan-10","rq-missing"]},
+    "relationship_fusion": {"split":"TEST","status":"EVALUATED","decision_count":17,"failures":[]},
+    "schema_matching": {"split":"TEST","status":"INSUFFICIENT_EVIDENCE","matchers":{},"no_match_false_positive_count":0},
+    "entity_resolution": {"split":"TEST","status":"INSUFFICIENT_EVIDENCE","prediction_method":"ACTUAL_ENTITY_RESOLUTION_RESULT_EDGES_AND_CLUSTERS","evaluated_record_universe_count":0}
   },
-  "limitations": ["v1 provider smoke metrics were not provider-bound and are superseded", "Valentine and Splink v2 outputs unavailable", "schema and entity metrics remain unclaimed", "no automation or canonicalization"],
+  "bootstrap": {"split":"TEST","group_count":7,"replicates":1000,"point_estimate":0.7142857142857143,"interval":[0.42857142857142855,1.0]},
+  "calibration": {"split":"CALIBRATION","status":"INSUFFICIENT_CALIBRATION_DATA","independent_group_count":6,"score_observation_count":1},
+  "threshold_study": {"split":"CALIBRATION","status":"STUDIED_ONLY","selected_threshold":null,"runtime_policy_mutated":false},
+  "controls": ["truth_shuffle_recomputed","input_order_rerun","provider_output_mutation_changed_metric_input","receipt_only_pending","authored_score_absence","exact_population_binding","reverse_pair_split_control","TEST_slice_denominators"],
+  "limitations": ["Valentine and Splink outputs unavailable after isolated provisioning attempts", "schema and entity metrics remain unclaimed", "synthetic and aggregate-safe evidence only", "no production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release claim", "Step19 implementation not started"],
   "step19_started": false
 }
