@@ -8,5 +8,7 @@ Current status: Steps 01-17 complete; Step18 v4 empirical evaluation is recorded
 
 Next: resolve the unavailable Step18 provider bindings if a future authorized run is requested. Step19 implementation has not started and is not authorized.
 
+The latest offline continuation verified Valentine `1.0.0` and Splink `4.0.17` from the project-local wheelhouse. Valentine/Coma completed its full schema estate, while Cupid remained incomplete because optional NLTK corpora were absent; Splink failed closed during truthful EM training completeness on the frozen 24-record population. Schema producer contracts completed, but schema/entity quality metrics remain unclaimed. G5 is still `PENDING` / `UNVALIDATED`; no threshold was selected and Step19 was not started.
+
 - Project documentation: [docs/00_README.md](docs/00_README.md)
 - Execution state: [docs/execution/MASTER_EXECUTION_STATE.yml](docs/execution/MASTER_EXECUTION_STATE.yml)

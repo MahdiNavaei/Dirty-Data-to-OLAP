@@ -1113,6 +1113,20 @@ handoff_to:
 - uncertainty: bootstrap over all 7 positive TEST groups, 1,000 replicates, interval `[0.4286, 1.0]`; relationship-Fusion calibration insufficient; threshold frontier studied only, no threshold selected or policy mutation
 - current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; Step19 not started
 
+## Step18 Offline Provider + Schema-Fusion Closure
+
+- execution_step: `18` continuation only; Step19 was not started
+- starting_head: `42a7f40d34016457f568fa559f364b8a9fef683b`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- content_commit_sha: `403dc8a` (`fix: complete Step18 offline provider evaluation`)
+- offline_runtime: complete `workspace/test-temp/step18-wheelhouse`, `--no-index --find-links`, no PyPI/network install; matching and ER runtimes both `READY`, Python `3.10.11`, Valentine `1.0.0`, Splink `4.0.17`
+- schema_provider: Valentine executed all 11 groups; Coma `11/11 COMPLETE`; Cupid `2/11 COMPLETE`, `9/11 FAILED` due absent optional NLTK corpora; network corpus download disabled; immutable receipt=`INCOMPLETE`; no matcher/ranking/Fusion quality promoted
+- schema_required_producers: actual DataProfiler, QualityAnalysisService, and Desbordante DependencyDiscoveryService completed for `22/22` source results and were bound to the current ProfileResult, QualityResult, and DependencyResult artifacts
+- entity_provider: Splink ran full `24` records in `LINK_AND_DEDUPE`, including same-source `crm-r9/crm-r10`; truthful training failed because `_is_fully_trained=False` for the frozen population; no default, heuristic, label, or fabricated ER result substituted
+- relationship: actual Desbordante candidate recall `5/7`, precision `5/17`, F1 `0.4167`; Fusion AP `0.5277`; semantic reproducibility=`PASS`, exact bytes unequal and retained
+- controls: schema mutation and available integrity controls executed; ER mutation not run because provider output failed; truth/split/leakage/reproducibility controls remain explicit
+- state: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; current_step=`18`; last_completed_step=`17`; no automation threshold selected; Step19 not started
+- verification: available-provider behavioral regression `16 passed`; v4 validator `22` checks PASS; evaluator fail-closed exit is expected while G5 remains pending
+
 ## Step18 Runtime and Reproducibility Closure
 
 - execution_step: `18` continuation and surgical harness repair only; Step19 was not started

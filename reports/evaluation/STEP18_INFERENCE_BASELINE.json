@@ -1,6 +1,6 @@
 {
   "report_id": "step18-inference-baseline-v4",
-  "git_content_commit": "e5eed4f",
+  "git_content_commit": "403dc8a8dc163ed4e95b41c7c02031d8bcfefc6e",
   "dataset_id": "step18-inference-baseline-v4",
   "protocol_version": "step18-evaluation-protocol-v4",
   "formal_gate": "PENDING",
@@ -14,20 +14,23 @@
     "profiling": "EXECUTED",
     "quality": "EXECUTED",
     "schema_matching": "INSUFFICIENT_EVIDENCE",
+    "schema_profiling": "EXECUTED",
+    "schema_quality": "EXECUTED",
+    "schema_dependency": "EXECUTED",
     "entity_resolution": "INSUFFICIENT_EVIDENCE"
   },
   "metrics": {
     "relationship_candidate_generation": {"split":"TEST","candidate_recall":{"value":0.7142857142857143,"numerator":5,"denominator":7},"candidate_precision":{"value":0.29411764705882354,"numerator":5,"denominator":17},"candidate_f1":{"value":0.4166666666666667,"numerator":10,"denominator":24},"generated_candidate_count":17,"generated_true_candidate_count":5,"generated_false_candidate_count":12,"missing_candidate_query_ids":["rq-orphan-10","rq-missing"]},
     "relationship_fusion": {"split":"TEST","status":"EVALUATED","decision_count":17,"failures":[],"average_precision":0.5277124183006535,"candidate_conditional_precision":0.29411764705882354,"candidate_conditional_recall":1.0,"candidate_conditional_f1":0.45454545454545453,"mean_reciprocal_rank":0.625,"recall_at_1":0.5,"recall_at_3":0.75,"ndcg_at_1":0.5,"ndcg_at_3":0.625,"end_to_end_relationship_recall":0.7142857142857143,"band_composition":{"HIGH":9,"CONFLICTED":8},"decision_state_composition":{"REVIEW_REQUIRED":17}},
-    "schema_matching": {"split":"TEST","status":"INSUFFICIENT_EVIDENCE","matchers":{},"no_match_false_positive_count":0},
+    "schema_matching": {"split":"TEST","status":"INSUFFICIENT_EVIDENCE","matchers":{},"matcher_execution_status":{"coma-schema":{"COMPLETE":11},"cupid-schema":{"COMPLETE":2,"FAILED":9}},"schema_required_producers":{"profiling":22,"quality":22,"dependency":22},"no_match_false_positive_count":0},
     "entity_resolution": {"split":"TEST","status":"INSUFFICIENT_EVIDENCE","prediction_method":"ACTUAL_ENTITY_RESOLUTION_RESULT_EDGES_AND_CLUSTERS","evaluated_record_universe_count":10,"defined_tn_universe":45}
   },
   "bootstrap": {"split":"TEST","group_count":7,"replicates":1000,"point_estimate":0.7142857142857143,"interval":[0.42857142857142855,1.0]},
   "calibration": {"split":"CALIBRATION","task":"RELATIONSHIP_FUSION","status":"INSUFFICIENT_CALIBRATION_DATA","independent_group_count":1,"score_observation_count":1,"reasons":["ONLY_ONE_INDEPENDENT_RELATIONSHIP_CALIBRATION_GROUP","INSUFFICIENT_SCORE_VARIATION","MISSING_CLASS"]},
   "threshold_study": {"split":"CALIBRATION","status":"STUDIED_ONLY","selected_threshold":null,"selection_reason":"NO_PRODUCT_APPROVED_AUTOMATION_TARGET","runtime_policy_mutated":false,"frontier_fields":["eligible_decisions","selected_count","coverage","tp","fp","precision","recall","review_remainder","conflict_incomplete_abstention"]},
-  "provisioning": {"runtime_root":"workspace/test-temp/step18-runtimes","matching":{"package_name":"valentine","expected_version":"1.0.0","dependencies":["valentine==1.0.0","pyarrow>=16,<23","pydantic>=2.12,<3"],"status":"FAILED","failure_category":"NETWORK_TIMEOUT"},"entity_resolution":{"package_name":"splink","expected_version":"4.0.17","dependencies":["splink==4.0.17","pyarrow>=16,<23","pydantic>=2.12,<3"],"status":"FAILED","failure_category":"NETWORK_TIMEOUT"},"editable_install":false,"import_and_metadata_version_check":true},
+  "provisioning": {"runtime_root":"workspace/test-temp/step18-runtimes","wheelhouse":"workspace/test-temp/step18-wheelhouse","matching":{"package_name":"valentine","expected_version":"1.0.0","dependencies":["valentine==1.0.0","pyarrow>=16,<23","pydantic>=2.12,<3"],"status":"READY","provider_version":"1.0.0","runtime":"matching-venv"},"entity_resolution":{"package_name":"splink","expected_version":"4.0.17","dependencies":["splink==4.0.17","pyarrow>=16,<23","pydantic>=2.12,<3"],"status":"READY","provider_version":"4.0.17","runtime":"er-venv"},"editable_install":false,"import_and_metadata_version_check":true},
   "reproducibility": {"status":"PASS","semantic_inference_equal":true,"task_metrics_equal":true,"byte_outputs_equal":false,"first_artifact_content_hash":"9996f6163fe3d2de580e9ae5182a78612fb2787bdbda378401c35b7439493237","second_artifact_content_hash":"d3c224cd8eaa06b69490acc6cb8ba018ab04bd35c9c1cc3b45e618ef5753e00c","semantic_fingerprint":"e63a5fb01c1f2af7ba7766415e198c0e300e1cdeec9e018f6cd59b9def3a812b"},
   "controls": ["truth_shuffle_recomputed","input_order_rerun","provider_output_mutation_changed_metric_input","semantic_reproducibility_pass_with_byte_hash_difference","receipt_only_pending","authored_score_absence","exact_population_binding","reverse_pair_split_control","TEST_slice_denominators"],
-  "limitations": ["Valentine and Splink outputs unavailable after persistent isolated provisioning attempts classified as NETWORK_TIMEOUT", "schema and entity metrics remain unclaimed", "synthetic and aggregate-safe evidence only", "no production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release claim", "Step19 implementation not started"],
+  "limitations": ["Valentine runtime is available, but Cupid is incomplete because optional NLTK corpora are absent from the offline wheelhouse; schema matcher and Fusion metrics remain unclaimed", "Splink runtime is available, but full EM training failed closed because the frozen population did not provide estimates for every comparison level; entity metrics remain unclaimed", "synthetic and aggregate-safe evidence only", "no production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release claim", "Step19 implementation not started"],
   "step19_started": false
 }
