@@ -1098,3 +1098,16 @@ handoff_to:
 - uncertainty: bootstrap over 7 TEST groups with 1,000 replicates, interval `[0.4286, 1.0]`; calibration computed but insufficient score variation; threshold frontier `STUDIED_ONLY`, no threshold selected, no runtime policy mutation
 - verification: v3 behavioral validator `25` checks PASS; focused Step18 regression `28 passed`; full repository regression and all validators required before final handoff
 - state: G4/G4A remain PASS; formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; current_step remains `18`; Step19 not started
+
+## Final Step18 v4 Empirical Evaluation Continuation
+
+- execution_step: `18` only; Step19 was not started
+- starting_head: `ebdc365bc2275732f78c575ff1d68583113f7a30`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- current_run: fresh `workspace/runs/step18-inference-baseline-v4/evaluation/`; v1-v3 evidence preserved
+- runtime: persistent project-local `matching-venv` and `er-venv`; `PYTHONNOUSERSITE=1`; local TEMP/TMP/PIP_CACHE_DIR; pinned Valentine/Splink install attempts failed before package availability
+- relationship: actual Desbordante `COMPLETE`; TEST candidate recall `5/7`, precision `5/17`, F1 `0.4167`; 17 candidates, 5 true, 12 false; missing positives `rq-orphan-10` and `rq-missing`
+- fusion: actual DependencyResult/ProfileResult/QualityResult consumed; 17 decisions; AP `0.5277`; candidate-conditional precision/recall/F1 `0.2941/1.0000/0.4545`; MRR `0.6250`; Recall@1/@3 `0.5000/0.7500`; NDCG@1/@3 `0.5000/0.6250`; HIGH `9`, CONFLICTED `8`; all `REVIEW_REQUIRED`
+- schema_entity: Valentine and Splink `INSUFFICIENT_EVIDENCE`; no schema candidate/ranking/Fusion or ER pairwise/cluster quality number claimed; ER TEST universe `10` records and `45` defined TN pairs; r4/r5/r6 hard negatives remain CALIBRATION
+- leakage_controls: real split/truth-cluster/case-pair audit PASS; truth shuffle, input-order, provider mutation, and population binding executed; relationship normalized reproducibility control `FAIL` (`9eb042...` vs `818d297...`)
+- uncertainty: bootstrap over all 7 positive TEST groups, 1,000 replicates, interval `[0.4286, 1.0]`; relationship-Fusion calibration insufficient; threshold frontier studied only, no threshold selected or policy mutation
+- current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; Step19 not started
