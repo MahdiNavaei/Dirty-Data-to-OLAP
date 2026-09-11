@@ -1053,3 +1053,20 @@ handoff_to:
 - limitations: synthetic/aggregate-safe benchmark; uncalibrated scores; no production, temporal, causal, human-acceptance, canonicalization, repair, deployment or release claim
 - handoff_to: `Step19 - Canonical Data Model Engineer`
 - next_state: `last_completed_step=18`, `current_step=19`, `current_role=canonical_model_engineer`, `G5=REVIEW_ONLY_VALIDATED`, `G6-G15=PENDING`, `blocked=false`; Step19 implementation not started
+
+## Post-Step18 G5 Empirical Integrity Closure
+
+- execution_step: `18` surgical closure only; Specialist Step19 was not started
+- starting_head: `4897437c9e7f2340073cf3c7aed5400e71d94742`
+- status: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`
+- historical_correction: v1 real provider receipts were capability smoke evidence, but v1 headline relationship/schema/entity metrics were not calculated from those normalized outputs; v1 is superseded for G5 quality claims
+- v2_chain: provider scenario fixture -> real adapter -> normalized project-owned output -> hashed binding -> topology truth -> metric; pre-authored runtime scores are not read
+- relationship_provider: Desbordante `2.4.1` completed over 13 v2 scenario groups; normalized output loaded by the evaluator; candidate-generation recall `2/13 = 0.1538`; 11 topology-positive provider misses retained, including zero-candidate queries
+- schema_provider: Valentine v2 output unavailable because pinned `valentine==1.0.0` was not installed and package installation was blocked; binding=`INSUFFICIENT_EVIDENCE`
+- entity_provider: Splink v2 output unavailable because pinned `splink==4.0.17` was not installed and package installation was blocked; binding=`INSUFFICIENT_EVIDENCE`; no ER quality number claimed
+- fusion: actual DependencyResult is passed through EvidenceFusionService; Fusion remains `INSUFFICIENT_EVIDENCE` because actual ProfileResult and QualityResult artifacts were not available; status-only producer evidence is rejected
+- controls: receipt-only negative, provider-output mutation, zero-candidate denominator, topology population, split metadata, input-order, and evaluation-only truth-shuffle controls persisted under `workspace/runs/step18-inference-baseline-v2/evaluation/`
+- verification: v2 binding validator `19` checks PASS; binding/unit regression `5 passed`; Desbordante v2 provider `COMPLETE`; Valentine/Splink execution blocked by unavailable pinned runtimes
+- state: G4/G4A remain PASS; G5-G15 remain PENDING; no automation, calibration, canonical identity, ReviewDecision, repair execution or release claim
+- concrete_missing_requirement: execute and bind v2 Valentine and Splink normalized outputs over the frozen scenario/truth populations, and produce actual ProfileResult and QualityResult artifacts for Fusion before G5 can move to PASS
+- handoff: remains `Step18 - ML Evaluation Engineer`; Step19 implementation not started

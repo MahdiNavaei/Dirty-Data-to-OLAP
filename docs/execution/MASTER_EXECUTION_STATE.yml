@@ -27,21 +27,21 @@ post_bootstrap_repairs:
     scope: "Stage-scoped temporal review checkpoints, artifact-bound ReviewDecision compatibility, review invalidation/replay semantics and topological validator checks"
     specialist_step_started: false
 specialist_execution:
-  current_step: 19
-  current_role: "canonical_model_engineer"
-  current_specialist: "Step19 - Canonical Data Model Engineer"
-  last_completed_step: 18
-  last_completed_role: "ml_evaluation_engineer"
+  current_step: 18
+  current_role: "ml_evaluation_engineer"
+  current_specialist: "Step18 - ML Evaluation Engineer"
+  last_completed_step: 17
+  last_completed_role: "evidence_fusion_engineer"
   last_completed_specialist: "Step18 - ML Evaluation Engineer"
-  last_completed_content_commit: "cd2ab6be6b665b972c00135325f3e4954c381a51"
-  next_step: "Step19 - Canonical Data Model Engineer"
+  last_completed_content_commit: "1c5004f7226ab291b90f43c3175ca37842fd7407"
+  next_step: "Step18 - ML Evaluation Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
   G2_ARCHITECTURE_READY: "PASS"
   G3_SOURCE_SAFETY: "PASS"
   G4_BOUNDED_INTELLIGENCE: "PASS"
-  G5_INFERENCE_VALIDITY: "REVIEW_ONLY_VALIDATED"
+  G5_INFERENCE_VALIDITY: "PENDING"
   G6_DATA_CORRECTNESS: "PENDING"
   G7_END_TO_END_PRODUCT: "PENDING"
   G8_REPRODUCIBLE_BUILD: "PENDING"
@@ -62,9 +62,9 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "cd2ab6be6b665b972c00135325f3e4954c381a51"
+  last_verified_commit: "ea95e8fe2a37a555900a275223632af4551a0254"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
-  commit_recording_note: "last_verified_commit identifies the latest verified repository commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit, while metadata commits are recorded separately in the specialist receipt and log."
+  commit_recording_note: "last_verified_commit identifies the latest verified content commit, not a later metadata-only commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'

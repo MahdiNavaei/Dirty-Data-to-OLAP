@@ -2,9 +2,17 @@
 
 ## Result
 
-`PASS` for review-only inference validity. G5 is `REVIEW_ONLY_VALIDATED`; automation remains unauthorized. Step19 was not started.
+`PENDING` for formal G5. The post-Step18 closure identified that v1 real-provider receipts were capability evidence, not the source of the published quality metrics. The v2 path now fails closed and binds normalized output where available. Step19 was not started.
 
-The substantive Step18 content is bound to commit `cd2ab6be6b665b972c00135325f3e4954c381a51`.
+The historical v1 content remains bound to `cd2ab6be6b665b972c00135325f3e4954c381a51`. The corrected closure is recorded separately in the v2 run under `workspace/runs/step18-inference-baseline-v2/evaluation/`.
+
+## Post-Step18 Empirical Integrity Closure
+
+v1 executed real Desbordante, Valentine, and Splink smoke paths, but its relationship, schema, and entity headline numbers were calculated from pre-authored runtime scores or a local ER heuristic. Those numbers are retained only as historical/provisional evidence and are not used by v2.
+
+The v2 chain is provider scenario fixture -> real adapter -> normalized project-owned result -> hashed provider binding -> frozen topology truth -> metric. The Desbordante v2 runner executed 13 corruption scenarios and produced 11 retained topology-positive misses, with candidate-generation recall `2/13 = 0.1538`. Valentine and Splink v2 could not be executed in the current interpreter because their pinned packages were unavailable and package installation was blocked; their bindings are `INSUFFICIENT_EVIDENCE`. Fusion also remains incomplete because no actual ProfileResult and QualityResult artifacts were available, and status-only producer evidence is rejected.
+
+Formal state is `G5_INFERENCE_VALIDITY=PENDING`, with separate `inference_validity_mode=UNVALIDATED` and `automation=NOT_AUTHORIZED`. The receipt-only, input-order, zero-candidate, provider-output mutation, topology truth, and evaluation-only shuffle controls are persisted under the v2 run. G4 and G4A remain PASS.
 
 ## Scope and evidence
 

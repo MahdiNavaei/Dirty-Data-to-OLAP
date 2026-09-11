@@ -1,16 +1,13 @@
 # Step18 Inference Baseline
 
-Status: `REVIEW_ONLY_VALIDATED`
+Status: `PENDING`
 
-Dataset: `step18-inference-quality-v1`; protocol: `step18-protocol-v1`; seed: `20260911`. TEST was group-held-out and executed after the protocol/policy manifest was written. Truth remained separate from runtime fixtures.
+Dataset: `step18-inference-quality-v2`; protocol: `step18-evaluation-protocol-v2`; seed: `20260911`. v1 remains historical/provisional and is superseded for G5 quality claims.
 
-Results on the held-out synthetic scenario groups:
+The corrected v2 chain is: provider execution -> normalized project-owned output -> frozen artifact -> topology truth join -> metric. Desbordante v2 executed over 13 provider scenarios and its candidate output is consumed by candidate-generation metrics. Valentine and Splink v2 outputs are absent in the current interpreter, so their metrics are not claimed. Fusion is also `INSUFFICIENT_EVIDENCE` because actual ProfileResult and QualityResult artifacts were not present; status-only producer evidence is not substituted.
 
-- Relationship fusion: precision `0.500`, recall `1.000`, F1 `0.667`, AP `0.500`; candidate-generation recall `0.667` with `rq-missing` exposed; MRR `0.500`, Recall@3 `1.000`.
-- Schema matching: precision `0.333`, recall `1.000`, F1 `0.500`; no-match false-positive count `1`.
-- Entity resolution: pairwise precision/recall/F1 `1.000/1.000/1.000`, false merges `0`, false splits `0` on the held-out anonymized-token cases.
-- Applied ML: `EXECUTED_EXPERIMENTAL` with grouped scikit-learn evaluation and label-shuffle control; no learned probability or automation threshold was selected.
+Observed v2 relationship candidate-generation recall is `2/13 = 0.1538`; eleven topology-positive queries are retained as provider misses, including the zero-candidate cases. This is provider evidence, not a product-quality pass.
 
-Real provider receipts completed for Desbordante Docker, Valentine 1.0.0, and Splink 4.0.17. Semantic AI remained optional and was not executed. Calibration is `INSUFFICIENT_CALIBRATION_DATA`; threshold study is `NO_AUTOMATION_THRESHOLD_SELECTED`; automation is `NOT_AUTHORIZED`.
+Provider binding status: Desbordante `EXECUTED`; Valentine `INSUFFICIENT_EVIDENCE`; Splink `INSUFFICIENT_EVIDENCE`. Calibration remains evidence-derived insufficient; the threshold study is calibration-only with `NO_AUTOMATION_THRESHOLD_SELECTED`; automation is `NOT_AUTHORIZED`.
 
-This is review-only validation over synthetic/aggregate-safe evidence. It is not production performance, causal evidence, acceptance, canonical identity, repair authorization, or release evidence. Step19 implementation was not started.
+This is an incomplete empirical closure over synthetic/aggregate-safe evidence. G4 and G4A remain PASS. Step19 implementation was not started.
