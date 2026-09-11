@@ -803,6 +803,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "canonical_model_engineer", "post-Step 18 state must hand off to Step19")
         require("Canonical Data Model" in str(execution.get("current_specialist")), "current specialist must be Step19")
         require("Canonical Data Model" in str(execution.get("next_step")), "next step must be Step19")
+    elif execution.get("current_step") == 20:
+        require(execution.get("last_completed_step") == 19, "post-Step 19 state must record completed Step 19")
+        require(execution.get("last_completed_role") == "canonical_model_engineer", "post-Step 19 role must be canonical_model_engineer")
+        require(execution.get("current_role") == "olap_engineer", "post-Step 19 state must hand off to Step20")
+        require("OLAP" in str(execution.get("current_specialist")), "current specialist must be Step20")
+        require("OLAP" in str(execution.get("next_step")), "next step must be Step20")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")

@@ -265,7 +265,7 @@ components:
     ports_used: [ArtifactStorePort]
     implementation_owner: Step19 Canonical Model Engineer
     implementation_step: 19
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -329,7 +329,7 @@ components:
     ports_used: [ArtifactStorePort, ControlStorePort]
     implementation_owner: Step19 Canonical Model Engineer
     implementation_step: 19
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false

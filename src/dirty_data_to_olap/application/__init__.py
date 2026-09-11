@@ -3,5 +3,16 @@
 from .dependency_discovery import DependencyDiscoveryService
 from .entity_resolution import EntityResolutionService
 from .evidence_fusion import EvidenceFusionService
+from .canonical import CanonicalFinalizationService, CanonicalHypothesisService, CanonicalizationError
+from .review_policy import ReviewCompatibilityError, ReviewPolicyService
 
-__all__ = ["DependencyDiscoveryService", "EntityResolutionService", "EvidenceFusionService"]
+__all__ = [
+    "DependencyDiscoveryService",
+    "EntityResolutionService",
+    "EvidenceFusionService",
+    "CanonicalFinalizationService",
+    "CanonicalHypothesisService",
+    "CanonicalizationError",
+    "ReviewCompatibilityError",
+    "ReviewPolicyService",
+]
