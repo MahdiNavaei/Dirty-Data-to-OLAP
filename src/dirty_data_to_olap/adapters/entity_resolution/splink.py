@@ -222,10 +222,6 @@ class SplinkEntityResolutionAdapter:
             raise _ERTraining(f"Splink u/m training failed: {error.__class__.__name__}; training_diagnostics=" + json.dumps(diagnostics, sort_keys=True, separators=(",", ":"))) from None
         predictions = linker.inference.predict()
         predicted_frame = predictions.as_pandas_dataframe()
-        clustering_threshold = spec.clustering_policy.cluster_probability_threshold or spec.threshold_policy.match_probability_threshold
-        if spec.clustering_policy.include_review_edges:
-            clustering_threshold = min(clustering_threshold, spec.threshold_policy.review_probability_threshold)
-        clusters_frame = linker.clustering.cluster_pairwise_predictions_at_threshold(predictions, clustering_threshold).as_pandas_dataframe()
         model_config_hash = entity_resolution_config_hash(spec)
         input_fingerprint = entity_resolution_input_fingerprint(spec)
         model_id = "er-model-" + hashlib.sha256(f"{model_config_hash}:{self.runtime_dependency}".encode()).hexdigest()[:24]
@@ -269,17 +265,39 @@ class SplinkEntityResolutionAdapter:
                 risk.append("no_non_placeholder_agreement")
             edge = EntityMatchEdge(edge_id=entity_edge_id(left["_record_ref"], right["_record_ref"], model_id), left_record_ref=left["_record_ref"], right_record_ref=right["_record_ref"], left_source_id=left["_source_id"], right_source_id=right["_source_id"], left_snapshot_id=left["_snapshot_id"], right_snapshot_id=right["_snapshot_id"], match_weight=weight, match_probability=probability, model_prediction_band=band, comparison_evidence_refs=tuple(evidence), blocking_rule_ids=tuple(rule.rule_id for rule in spec.blocking_rules), model_evidence_ref=model.model_id, independent_evidence_refs=tuple(evidence), risk_flags=tuple(risk))
             edges.append(edge)
-        clusters, diagnostics = self._clusters(clusters_frame, record_map, edges, spec, model_id, model_config_hash)
+        # Splink's native connected components are diagnostic only. Project
+        # clusters must be built from the authorized project edge bands so a
+        # review edge cannot silently become identity when policy excludes it.
+        clusters, diagnostics = self._clusters(record_map, edges, spec, model_id, model_config_hash)
         return edges, model, clusters, diagnostics, len(predicted_frame)
 
-    def _clusters(self, clusters_frame, record_map, edges, spec, model_id, model_config_hash):
-        memberships: dict[Any, set[str]] = defaultdict(set)
-        for row in clusters_frame.to_dict(orient="records"):
-            native_id = row.get("unique_id")
-            cluster_key = row.get("cluster_id")
-            if native_id in record_map and cluster_key is not None:
-                memberships[cluster_key].add(native_id)
-        edge_by_pair = {frozenset((f"{item.left_source_id}::{item.left_record_ref}", f"{item.right_source_id}::{item.right_record_ref}")): item for item in edges}
+    def _clusters(self, record_map, edges, spec, model_id, model_config_hash):
+        memberships: dict[str, set[str]] = {}
+        parent = {key: key for key in record_map}
+
+        def find(value: str) -> str:
+            while parent[value] != value:
+                parent[value] = parent[parent[value]]
+                value = parent[value]
+            return value
+
+        def union(left: str, right: str) -> None:
+            left_root, right_root = find(left), find(right)
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        authorized_bands = {EntityMatchPredictionBand.STRONG_LINK_EVIDENCE}
+        if spec.clustering_policy.include_review_edges:
+            authorized_bands.add(EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE)
+        authorized_edges = [edge for edge in edges if edge.model_prediction_band in authorized_bands]
+        for edge in authorized_edges:
+            left = f"{edge.left_source_id}::{edge.left_record_ref}"
+            right = f"{edge.right_source_id}::{edge.right_record_ref}"
+            if left in parent and right in parent:
+                union(left, right)
+        for record_ref in record_map:
+            memberships.setdefault(find(record_ref), set()).add(record_ref)
+        edge_by_pair = {frozenset((f"{item.left_source_id}::{item.left_record_ref}", f"{item.right_source_id}::{item.right_record_ref}")): item for item in authorized_edges}
         clusters: list[EntityCluster] = []; diagnostics: list[EntityClusterDiagnostic] = []
         for component in sorted((value for value in memberships.values() if len(value) > 1), key=lambda item: (len(item), sorted(item))):
             refs = tuple(sorted(record_map[item]["_record_ref"] for item in component))

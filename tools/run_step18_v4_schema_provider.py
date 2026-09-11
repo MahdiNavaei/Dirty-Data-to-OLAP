@@ -77,7 +77,7 @@ def _nltk_preflight() -> dict[str, object]:
         hashes[name] = digest.hexdigest()
     presence = {name: name in resolved and name in hashes for name in resource_paths}
     report = {"status": "COMPLETE" if all(presence.values()) else "LOCAL_NLTK_RESOURCE_MISSING", "nltk_version": nltk.__version__, "resource_names": list(resource_paths), "nltk_data_path_relative": NLTK_DATA.relative_to(ROOT).as_posix(), "resource_presence": presence, "resource_hashes": hashes, "global_search_disabled": True}
-    preflight = ROOT / "workspace" / "runs" / "step18-inference-baseline-v4" / "evaluation" / "provisioning" / "nltk_preflight.json"
+    preflight = RUN.parent / "provisioning" / "nltk_preflight.json"
     preflight.parent.mkdir(parents=True, exist_ok=True)
     preflight.write_text(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     if not all(presence.values()):

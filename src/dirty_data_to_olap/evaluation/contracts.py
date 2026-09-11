@@ -178,6 +178,13 @@ class EntityResolutionMetrics(_SourceModel):
     mean_predicted_cluster_purity: MetricValue
     mean_truth_cluster_completeness: MetricValue
     evaluated_record_universe_count: int
+    truth_positive_pair_count: int = 0
+    truth_negative_pair_count: int = 0
+    explicit_predicted_cluster_count: int = 0
+    implicit_singleton_count: int = 0
+    predicted_partition_component_count: int = 0
+    partition_validated: bool = False
+    complete_partition_mean_purity: MetricValue | None = None
 
 
 class BootstrapInterval(_SourceModel):

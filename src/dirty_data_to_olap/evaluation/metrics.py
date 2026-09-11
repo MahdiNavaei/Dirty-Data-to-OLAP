@@ -109,42 +109,83 @@ def ranking_metrics(queries: Mapping[str, Sequence[tuple[str, float]]], truth: M
     )
 
 
-def entity_resolution_metrics(predicted_pairs: set[frozenset[str]], truth_pairs: set[frozenset[str]], truth_clusters: Mapping[str, set[str]], predicted_clusters: Sequence[set[str]], *, evaluated_universe: set[frozenset[str]]) -> EntityResolutionMetrics:
-    rows = []
-    for pair in sorted(evaluated_universe, key=lambda item: tuple(sorted(item))):
-        rows.append(("|".join(sorted(pair)), int(pair in truth_pairs), int(pair in predicted_pairs), 1.0 if pair in predicted_pairs else 0.0))
-    pairwise = binary_classification_metrics(rows, universe_count=len(evaluated_universe))
-    false_merge_pairs = predicted_pairs - truth_pairs
+def entity_resolution_metrics(
+    predicted_pairs: set[frozenset[str]],
+    truth_pairs: set[frozenset[str]],
+    truth_clusters: Mapping[str, set[str]],
+    predicted_clusters: Sequence[set[str]],
+    *,
+    evaluated_universe: set[frozenset[str]],
+    evaluated_record_refs: set[str] | None = None,
+) -> EntityResolutionMetrics:
+    """Evaluate pairwise links and a complete predicted partition.
+
+    ``predicted_clusters`` contains only explicit multi-record clusters. Every
+    evaluated record absent from those clusters is an implicit singleton. This
+    distinction is important: no explicit cluster is a valid undefined purity
+    state, but it is not a valid reason to report zero completeness.
+    """
+    universe = {frozenset(pair) for pair in evaluated_universe}
+    records = set(evaluated_record_refs or set().union(*universe) if universe else set())
+    if evaluated_record_refs is None:
+        records.update(set().union(*truth_clusters.values()) if truth_clusters else set())
+    expected_universe = {frozenset(pair) for pair in combinations(sorted(records), 2)}
+    if universe != expected_universe:
+        raise ValueError("evaluated pair universe must equal all pairs of evaluated records")
+    explicit = [set(cluster) for cluster in predicted_clusters if cluster]
+    explicit_refs = set().union(*explicit) if explicit else set()
+    if not explicit_refs.issubset(records):
+        raise ValueError("predicted cluster contains an out-of-universe record")
+    if sum(len(cluster) for cluster in explicit) != len(explicit_refs):
+        raise ValueError("predicted clusters overlap")
+    partition = explicit + [{record} for record in sorted(records - explicit_refs)]
+    if set().union(*partition) != records or sum(len(item) for item in partition) != len(records):
+        raise ValueError("predicted clusters do not form a complete partition")
+    predicted = {frozenset(pair) for pair in predicted_pairs}
+    truth = {frozenset(pair) for pair in truth_pairs}
+    if not predicted.issubset(universe) or not truth.issubset(universe):
+        raise ValueError("predicted or truth pair is outside the evaluated universe")
+    rows = [("|".join(sorted(pair)), int(pair in truth), int(pair in predicted), 1.0 if pair in predicted else 0.0) for pair in sorted(universe, key=lambda item: tuple(sorted(item)))]
+    pairwise = binary_classification_metrics(rows, universe_count=len(universe))
+    false_merge_pairs = predicted - truth
     contaminated = 0
     largest_false_merge = 0
-    for cluster in predicted_clusters:
+    for cluster in explicit:
         hits = sum(bool(cluster.intersection(refs)) for refs in truth_clusters.values())
         if hits > 1 or any(frozenset(pair) in false_merge_pairs for pair in combinations(cluster, 2)):
             contaminated += 1
             largest_false_merge = max(largest_false_merge, len(cluster))
     split_count = 0
-    purities: list[float] = []
     completeness: list[float] = []
     for refs in truth_clusters.values():
-        overlapping = [cluster for cluster in predicted_clusters if refs.intersection(cluster)]
-        if len(overlapping) > 1:
+        refs = set(refs)
+        overlaps = [component for component in partition if refs.intersection(component)]
+        if len(overlaps) > 1:
             split_count += 1
-        completeness.append(max((len(refs.intersection(cluster)) / len(refs) for cluster in predicted_clusters), default=0.0))
-    for cluster in predicted_clusters:
-        overlap = max((len(cluster.intersection(refs)) for refs in truth_clusters.values()), default=0)
-        purities.append(overlap / len(cluster) if cluster else 0.0)
+        completeness.append(max((len(refs.intersection(component)) / len(refs) for component in partition), default=0.0))
+    explicit_multi = [cluster for cluster in explicit if len(cluster) > 1]
+    purities = [max((len(cluster.intersection(refs)) for refs in truth_clusters.values()), default=0) / len(cluster) for cluster in explicit_multi]
+    complete_purities = [max((len(component.intersection(refs)) for refs in truth_clusters.values()), default=0) / len(component) for component in partition]
+    no_purity = "NO_PREDICTED_CLUSTERS"
     return EntityResolutionMetrics(
         pairwise=pairwise,
-        evaluated_pair_count=len(evaluated_universe),
+        evaluated_pair_count=len(universe),
         false_merge_pair_count=len(false_merge_pairs),
-        false_merge_rate=_safe_ratio(len(false_merge_pairs), len(predicted_pairs), "NO_PREDICTED_LINKS"),
+        false_merge_rate=_safe_ratio(len(false_merge_pairs), len(predicted), "NO_PREDICTED_LINKS"),
         contaminated_cluster_count=contaminated,
         largest_false_merge_cluster=largest_false_merge,
         truth_clusters_split=split_count,
         false_split_rate=_safe_ratio(split_count, len(truth_clusters), "NO_TRUTH_CLUSTERS"),
-        mean_predicted_cluster_purity=_metric(sum(purities) / len(purities), len(purities), len(purities), "NO_PREDICTED_CLUSTERS") if purities else _metric(None, 0, 0, "NO_PREDICTED_CLUSTERS"),
+        mean_predicted_cluster_purity=_metric(sum(purities) / len(purities), len(purities), len(purities), no_purity) if purities else _metric(None, 0, 0, no_purity),
         mean_truth_cluster_completeness=_metric(sum(completeness) / len(completeness), len(completeness), len(completeness), "NO_TRUTH_CLUSTERS") if completeness else _metric(None, 0, 0, "NO_TRUTH_CLUSTERS"),
-        evaluated_record_universe_count=len(set().union(*truth_clusters.values(), *predicted_clusters)) if truth_clusters or predicted_clusters else 0,
+        evaluated_record_universe_count=len(records),
+        truth_positive_pair_count=len(truth),
+        truth_negative_pair_count=len(universe - truth),
+        explicit_predicted_cluster_count=len(explicit_multi),
+        implicit_singleton_count=len(records - explicit_refs),
+        predicted_partition_component_count=len(partition),
+        partition_validated=True,
+        complete_partition_mean_purity=_metric(sum(complete_purities) / len(complete_purities), len(complete_purities), len(complete_purities), "NO_PREDICTED_PARTITION") if complete_purities else _metric(None, 0, 0, "NO_PREDICTED_PARTITION"),
     )
 
 

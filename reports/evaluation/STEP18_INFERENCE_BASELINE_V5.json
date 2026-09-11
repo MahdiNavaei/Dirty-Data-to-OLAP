@@ -1,0 +1,44 @@
+{
+  "report_id": "step18-inference-baseline-v5",
+  "protocol_id": "step18-evaluation-protocol-v5",
+  "formal_gate": "PASS",
+  "inference_validity_mode": "REVIEW_ONLY_VALIDATED",
+  "assessment": {
+    "automation_recommendation": "NOT_AUTHORIZED",
+    "automation_enabled": false,
+    "selected_threshold": null,
+    "step19_started": false
+  },
+  "entity_resolution": {
+    "split": "TEST",
+    "evaluated_record_universe_count": 10,
+    "evaluated_pair_universe_count": 45,
+    "truth_positive_pair_count": 8,
+    "truth_negative_pair_count": 37,
+    "classification_reconciliation": "TP+FP+FN+TN=45",
+    "true_positive": 0,
+    "false_positive": 0,
+    "false_negative": 8,
+    "true_negative": 37,
+    "truth_clusters_split": 4,
+    "false_split_rate": 1.0,
+    "mean_truth_cluster_completeness": 0.41666666666666663,
+    "explicit_predicted_cluster_purity": null,
+    "explicit_predicted_cluster_purity_undefined_reason": "NO_PREDICTED_CLUSTERS",
+    "complete_partition_validated": true,
+    "native_splink_clusters_are_diagnostic_only": true,
+    "final_project_cluster_policy": "STRONG_LINK_EVIDENCE_ONLY_WHEN_INCLUDE_REVIEW_EDGES_FALSE"
+  },
+  "controls": {
+    "relationship": "PASS",
+    "schema": "PASS",
+    "entity_resolution": "PASS",
+    "negative_controls": "PASS"
+  },
+  "limitations": [
+    "synthetic aggregate-safe TEST evidence",
+    "Step19 implementation not started",
+    "No automation threshold was selected",
+    "No TEST-driven threshold/model tuning was performed"
+  ]
+}
