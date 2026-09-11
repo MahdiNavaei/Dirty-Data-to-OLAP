@@ -32,14 +32,14 @@ post_bootstrap_repairs:
     scope: "Correct TEST pair accounting, complete-partition ER metrics, final project edge-band clustering policy, and task-scoped negative controls"
     specialist_step_started: false
 specialist_execution:
-  current_step: 19
-  current_role: "canonical_model_engineer"
-  current_specialist: "Step19 - Canonical Data Model Engineer"
-  last_completed_step: 18
-  last_completed_role: "ml_evaluation_engineer"
-  last_completed_specialist: "Step18 - ML Evaluation Engineer"
-  last_completed_content_commit: "45a2a611e07b19c90c3451845a92fd958d7843c4"
-  next_step: "Step19 - Canonical Data Model Engineer"
+  current_step: 20
+  current_role: "olap_engineer"
+  current_specialist: "Step20 - Data Warehouse / OLAP Engineer"
+  last_completed_step: 19
+  last_completed_role: "canonical_model_engineer"
+  last_completed_specialist: "Step19 - Canonical Data Model Engineer"
+  last_completed_content_commit: "04fa158"
+  next_step: "Step20 - Data Warehouse / OLAP Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
@@ -67,9 +67,9 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "45a2a611e07b19c90c3451845a92fd958d7843c4"
+  last_verified_commit: "04fa158"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
-  commit_recording_note: "last_verified_commit identifies the latest verified content commit, not a later metadata-only commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit; Step18 v5 is the corrected G5 PASS in review-only validated mode, v4 is superseded historical evidence, and Step19 implementation is not started."
+  commit_recording_note: "last_verified_commit identifies the latest verified content commit, not a later metadata-only commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit; Step18 v5 is the corrected G5 PASS in review-only validated mode, v4 is superseded historical evidence, and Step19 canonical artifacts are handed off to Step20 without G6 promotion."
 filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'
