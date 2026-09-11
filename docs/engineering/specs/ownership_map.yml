@@ -45,9 +45,9 @@ components:
   - {component_id: application.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "ER adapter and false-merge evaluation"}
   - {component_id: application.learned_evidence, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "grouped ranking, leakage negatives, JSON artifact and unavailable-path tests"}
   - {component_id: application.canonical_finalization, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, implementation_status: IMPLEMENTED, test_strategy: "identity, survivorship and accounting tests"}
-  - {component_id: application.analytical_planner, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "grain, measure and model contract tests"}
-  - {component_id: application.compiler, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "compiled-plan and SQL contract tests"}
-  - {component_id: application.materializer, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "controlled-target integration tests"}
+  - {component_id: application.analytical_planner, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "grain, measure and model contract tests"}
+  - {component_id: application.compiler, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "compiled-plan and SQL contract tests"}
+  - {component_id: application.materializer, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "controlled-target integration tests"}
   - {component_id: application.validation, primary_specialist: "Step22 Data QA Engineer", implementation_step: 22, test_strategy: "reconciliation and release acceptance suite"}
   - {component_id: adapters.source, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source adapter contract tests"}
   - {component_id: adapters.database_security, primary_specialist: "Step11 Database Security Specialist", implementation_step: 11, test_strategy: "SQLite authorizer and SQLAlchemy/dlt hook tests"}
@@ -58,7 +58,7 @@ components:
   - {component_id: adapters.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, implementation_status: IMPLEMENTED, test_strategy: "Splink normalized-output contract tests"}
   - {component_id: adapters.ml, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "real sklearn adapter, contribution reconstruction and JSON persistence tests"}
   - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, implementation_status: IMPLEMENTED, test_strategy: "provider provenance and unavailable-path tests"}
-  - {component_id: adapters.materialization, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, test_strategy: "DuckDB/materializer compatibility tests"}
+  - {component_id: adapters.materialization, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "DuckDB/materializer compatibility tests"}
   - {component_id: persistence.control_store, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, comprehensive_platform_owner: "Step23 Data Platform Engineer", test_strategy: "schema, migration and lifecycle tests"}
   - {component_id: persistence.artifact_store, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, test_strategy: "immutability, hash and retention tests"}
   - {component_id: runtime.stage_executor, primary_specialist: "Step28 Distributed Systems / Jobs Engineer", implementation_step: 28, test_strategy: "attempt isolation and retry tests"}

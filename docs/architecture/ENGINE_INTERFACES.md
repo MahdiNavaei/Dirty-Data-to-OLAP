@@ -121,8 +121,10 @@ directly.
 ## MaterializerPort
 
 - Purpose: execute an approved compiled analytical plan into a controlled target.
-- Input: project-owned compiled plan and approved artifact references.
-- Output: materialization artifact reference and execution evidence.
+- Input: project-owned `CompiledPlan`, `GeneratedSQL` and the exact
+  `REVIEW_MATERIALIZATION_PLAN` `ReviewDecision`.
+- Output: project-owned `MaterializationArtifact` with target, hash, row-count
+  and usability evidence.
 - Side effects: controlled target writes only.
 - Idempotency: target path is attempt-scoped; retries never treat an unknown partial target as published.
 - Optionality: required for a final validated run.

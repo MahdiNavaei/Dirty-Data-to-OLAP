@@ -12,6 +12,8 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewDecisionStatus,
     ReviewSkipAuthorization,
 )
+from dirty_data_to_olap.domain.contracts.analytical import CompiledPlan, GeneratedSQL, AnalyticalPlan, TargetConfig
+from dirty_data_to_olap.domain.contracts.source import stable_digest
 from dirty_data_to_olap.domain.contracts.evidence_fusion import RelationshipDecision, SemanticMappingDecision
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
 
@@ -105,3 +107,84 @@ class ReviewPolicyService:
         if not reason.strip():
             raise ValueError("invalidation requires a reason")
         return decision.model_copy(update={"decision": ReviewDecisionStatus.INVALIDATED, "invalidation_reason": reason})
+
+    def analytical_plan_context(self, plan: AnalyticalPlan) -> ReviewCompatibilityContext:
+        """Bind analytical review to the exact plan and finalized canonical model."""
+
+        semantic_scope = {
+            "canonical_model_id": plan.canonical_model_id,
+            "canonical_model_content_hash": plan.canonical_model_content_hash,
+            "facts": plan.materialized_fact_ids,
+            "dimensions": plan.materialized_dimension_ids,
+            "grains": plan.grain_spec_ids,
+            "measures": plan.measure_spec_ids,
+        }
+        applicability = stable_id("analytical-review-applicability", {
+            "plan_id": plan.plan_id,
+            "plan_content_hash": plan.content_hash,
+            "canonical_model_id": plan.canonical_model_id,
+            "canonical_model_content_hash": plan.canonical_model_content_hash,
+            "binding": plan.input_binding_content_hash,
+            "policy": plan.policy_version,
+        })
+        return ReviewCompatibilityContext(
+            review_checkpoint_id=ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN,
+            subject_stage="ANALYTICAL_PLANNING",
+            subject_artifact_id=plan.plan_id,
+            subject_content_hash=plan.content_hash,
+            subject_schema_version=plan.schema_version,
+            model_version=plan.plan_version,
+            source_schema_fingerprints={
+                "canonical_model_id": plan.canonical_model_id,
+                "canonical_model_content_hash": plan.canonical_model_content_hash,
+                "canonical_model_fingerprint": plan.canonical_model_fingerprint,
+                **dict(plan.source_schema_fingerprints),
+            },
+            policy_version=plan.policy_version,
+            domain_assertion_refs=tuple(sorted(plan.domain_assertion_refs)),
+            subject_semantic_id=stable_id("analytical-plan-semantic", semantic_scope),
+            applicability_fingerprint=applicability,
+        )
+
+    def materialization_context(
+        self,
+        compiled_plan: CompiledPlan,
+        generated_sql: GeneratedSQL,
+        target_config: TargetConfig,
+    ) -> ReviewCompatibilityContext:
+        """Bind materialization approval to compiled SQL and controlled target."""
+
+        subject_hash = stable_digest({
+            "compiled_plan_hash": compiled_plan.content_hash,
+            "generated_sql_hash": generated_sql.sql_hash,
+            "target_config_fingerprint": target_config.config_fingerprint,
+        })
+        return ReviewCompatibilityContext(
+            review_checkpoint_id=ReviewCheckpoint.REVIEW_MATERIALIZATION_PLAN,
+            subject_stage="COMPILATION",
+            subject_artifact_id=compiled_plan.compiled_plan_id,
+            subject_content_hash=subject_hash,
+            subject_schema_version=compiled_plan.schema_version,
+            model_version=compiled_plan.compiler_version,
+            source_schema_fingerprints={
+                "canonical_model_id": compiled_plan.canonical_model_id,
+                "canonical_model_content_hash": compiled_plan.canonical_model_content_hash,
+                "plan_content_hash": compiled_plan.plan_content_hash,
+                "compiled_plan_content_hash": compiled_plan.content_hash,
+                "generated_sql_hash": generated_sql.sql_hash,
+                "target_config_fingerprint": target_config.config_fingerprint,
+            },
+            policy_version="materialization-policy-v1",
+            domain_assertion_refs=tuple(sorted(compiled_plan.domain_assertion_refs)),
+            subject_semantic_id=stable_id("materialization-semantic", {
+                "plan_id": compiled_plan.plan_id,
+                "compiled_plan_id": compiled_plan.compiled_plan_id,
+                "dialect": compiled_plan.dialect,
+                "target_type": target_config.target_type,
+            }),
+            applicability_fingerprint=stable_id("materialization-applicability", {
+                "compiled_plan": compiled_plan.content_hash,
+                "sql": generated_sql.sql_hash,
+                "target": target_config.config_fingerprint,
+            }),
+        )

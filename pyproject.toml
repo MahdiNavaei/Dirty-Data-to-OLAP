@@ -9,6 +9,7 @@ description = "Evidence-first database access foundations for Dirty Data to OLAP
 requires-python = ">=3.10"
 dependencies = [
   "pydantic>=2.12,<3",
+  "duckdb>=1.0,<2",
 ]
 
 [project.optional-dependencies]

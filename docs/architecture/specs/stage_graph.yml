@@ -203,7 +203,7 @@ stages:
     required: true
     dependencies: [CANONICAL_HYPOTHESES, CANONICAL_IDENTITY_PREPARATION, REVIEW_CANONICAL_IDENTITY]
     optional_dependencies: [ENTITY_RESOLUTION]
-    input_artifact_types: [CanonicalModelHypothesis, EntityMatchEdge, EntityCluster, ReviewDecision]
+    input_artifact_types: [CanonicalModelHypothesis, CanonicalIdentityProposal, EntityResolutionResult, ReviewDecision]
     output_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute]
     failure_consequence: NEEDS_REVIEW
     cacheable: true
@@ -225,7 +225,7 @@ stages:
     required: true
     dependencies: [CANONICAL_FINALIZATION]
     optional_dependencies: []
-    input_artifact_types: [CanonicalModel, RelationshipDecision, DomainAssertion]
+    input_artifact_types: [CanonicalModel, SourceRecordCanonicalMap, CanonicalRelationship, DomainAssertion]
     output_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
     failure_consequence: NEEDS_REVIEW
     cacheable: true
@@ -249,7 +249,7 @@ stages:
     required: true
     dependencies: [ANALYTICAL_PLANNING, REVIEW_ANALYTICAL_PLAN]
     optional_dependencies: []
-    input_artifact_types: [AnalyticalPlan, ReviewDecision]
+    input_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, ReviewDecision]
     output_artifact_types: [CompiledPlan, GeneratedSQL]
     failure_consequence: FAILED
     cacheable: true
@@ -274,7 +274,7 @@ stages:
     required: true
     dependencies: [COMPILATION, REVIEW_MATERIALIZATION_PLAN]
     optional_dependencies: []
-    input_artifact_types: [CompiledPlan]
+    input_artifact_types: [CompiledPlan, GeneratedSQL, ReviewDecision]
     output_artifact_types: [MaterializationArtifact]
     failure_consequence: FAILED
     cacheable: false

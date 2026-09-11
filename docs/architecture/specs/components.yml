@@ -339,13 +339,13 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [facts, dimensions, grain, measures, keys and mappings]
-    input_contracts: [CanonicalModel, RelationshipDecision, DomainAssertion]
+    input_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalRelationship, DomainAssertion]
     output_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
     depends_on: [application.canonical_finalization, domain.contracts]
     ports_used: [ArtifactStorePort]
     implementation_owner: Step20 OLAP Engineer
     implementation_step: 20
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -355,13 +355,13 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [compile approved analytical plan into execution artifacts]
-    input_contracts: [AnalyticalPlan, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
+    input_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
     output_contracts: [CompiledPlan, GeneratedSQL]
     depends_on: [application.analytical_planner, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
     implementation_owner: Step20 OLAP Engineer
     implementation_step: 20
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -371,13 +371,13 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [execute approved compiled plan into controlled target]
-    input_contracts: [CompiledPlan, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
+    input_contracts: [CompiledPlan, GeneratedSQL, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
     output_contracts: [MaterializationArtifact]
     depends_on: [application.compiler, application.review_policy, domain.contracts]
     ports_used: [MaterializerPort, ArtifactStorePort]
     implementation_owner: Step20 OLAP Engineer
     implementation_step: 20
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: controlled_target_write
     persistence_access: ArtifactStorePort
     optional: false
@@ -559,13 +559,13 @@ components:
     layer: adapters
     ownership: adapter implementation
     responsibilities: [normalize target-engine execution]
-    input_contracts: [CompiledPlan]
+    input_contracts: [CompiledPlan, GeneratedSQL, ReviewDecision]
     output_contracts: [MaterializationArtifact]
     depends_on: [domain.contracts]
     extension_port: MaterializerPort
     implementation_owner: Step20 OLAP Engineer
     implementation_step: 20
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: controlled_target_write
     persistence_access: ArtifactStorePort
     optional: false

@@ -377,6 +377,7 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
     finalization = by_id["CANONICAL_FINALIZATION"]
     require(set(er.get("output_artifact_types", [])) == {"EntityMatchEdge", "EntityCluster", "EntityResolutionResult"}, "ER stage output ownership is invalid")
     require("SourceRecordCanonicalMap" in finalization.get("output_artifact_types", []), "finalization must output SourceRecordCanonicalMap")
+    require({"CanonicalIdentityProposal", "EntityResolutionResult"}.issubset(set(finalization.get("input_artifact_types", []))), "finalization must consume the current identity proposal and ER result contracts")
     require("SourceRecordCanonicalMap" not in er.get("output_artifact_types", []), "ER stage must not output SourceRecordCanonicalMap")
     require("RelationshipCandidate" in by_id["DEPENDENCY_DISCOVERY"].get("output_artifact_types", []), "dependency stage must expose RelationshipCandidate")
     guards = finalization.get("conditional_dependencies", [])
@@ -396,6 +397,9 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
     }.items():
         require(by_id[guarded_stage].get("required_review_checkpoint") == checkpoint, f"{guarded_stage} has the wrong review checkpoint guard")
         require(checkpoint in by_id[guarded_stage].get("dependencies", []), f"{guarded_stage} must depend on {checkpoint}")
+    require(set(by_id["ANALYTICAL_PLANNING"].get("output_artifact_types", [])) >= {"AnalyticalPlan", "FactSpec", "DimensionSpec", "GrainSpec", "MeasureSpec"}, "analytical planning output contracts are incomplete")
+    require(set(by_id["COMPILATION"].get("input_artifact_types", [])) >= {"AnalyticalPlan", "FactSpec", "DimensionSpec", "GrainSpec", "MeasureSpec", "ReviewDecision"}, "compilation must consume typed reviewed analytical contracts")
+    require(set(by_id["MATERIALIZATION"].get("input_artifact_types", [])) >= {"CompiledPlan", "GeneratedSQL", "ReviewDecision"}, "materialization must consume exact reviewed compiled SQL")
     return stage_ids, len(stages)
 
 
