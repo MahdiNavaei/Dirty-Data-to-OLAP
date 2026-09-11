@@ -256,7 +256,7 @@ def main() -> int:
     check("bootstrap is PASS", state.get("bootstrap", {}).get("status") == "PASS")
     check("all prior repairs are PASS", all(item.get("status") == "PASS" for item in state.get("post_bootstrap_repairs", [])))
     check("G0 and G1 are PASS", gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS")
-    check("G3-G15 preserve evidenced G3/G4/G5 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED"} and all(gates.get(key) == "PENDING" for key in LATER_GATES[3:]))
+    check("G3-G15 preserve evidenced G3/G4/G5 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and all(gates.get(key) == "PENDING" for key in LATER_GATES[3:]))
     check("blocked is false", state.get("blocked") is False)
     if mode == "pre" and execution.get("current_step", 0) < 6:
         check("pre-gate G2 is PENDING", gates.get("G2_ARCHITECTURE_READY") == "PENDING")

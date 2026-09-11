@@ -825,7 +825,7 @@ def check_state() -> None:
         "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE",
         "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE",
     ]
-    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[3:]), "G3-G15 must remain pending except evidenced G3/G4/G5 decisions")
+    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and all(gates.get(key) == "PENDING" for key in later_gate_keys[3:]), "G3-G15 must remain pending except evidenced G3/G4/G5 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 

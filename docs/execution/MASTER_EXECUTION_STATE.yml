@@ -29,12 +29,12 @@ post_bootstrap_repairs:
 specialist_execution:
   current_step: 19
   current_role: "canonical_model_engineer"
-  current_specialist: "Step19 - Canonical Model Engineer"
+  current_specialist: "Step19 - Canonical Data Model Engineer"
   last_completed_step: 18
   last_completed_role: "ml_evaluation_engineer"
   last_completed_specialist: "Step18 - ML Evaluation Engineer"
   last_completed_content_commit: "00f7d98d09ff0d9190c0a678c7436fb441f070ef"
-  next_step: "Step19 - Canonical Model Engineer"
+  next_step: "Step19 - Canonical Data Model Engineer"
 gates:
   G0_PRODUCT_CONTRACT: "PASS"
   G1_DOMAIN_TRUTH: "PASS"
