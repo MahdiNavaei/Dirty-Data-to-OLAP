@@ -1,0 +1,20 @@
+{
+  "schema_version": "1",
+  "fixture_id": "step18-provider-schema-scenarios-v2",
+  "source_columns": [
+    {"name":"customer_code","type":"text","role":"renamed_true"},
+    {"name":"status","type":"text","role":"same_name"},
+    {"name":"order_total","type":"numeric","role":"same_semantics"},
+    {"name":"نام_مشتری","type":"text","role":"multilingual"},
+    {"name":"event_code","type":"text","role":"abbreviation"},
+    {"name":"unmatched_date","type":"date","role":"no_match"}
+  ],
+  "target_columns": [
+    {"name":"client_no","type":"text","role":"renamed_true"},
+    {"name":"status","type":"text","role":"same_name"},
+    {"name":"order_total","type":"numeric","role":"same_semantics"},
+    {"name":"نام مشتری","type":"text","role":"multilingual"},
+    {"name":"evt_cd","type":"text","role":"abbreviation"},
+    {"name":"unmatched_label","type":"text","role":"no_match"}
+  ]
+}

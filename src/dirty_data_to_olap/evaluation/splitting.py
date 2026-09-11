@@ -45,7 +45,7 @@ def build_split_manifest(*, examples: Iterable[InferenceEvaluationExample], trut
         for tag in row.slice_tags:
             slice_counts[role][tag] += 1
     group_sets = [set(values) for values in group_ids_by_split.values()]
-    leakage = {"group_intersections": {}, "reverse_pair_leakage": True}
+    leakage = {"group_intersections": {}, "reverse_pair_leakage": None, "reverse_pair_control": "NOT_EXERCISED"}
     for left_index, left in enumerate(sorted(group_ids_by_split)):
         for right in sorted(group_ids_by_split)[left_index + 1:]:
             intersection = sorted(set(group_ids_by_split[left]).intersection(group_ids_by_split[right]))
@@ -53,7 +53,8 @@ def build_split_manifest(*, examples: Iterable[InferenceEvaluationExample], trut
     reverse_pair_groups = reverse_pair_groups or {}
     reverse_split = {pair: group_roles.get(group) for pair, group in reverse_pair_groups.items()}
     leakage["reverse_pair_split"] = reverse_split
-    leakage["reverse_pair_leakage"] = len({value for value in reverse_split.values() if value}) <= 1 if reverse_split else True
+    leakage["reverse_pair_leakage"] = len({value for value in reverse_split.values() if value}) <= 1 if reverse_split else None
+    leakage["reverse_pair_control"] = "EXECUTED" if reverse_split else "NOT_EXERCISED"
     return SplitManifest(
         split_id=f"step18-split-{seed}",
         algorithm="sha256_group_bucket_or_frozen_roles_v1",

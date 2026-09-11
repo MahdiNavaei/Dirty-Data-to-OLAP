@@ -231,6 +231,41 @@ class InferenceValidityStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class FormalGateStatus(str, Enum):
+    """Formal G5 state; review mode is intentionally a separate field."""
+
+    PASS = "PASS"
+    PENDING = "PENDING"
+    BLOCKED = "BLOCKED"
+
+
+class ProviderEvaluationBinding(_SourceModel):
+    """Evidence binding required before a provider result can score a task."""
+
+    component: str
+    receipt_path: str
+    output_path: str
+    receipt_output_hash: str
+    loaded_output_hash: str
+    content_commit: str
+    protocol_hash: str
+    dataset_manifest_hash: str
+    scenario_fixture_hashes: Mapping[str, str]
+    scenario_group_ids: tuple[str, ...] = ()
+    truth_artifact_hash: str
+    split_hash: str
+    status: str
+    loaded_for_metrics: bool = False
+    population_match: bool = False
+    failure_reasons: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def hash_contract(self) -> "ProviderEvaluationBinding":
+        if self.status == "EXECUTED" and (not self.loaded_for_metrics or not self.population_match):
+            raise ValueError("EXECUTED provider binding must be loaded and population-aligned")
+        return self
+
+
 class InferenceValidityAssessment(_SourceModel):
     assessment_id: str
     protocol_hash: str
@@ -246,6 +281,10 @@ class InferenceValidityAssessment(_SourceModel):
     limitations: tuple[str, ...]
     gate_recommendation: InferenceValidityStatus
     required_provider_status: Mapping[str, str]
+    formal_gate: FormalGateStatus = FormalGateStatus.PENDING
+    inference_validity_mode: str = "UNVALIDATED"
+    provider_bindings: Mapping[str, ProviderEvaluationBinding] = Field(default_factory=dict)
+    negative_controls: Mapping[str, str] = Field(default_factory=dict)
     score_semantics: str = "UNCALIBRATED_DECISION_SCORE"
     automation_enabled: bool = False
 
@@ -255,6 +294,8 @@ class InferenceValidityAssessment(_SourceModel):
             raise ValueError("Step18 assessment cannot authorize automation")
         if self.gate_recommendation is InferenceValidityStatus.REVIEW_ONLY_VALIDATED and self.held_out_test_status != "EXECUTED_UNTOUCHED_BY_TUNING":
             raise ValueError("review-only validation requires an untouched held-out test")
+        if self.formal_gate is FormalGateStatus.PASS and self.inference_validity_mode != "REVIEW_ONLY_VALIDATED":
+            raise ValueError("formal G5 PASS requires an explicit review-only mode")
         return self
 
 

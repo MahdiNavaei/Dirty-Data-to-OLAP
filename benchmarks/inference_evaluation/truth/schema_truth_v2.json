@@ -1,0 +1,13 @@
+{
+  "schema_version":"2",
+  "truth_id":"step18-schema-topology-truth-v2",
+  "truth_kind":"SCHEMA_MAPPING",
+  "provenance":"domain-reviewed endpoint labels; no provider scores or candidate IDs",
+  "labels":[
+    {"query_id":"sq-customer-code","scenario_group_id":"schema-renamed","source_id":"crm-v2","source_table_id":"crm_customers_v2","source_column_id":"crm_customers_v2-customer_code","target_source_id":"erp-v2","target_table_id":"erp_customers_v2","target_column_id":"erp_customers_v2-client_no","expected":"MATCH"},
+    {"query_id":"sq-status","scenario_group_id":"schema-hard-negative","source_id":"crm-v2","source_table_id":"crm_customers_v2","source_column_id":"crm_customers_v2-status","target_source_id":"erp-v2","target_table_id":"erp_customers_v2","target_column_id":"erp_customers_v2-status","expected":"MATCH"},
+    {"query_id":"sq-order-total","scenario_group_id":"schema-multilingual","source_id":"crm-v2","source_table_id":"crm_customers_v2","source_column_id":"crm_customers_v2-order_total","target_source_id":"erp-v2","target_table_id":"erp_customers_v2","target_column_id":"erp_customers_v2-order_total","expected":"MATCH"},
+    {"query_id":"sq-persian","scenario_group_id":"schema-multilingual","source_id":"crm-v2","source_table_id":"crm_customers_v2","source_column_id":"crm_customers_v2-نام_مشتری","target_source_id":"erp-v2","target_table_id":"erp_customers_v2","target_column_id":"erp_customers_v2-نام مشتری","expected":"MATCH"},
+    {"query_id":"sq-no-match","scenario_group_id":"schema-no-match","source_id":"crm-v2","source_table_id":"crm_customers_v2","source_column_id":"crm_customers_v2-unmatched_date","target_source_id":"erp-v2","target_table_id":"erp_customers_v2","target_column_id":"erp_customers_v2-unmatched_label","expected":"NO_MATCH"}
+  ]
+}

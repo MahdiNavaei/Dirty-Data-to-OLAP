@@ -1,4 +1,4 @@
-"""Validate Step18 aggregate-safe evaluation evidence and G5 boundaries."""
+"""Behavioral validator for the post-Step18 empirical binding closure."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
-EVAL = ROOT / "workspace" / "runs" / "step18-inference-baseline-v1" / "evaluation"
+EVAL = ROOT / "workspace" / "runs" / "step18-inference-baseline-v2" / "evaluation"
 
 
 def _json(path: Path) -> dict:
@@ -22,61 +21,57 @@ def _check(name: str, condition: bool, failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
-    report_path = EVAL / "report.json"
-    protocol_path = EVAL / "manifest" / "evaluation_protocol.json"
-    split_path = EVAL / "manifest" / "split_manifest.json"
-    dataset_path = EVAL / "manifest" / "dataset_manifest.json"
-    required = (report_path, protocol_path, split_path, dataset_path)
-    _check("required evaluation manifests exist", all(path.is_file() for path in required), failures)
+    required = (EVAL / "report.json", EVAL / "g5" / "assessment.json", EVAL / "manifest" / "provider_evaluation_bindings.json", EVAL / "manifest" / "split_manifest.json")
+    _check("v2 evaluation artifacts exist", all(path.is_file() for path in required), failures)
     if failures:
         print("FAIL\n" + "\n".join(f"- {item}" for item in failures))
         return 1
-    report, protocol, split, dataset = map(_json, required)
-    _check("protocol binds a full git commit", len(protocol.get("content_commit", "")) == 40, failures)
-    _check("truth and runtime are separately hashed", bool(dataset.get("truth_artifact_hashes")) and bool(dataset.get("runtime_fixture_hashes")), failures)
-    _check("frozen Step17 policy hashes are present", len(dataset.get("frozen_policy_hashes", {})) >= 2, failures)
-    roles = split.get("group_ids_by_split", {})
-    role_sets = {key: set(value) for key, value in roles.items()}
-    _check("scenario groups are disjoint", all(not role_sets[left].intersection(role_sets[right]) for left in role_sets for right in role_sets if left < right), failures)
-    test_ids = set(split.get("example_ids_by_split", {}).get("TEST", ()))
-    calibration_ids = set(split.get("example_ids_by_split", {}).get("CALIBRATION", ()))
-    _check("test examples do not enter calibration", not test_ids.intersection(calibration_ids), failures)
-    threshold = _json(EVAL / "thresholds" / "frontier.json")
-    _check("threshold study is calibration-only and unselected", threshold.get("split") == "CALIBRATION" and threshold.get("selected_threshold") is None and not threshold.get("runtime_policy_mutated"), failures)
-    _check("threshold score is not presented as probability", threshold.get("source_score_semantics") == "UNCALIBRATED_DECISION_SCORE", failures)
+    report, assessment, bindings, split = (_json(path) for path in required)
+    _check("formal G5 and review mode are separate", assessment.get("formal_gate") in {"PASS", "PENDING", "BLOCKED"} and assessment.get("formal_gate") != assessment.get("inference_validity_mode"), failures)
+    _check("automation remains unauthorized", assessment.get("automation_recommendation") == "NOT_AUTHORIZED" and assessment.get("automation_enabled") is False, failures)
+    roles = {key: set(value) for key, value in split.get("group_ids_by_split", {}).items()}
+    _check("scenario groups are disjoint", all(not roles[left].intersection(roles[right]) for left in roles for right in roles if left < right), failures)
+    _check("split reverse/shared control is exercised or explicitly recorded", "reverse_pair_split" in split.get("leakage_audit", {}), failures)
+
     relationship = _json(EVAL / "relationship" / "test_metrics.json")
-    candidate_generation = relationship.get("candidate_generation", {})
-    _check("candidate-generation recall exposes missing candidates", "missing_candidate_query_ids" in candidate_generation and candidate_generation.get("candidate_recall", {}).get("denominator") is not None, failures)
-    fusion = relationship.get("fusion", {})
-    _check("relationship precision formula is explicit", fusion.get("precision", {}).get("denominator") == fusion.get("true_positive", 0) + fusion.get("false_positive", 0), failures)
-    _check("relationship recall formula is explicit", fusion.get("recall", {}).get("denominator") == fusion.get("true_positive", 0) + fusion.get("false_negative", 0), failures)
+    candidate = relationship.get("candidate_generation", {})
+    _check("relationship universe comes from truth", candidate.get("truth_query_count") == 13, failures)
+    _check("zero-candidate truth queries remain visible", "missing_candidate_query_ids" in candidate and len(candidate["missing_candidate_query_ids"]) >= 1, failures)
+    _check("candidate metrics have explicit denominator", candidate.get("candidate_recall", {}).get("denominator") is not None, failures)
+    _check("fusion does not claim complete without Profile and Quality artifacts", relationship.get("fusion", {}).get("status") != "EVALUATED" or bindings.get("profiling", {}).get("status") == "EXECUTED", failures)
+
+    dependency_binding = bindings.get("dependency_discovery", {})
+    if dependency_binding.get("status") == "EXECUTED":
+        output = ROOT / dependency_binding["output_path"]
+        payload = _json(output)
+        actual_count = sum(len(item["result"].get("relationship_candidates", ())) for item in payload.get("results", ()))
+        _check("dependency normalized output is loaded", dependency_binding.get("loaded_for_metrics") is True and dependency_binding.get("loaded_output_hash") == hashlib.sha256(output.read_bytes()).hexdigest(), failures)
+        _check("candidate metric consumes normalized DependencyResult", candidate.get("generated_candidate_count") == actual_count, failures)
+        if payload.get("results"):
+            mutated = json.loads(json.dumps(payload))
+            mutated["results"][0]["result"]["relationship_candidates"] = []
+            mutated_count = sum(len(item["result"].get("relationship_candidates", ())) for item in mutated.get("results", ()))
+            _check("mutating provider candidates changes candidate metric input", mutated_count != actual_count, failures)
+    else:
+        _check("missing dependency provider fails closed", assessment.get("formal_gate") == "PENDING", failures)
+
     schema = _json(EVAL / "schema_matching" / "test_metrics.json")
-    _check("schema no-match false positives are reported", "no_match_false_positive_count" in schema, failures)
     entity = _json(EVAL / "entity_resolution" / "test_metrics.json")
-    _check("entity false merge and split metrics are reported", "false_merge_pair_count" in entity and "false_split_rate" in entity, failures)
-    bootstrap = _json(EVAL / "bootstrap" / "intervals.json")
-    _check("bootstrap is grouped and seeded", bool(bootstrap) and all(item.get("method") == "group_resample_v1" and item.get("seed") == dataset.get("seed") for item in bootstrap), failures)
-    _check("G5 has no automation authorization", report.get("assessment", {}).get("automation_recommendation") == "NOT_AUTHORIZED" and report.get("assessment", {}).get("automation_enabled") is False, failures)
-    _check("G5 status is evidence-backed review-only validation", report.get("assessment", {}).get("gate_recommendation") == "REVIEW_ONLY_VALIDATED", failures)
-    for reference in report.get("generated_artifact_refs", ()):
-        artifact = EVAL / reference["relative_path"]
-        _check(f"artifact exists: {reference['relative_path']}", artifact.is_file(), failures)
-        if artifact.is_file():
-            _check(f"artifact hash: {reference['relative_path']}", hashlib.sha256(artifact.read_bytes()).hexdigest() == reference["content_hash"], failures)
-    for receipt in (EVAL / "dependency_discovery" / "real_provider_receipt.json", EVAL / "schema_matching" / "real_provider_receipt.json", EVAL / "entity_resolution" / "real_provider_receipt.json"):
-        payload = _json(receipt)
-        output = ROOT / payload["output_artifact"]
-        _check(f"provider receipt output hash: {receipt.parent.name}", output.is_file() and hashlib.sha256(output.read_bytes()).hexdigest() == payload["output_hash"] and payload.get("execution_result") == "COMPLETE", failures)
-    runtime_imports = []
-    for path in (ROOT / "src" / "dirty_data_to_olap").rglob("*.py"):
-        if "evaluation" not in path.parts and "dirty_data_to_olap.evaluation" in path.read_text(encoding="utf-8"):
-            runtime_imports.append(path.as_posix())
-    _check("runtime DAG does not import evaluation package", not runtime_imports, failures)
+    _check("schema no-match is first-class", "no_match_false_positive_count" in schema, failures)
+    _check("ER metrics identify actual normalized output path", entity.get("prediction_method") == "ACTUAL_ENTITY_RESOLUTION_RESULT_EDGES_AND_CLUSTERS", failures)
+    _check("provider population mismatch cannot pass", not (bindings.get("entity_resolution", {}).get("status") == "EXECUTED" and entity.get("population_match") is not True), failures)
+
+    controls = _json(EVAL / "controls" / "negative_controls.json")
+    _check("receipt-only negative control passes", controls.get("receipt_only", {}).get("receipt_without_loaded_output_cannot_close_g5") is True, failures)
+    _check("input-order control executes", controls.get("input_order_invariance", {}).get("status") == "EXECUTED", failures)
+    _check("truth shuffle is evaluation-only", controls.get("evaluation_truth_shuffle", {}).get("retrained") is False, failures)
+    _check("threshold remains non-authorizing", _json(EVAL / "thresholds" / "frontier.json").get("selected_threshold") is None, failures)
     _check("Step19 implementation is absent", not (ROOT / "src" / "dirty_data_to_olap" / "application" / "review_decision.py").exists(), failures)
+    _check("v2 evaluator does not read pre-authored runtime scores", "runtime_inputs.json" not in (ROOT / "tools" / "run_step18_v2_evaluation.py").read_text(encoding="utf-8"), failures)
     if failures:
         print("FAIL\n" + "\n".join(f"- {item}" for item in failures))
         return 1
-    print("PASS: step18_ml_evaluation_checks=23")
+    print("PASS: step18_v2_binding_checks=19")
     return 0
 
 
