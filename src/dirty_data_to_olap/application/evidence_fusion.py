@@ -407,7 +407,7 @@ class EvidenceFusionService:
                     continue
                 is_structural = signal.family is SchemaMatchSignalFamily.SCHEMA_STRUCTURAL and signal.value is not None
                 direction = EvidenceDirection.SUPPORTS if is_structural and signal.value >= 0.5 else EvidenceDirection.CONTRADICTS if is_structural else EvidenceDirection.CONTEXT
-                output.append(FusionEvidenceItem(evidence_id=signal.signal_id, subject_id=subject, producer_id="schema-matching:signal", family=EvidenceFamily.SCHEMA_MATCHING, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="type_compatibility" if is_structural else "schema_signal:" + signal.family.value.lower(), metric_value=signal.value, metric_semantics=signal.semantics, direction=direction, score_dimension_id="type_compatibility" if is_structural and "type_compatibility" in dimensions else None, dependency_group="type_compatibility" if is_structural else "schema_signal:" + signal.family.value.lower(), score_bearing=is_structural and "type_compatibility" in dimensions, derived_from_refs=signal.evidence_refs, qualitative_text=None if is_structural else signal.semantics, scope_id=subject, **common))
+                output.append(FusionEvidenceItem(evidence_id=signal.signal_id + ":candidate:" + str(candidate.candidate_id), subject_id=subject, producer_id="schema-matching:signal", family=EvidenceFamily.SCHEMA_MATCHING, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="type_compatibility" if is_structural else "schema_signal:" + signal.family.value.lower(), metric_value=signal.value, metric_semantics=signal.semantics, direction=direction, score_dimension_id="type_compatibility" if is_structural and "type_compatibility" in dimensions else None, dependency_group="type_compatibility" if is_structural else "schema_signal:" + signal.family.value.lower(), score_bearing=is_structural and "type_compatibility" in dimensions, derived_from_refs=signal.evidence_refs, qualitative_text=None if is_structural else signal.semantics, scope_id=subject, **common))
         return output
 
     @staticmethod
@@ -590,11 +590,14 @@ class EvidenceFusionService:
                     if rule is None or item.metric_name not in rule.metric_names:
                         failures.append(FusionFailure(failure_id="fusion-unsupported-" + stable_digest(item.metric_name)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail=f"metric {item.metric_name} has no policy-authorized normalization", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
                         score_bearing = False
-                    elif item.metric_value is None or not (-1 <= float(item.metric_value) <= 1):
+                    elif item.metric_value is None:
+                        failures.append(FusionFailure(failure_id="fusion-unsupported-value-" + stable_digest(item.evidence_id)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail="score-bearing evidence has no numeric value", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
+                        score_bearing = False
+                    elif rule.method.startswith("ordinal") and float(item.metric_value) >= 1:
+                        normalized, method = 1.0 / (1.0 + float(item.metric_value)), rule.method
+                    elif not (-1 <= float(item.metric_value) <= 1):
                         failures.append(FusionFailure(failure_id="fusion-unsupported-value-" + stable_digest(item.evidence_id)[:20], kind=FusionFailureKind.UNSUPPORTED_SCORE_SEMANTICS, detail="score-bearing evidence value is outside policy bounds", subject_id=item.subject_id, evidence_refs=(item.evidence_id,)))
                         score_bearing = False
-                    elif rule.method.startswith("ordinal"):
-                        normalized, method = 1.0 / (1.0 + float(item.metric_value)), rule.method
                     elif rule.method.startswith("compatibility_strength"):
                         normalized, method = (2.0 * float(item.metric_value)) - 1.0, rule.method
                     elif rule.method.startswith("identity"):

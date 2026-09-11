@@ -5,14 +5,17 @@ import json
 from pathlib import Path
 import hashlib
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
 from tools.provision_step18_v4_runtimes import _child_environment
 from tools.step18_provider_fixtures import entity_spec
-from tools.run_step18_v4_evaluation import _er_leakage_audit, _schema_endpoint
+from tools.run_step18_v4_evaluation import _er_leakage_audit, _fuse_joint_schema_rows, _schema_endpoint
 from dirty_data_to_olap.adapters.entity_resolution.splink import SplinkEntityResolutionAdapter
 from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionMode
+from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchResult
+from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -112,6 +115,20 @@ def test_v4_schema_fusion_path_consumes_actual_schema_result():
     assert "fused.mappings" in source
 
 
+def test_v4_joint_schema_fusion_calls_one_fusion_request_per_scenario(monkeypatch):
+    item = _json("workspace/runs/step18-inference-baseline-v4/evaluation/schema_matching/normalized_provider_results.json")["results"][1]
+    combined = SchemaMatchResult.model_validate(item["result"])
+    calls = []
+
+    def fake_fuse(self, request, **kwargs):
+        calls.append(kwargs["schema_match_result"])
+        return SimpleNamespace(mappings=(), failures=())
+
+    monkeypatch.setattr(EvidenceFusionService, "fuse", fake_fuse)
+    _fuse_joint_schema_rows([{"group": item["scenario_group_id"], "result": combined}], {}, {}, {})
+    assert calls == [combined]
+
+
 def test_v4_er_negative_cases_bind_their_own_records():
     groups = _json("benchmarks/inference_evaluation/scenario_groups_v4.json")["groups"]
     by_case = {item["case_id"]: item for item in groups if item["task"] == "ENTITY_RESOLUTION"}
@@ -136,10 +153,10 @@ def test_v4_er_test_universe_is_exactly_test_assigned_records():
     assert metrics["defined_tn_universe"] == 45
 
 
-def test_v4_g5_cannot_pass_with_missing_schema_fusion():
+def test_v4_g5_passes_only_after_schema_fusion_is_evaluated():
     report = _json("workspace/runs/step18-inference-baseline-v4/evaluation/report.json")
-    assert report["formal_gate"] == "PENDING"
-    assert report["assessment"]["required_task_completion"]["SCHEMA_FUSION_EVALUATED"] is False
+    assert report["formal_gate"] == "PASS"
+    assert report["assessment"]["required_task_completion"]["SCHEMA_FUSION_EVALUATED"] is True
 
 
 def test_v4_reproducibility_separates_exact_bytes_from_semantic_evidence():

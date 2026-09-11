@@ -117,8 +117,8 @@ def entity_spec(table_suffix: str = "v4") -> EntityResolutionSpec:
         identity_fields=fields,
         normalization_rules=tuple(EntityResolutionNormalizationRule(rule_id=f"norm-{field}", version="1", applies_to=(field,)) for field in ("name", "email", "phone")),
         blocking_rules=(ERBlockingRule(rule_id="block-email", version="1", field_ids=("email",), sql_expression="l.email = r.email"), ERBlockingRule(rule_id="block-phone", version="1", field_ids=("phone",), sql_expression="l.phone = r.phone")),
-        comparisons=(ERComparisonSpecification(comparison_id="cmp-name", field_id="name", method="exact"), ERComparisonSpecification(comparison_id="cmp-email", field_id="email", method="exact")),
-        training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-email",), max_u_pairs=500),
+        comparisons=(ERComparisonSpecification(comparison_id="cmp-name", field_id="name", method="exact"), ERComparisonSpecification(comparison_id="cmp-email", field_id="email", method="exact"), ERComparisonSpecification(comparison_id="cmp-phone", field_id="phone", method="exact")),
+        training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-email", "block-phone"), max_u_pairs=500),
         threshold_policy=ERThresholdPolicy(match_probability_threshold=0.8, review_probability_threshold=0.5),
         clustering_policy=ERClusteringPolicy(threshold_policy_id="er-threshold-v1"),
     )

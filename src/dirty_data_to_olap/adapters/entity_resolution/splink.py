@@ -201,17 +201,25 @@ class SplinkEntityResolutionAdapter:
             raise _ERTraining("Splink prior is not available from the declared training policy")
         settings = SettingsCreator(link_type={EntityResolutionMode.LINK_ONLY: "link_only", EntityResolutionMode.DEDUPE_ONLY: "dedupe_only", EntityResolutionMode.LINK_AND_DEDUPE: "link_and_dedupe"}[spec.mode], comparisons=comparisons, blocking_rules_to_generate_predictions=blocking_sql, probability_two_random_records_match=prior, max_iterations=spec.training_policy.max_em_iterations, retain_matching_columns=True, retain_intermediate_calculation_columns=True)
         linker = Linker(frame.drop(columns=["_record_ref", "_source_id", "_snapshot_id"]), settings, DuckDBAPI(connection=str(db_path)), input_table_aliases="entity_records", set_up_basic_logging=False)
+        training_rule_counts = self._candidate_counts(frame, spec)
+        training_sessions: list[dict[str, object]] = []
         try:
             linker.training.estimate_u_using_random_sampling(max_pairs=spec.training_policy.max_u_pairs, seed=spec.training_policy.random_seed)
             for rule_id in spec.training_policy.em_blocking_rule_ids:
                 rule = next(item for item in spec.blocking_rules if item.rule_id == rule_id)
+                session = {"rule_id": rule_id, "candidate_count": training_rule_counts.get(rule_id, 0), "succeeded": False}
+                training_sessions.append(session)
                 linker.training.estimate_parameters_using_expectation_maximisation(self._safe_blocking_sql(rule, field_map))
+                session["succeeded"] = True
             if not bool(getattr(linker._settings_obj, "_is_fully_trained", False)):
-                raise _ERTraining("Splink completed without estimates for every comparison; default parameters are not accepted")
+                missing = {comparison.output_column_name: {"m": [level.comparison_vector_value for level in comparison.comparison_levels if not level._m_is_trained], "u": [level.comparison_vector_value for level in comparison.comparison_levels if not level._u_is_trained]} for comparison in linker._settings_obj.comparisons if not comparison._is_trained}
+                diagnostics = {"comparison_ids": [item.comparison_id for item in spec.comparisons], "missing_estimates": missing, "em_blocking_rules": training_sessions, "u_training_succeeded": True}
+                raise _ERTraining("Splink completed without estimates for every comparison; default parameters are not accepted; training_diagnostics=" + json.dumps(diagnostics, sort_keys=True, separators=(",", ":")))
         except _ERTraining:
             raise
         except Exception as error:
-            raise _ERTraining(f"Splink u/m training failed: {error.__class__.__name__}") from None
+            diagnostics = {"comparison_ids": [item.comparison_id for item in spec.comparisons], "missing_estimates": {}, "em_blocking_rules": training_sessions, "u_training_succeeded": False}
+            raise _ERTraining(f"Splink u/m training failed: {error.__class__.__name__}; training_diagnostics=" + json.dumps(diagnostics, sort_keys=True, separators=(",", ":"))) from None
         predictions = linker.inference.predict()
         predicted_frame = predictions.as_pandas_dataframe()
         clustering_threshold = spec.clustering_policy.cluster_probability_threshold or spec.threshold_policy.match_probability_threshold
