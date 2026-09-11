@@ -30,7 +30,7 @@ Splink processed the full 24-record `LINK_AND_DEDUPE` population, including `crm
 
 The final v4 rerun used only the local wheelhouse and project-local NLTK data. NLTK preflight is `COMPLETE` for `punkt_tab`, `stopwords`, `wordnet`, and `omw-1.4`; the version, resource hashes, path, and disabled global search are bound in evaluation metadata. Valentine `1.0.0` completed Coma `11/11` and Cupid `11/11`.
 
-Independent TEST matcher ranking is retained per family. Coma has no eligible multi-candidate query and therefore reports undefined ranking values with an explicit denominator; Cupid reports MRR `0.5000`, Recall@1/@3 `0.0000/1.0000`, and NDCG@1/@3 `0.0000/0.6309`. Joint candidate generation from the combined result is `3/3` recall, `3/5` precision, with `5` candidates and `0` no-match false positives.
+Independent TEST matcher ranking is retained per family. Coma has no eligible multi-candidate query and therefore reports undefined ranking values with an explicit denominator; Cupid reports MRR `0.5000`, Recall@1/@3 `0.0000/1.0000`, and NDCG@1/@3 `0.0000/0.6309`. Joint candidate generation from the combined result is `3/3` recall, `3/5` precision, F1 `0.7500`, with `5` candidates, `0` zero-candidate true queries, and `1` no-match false positive.
 
 Joint Schema Fusion uses one combined SchemaMatchResult per scenario and the real `22/22/22` Profile/Quality/Dependency producer estate. TEST Fusion is `EVALUATED`: `5` decisions, precision/recall/F1 `0.6000/1.0000/0.7500`, AP `0.4778`, MRR `0.5000`, Recall@1/@3 `0.0000/1.0000`, NDCG@3 `0.6309`, no failures, and review-only decisions. The mapping evidence exposes both Coma and Cupid rank dimensions.
 
