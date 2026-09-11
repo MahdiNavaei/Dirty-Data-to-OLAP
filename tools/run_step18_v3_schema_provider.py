@@ -3,31 +3,23 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from dirty_data_to_olap.adapters.matching.valentine import ValentineSchemaMatchingAdapter
 from dirty_data_to_olap.application.privacy_policy import PrivacyPolicyService
 from dirty_data_to_olap.application.schema_matching import SchemaMatchingService
 from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchMode, SchemaMatchRequest, SchemaMatcherReference, schema_match_config_hash
+from step18_provider_fixtures import schema_source
 
 
 MANIFEST = ROOT / "benchmarks" / "inference_evaluation" / "provider_scenarios" / "schema_matching" / "scenarios_v3.json"
 RUN = ROOT / "workspace" / "runs" / "step18-inference-baseline-v3" / "evaluation" / "schema_matching"
-
-
-def _helpers():
-    path = ROOT / "tests" / "integration" / "matching" / "test_step13_real_valentine.py"
-    spec = importlib.util.spec_from_file_location("step13_helpers_v3", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
-    return module
 
 
 def _receipt_hash(value: dict) -> str:
@@ -52,7 +44,6 @@ def main() -> int:
         (RUN / "provider_receipt.json").write_text(json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"status":"UNAVAILABLE","reason":"valentine package is not installed"}, indent=2))
         return 0
-    helper = _helpers()
     results = []
     population = {}
     for scenario in manifest["scenarios"]:
@@ -60,8 +51,8 @@ def main() -> int:
         source_table, target_table = f"crm_customers_{group}", f"erp_customers_{group}"
         source_cols = tuple((item["name"], item["type"]) for item in scenario["source_columns"])
         target_cols = tuple((item["name"], item["type"]) for item in scenario["target_columns"])
-        crm_catalog, crm_snapshot = helper._source("crm-v3", source_table, source_cols, RUN)
-        erp_catalog, erp_snapshot = helper._source("erp-v3", target_table, target_cols, RUN)
+        crm_catalog, crm_snapshot = schema_source("crm-v3", source_table, source_cols, RUN)
+        erp_catalog, erp_snapshot = schema_source("erp-v3", target_table, target_cols, RUN)
         references = (SchemaMatcherReference(matcher_id="coma-schema", name="Coma", version="1.0.0", configuration={"use_schema": True, "use_instances": False, "max_n": 10, "threshold": 0.0}), SchemaMatcherReference(matcher_id="cupid-schema", name="Cupid", version="1.0.0", configuration={"use_schema": True, "use_instances": False, "max_n": 10, "threshold": 0.0}))
         request = SchemaMatchRequest(request_id=f"step18-v3-{group}", source_ids=("crm-v3", "erp-v3"), snapshot_ids={"crm-v3":f"snapshot-crm-v3", "erp-v3":f"snapshot-erp-v3"}, selected_table_ids_by_source={"crm-v3":(source_table,), "erp-v3":(target_table,)}, mode=SchemaMatchMode.SCHEMA_ONLY, matcher_references=references)
         policy = PrivacyPolicyService(project_root=RUN)

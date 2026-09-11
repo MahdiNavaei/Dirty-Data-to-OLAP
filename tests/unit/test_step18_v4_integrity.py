@@ -5,7 +5,10 @@ import json
 from pathlib import Path
 
 from tools.provision_step18_v4_runtimes import _child_environment
+from tools.step18_provider_fixtures import entity_spec
 from tools.run_step18_v4_evaluation import _er_leakage_audit, _schema_endpoint
+from dirty_data_to_olap.adapters.entity_resolution.splink import SplinkEntityResolutionAdapter
+from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionMode
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,6 +24,31 @@ def test_v4_provisioning_keeps_runtime_and_sandboxes_temp(tmp_path):
     assert Path(environment["PIP_CACHE_DIR"]).is_relative_to(tmp_path)
     assert environment["PYTHONNOUSERSITE"] == "1"
     assert record["proxy_values_redacted"] is True
+
+
+def test_v4_provisioning_uses_package_name_expected_version_and_import_check():
+    source = inspect.getsource(__import__("tools.provision_step18_v4_runtimes", fromlist=["main"]))
+    assert '"package_name"' in source
+    assert '"expected_version"' in source
+    assert 'm.version(package)' in source
+    assert "importlib.import_module(module)" in source
+    assert '"valentine==1.0.0"' in source
+    assert '"splink==4.0.17"' in source
+    assert '"-e"' not in source
+
+
+def test_v4_provider_runners_are_decoupled_from_optional_test_modules_and_sentinels():
+    for name in ("tools.run_step18_v4_schema_provider", "tools.run_step18_v4_entity_provider", "tools.run_step18_v3_schema_provider", "tools.run_step18_v3_entity_provider"):
+        source = inspect.getsource(__import__(name, fromlist=["main"]))
+        assert "tests/integration" not in source
+        assert "valentine-runtime" not in source
+        assert "splink-runtime" not in source
+
+
+def test_v4_er_spec_includes_same_source_duplicate_capability():
+    spec = entity_spec("v4")
+    assert spec.mode is EntityResolutionMode.LINK_AND_DEDUPE
+    assert SplinkEntityResolutionAdapter._all_pairs(spec, [{"source_dataset": "crm"}, {"source_dataset": "crm"}]) == 1
 
 
 def test_v4_relationship_fusion_quality_is_not_only_decision_count():
@@ -78,3 +106,19 @@ def test_v4_g5_cannot_pass_with_missing_schema_fusion():
     assert report["formal_gate"] == "PENDING"
     assert report["assessment"]["required_task_completion"]["SCHEMA_FUSION_EVALUATED"] is False
 
+
+def test_v4_reproducibility_separates_exact_bytes_from_semantic_evidence():
+    repro = _json("workspace/runs/step18-inference-baseline-v4/evaluation/reproducibility/relationship_provider.json")
+    assert repro["status"] == "PASS"
+    assert repro["semantic_inference_equal"] is True
+    assert repro["task_metrics_equal"] is True
+    assert repro["byte_outputs_equal"] is False
+    assert repro["first_artifact_content_hash"] != repro["second_artifact_content_hash"]
+
+
+def test_v4_threshold_frontier_is_complete_and_non_authorizing():
+    frontier = _json("workspace/runs/step18-inference-baseline-v4/evaluation/thresholds/frontier.json")
+    assert frontier["selected_threshold"] is None
+    assert frontier["runtime_policy_mutated"] is False
+    required = {"eligible_decisions", "selected_count", "coverage", "tp", "fp", "precision", "recall", "review_remainder", "conflict_incomplete_abstention"}
+    assert required <= set(frontier["points"][0])

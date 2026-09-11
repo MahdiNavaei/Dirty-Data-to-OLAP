@@ -1112,3 +1112,15 @@ handoff_to:
 - leakage_controls: real split/truth-cluster/case-pair audit PASS; truth shuffle, input-order, provider mutation, and population binding executed; relationship normalized reproducibility control `FAIL` (`9eb042...` vs `818d297...`)
 - uncertainty: bootstrap over all 7 positive TEST groups, 1,000 replicates, interval `[0.4286, 1.0]`; relationship-Fusion calibration insufficient; threshold frontier studied only, no threshold selected or policy mutation
 - current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; Step19 not started
+
+## Step18 Runtime and Reproducibility Closure
+
+- execution_step: `18` continuation and surgical harness repair only; Step19 was not started
+- repaired: explicit provider package/version/dependency provisioning contract; metadata-plus-import verification; no editable project install; project-owned provider fixtures; no test-module imports or sentinel runtime creation; same-source ER support with `LINK_AND_DEDUPE`
+- provisioning: dedicated `matching-venv` and `er-venv` used child-local temporary/cache roots and `PYTHONNOUSERSITE=1`; Valentine `1.0.0` and Splink `4.0.17` installs both failed as `NETWORK_TIMEOUT`; no provider artifact was fabricated
+- optional_suite: clean normal integration run `33 passed, 2 skipped`; unavailable optional providers now skip rather than fail
+- relationship_reproducibility: two clean equivalent Desbordante executions produced unequal exact artifact-byte hashes but equal semantic inference fingerprints and task metrics; semantic reproducibility=`PASS`, byte equality=`FALSE`
+- relationship_quality: candidate recall `5/7`, precision `5/17`, F1 `0.4167`; Fusion AP `0.5277`, MRR `0.6250`, Recall@1/@3 `0.5000/0.7500`, NDCG@1/@3 `0.5000/0.6250`; all decisions remain `REVIEW_REQUIRED`
+- calibration_thresholds: explicit insufficiency reasons recorded; frontier contains eligibility, selection, coverage, TP/FP, precision/recall, review remainder, and conflict/incomplete abstention; no threshold selected or promoted
+- verification: focused Step18 integrity `14 passed`; integration `33 passed, 2 skipped`; full regression and validators required before final handoff
+- current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; Step19 not started

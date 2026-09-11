@@ -63,3 +63,15 @@ Valentine and Splink remain `INSUFFICIENT_EVIDENCE`, so schema candidate IDs, Co
 The real split/leakage audit passes for disjoint groups, truth-cluster separation, and case-pair role consistency. Executed negative controls include truth shuffle, input-order invariance, provider-output mutation, and exact population binding. The repeated relationship provider execution is recorded as `FAIL` for normalized-output reproducibility (`9eb042...` versus `818d297...`); this remains a blocker rather than being hidden. Bootstrap covers all 7 positive TEST scenario groups with 1,000 replicates and interval `[0.4286, 1.0]`. Calibration is relationship-Fusion-only and insufficient; the threshold frontier is studied only, with no selected threshold and no runtime-policy mutation.
 
 Formal G5 remains `PENDING`, `inference_validity_mode=UNVALIDATED`, and automation `NOT_AUTHORIZED`. Step19 was not started.
+
+## Step18 Runtime and Reproducibility Continuation
+
+This continuation repaired the Step18 harness only. Step19 was not started. The provisioning contract now names each package and expected version explicitly, installs only `valentine==1.0.0` or `splink==4.0.17` plus bounded provider dependencies, verifies metadata and import success inside the dedicated interpreter, and never installs the project editable. The matching and ER runners use project-owned fixtures and do not import integration tests or create optional-provider sentinel directories.
+
+Both persistent project-local runtimes were attempted with child-local `TEMP`, `TMP`, `PIP_CACHE_DIR`, and `PYTHONNOUSERSITE=1`. Both installs failed with the recorded category `NETWORK_TIMEOUT` after PyPI read timeouts; no provider output was fabricated. The optional integration contract now behaves correctly in a clean environment: `33 passed, 2 skipped`, with Valentine and Splink skipped because their official runtimes are unavailable.
+
+The executed Desbordante relationship provider was run twice on clean equivalent inputs. Exact output bytes differed (`9996f616...` versus `d3c224cd...`), while the semantic inference fingerprint and task metrics matched (`e63a5fb0...`), so semantic reproducibility is `PASS` and byte equality is correctly reported as `FALSE`. Only documented volatile envelope fields are excluded from the semantic fingerprint; provider artifacts were not rewritten.
+
+The current TEST relationship and Fusion metrics are unchanged: candidate recall `5/7`, precision `5/17`, F1 `0.4167`; Fusion AP `0.5277`, MRR `0.6250`, Recall@1/@3 `0.5000/0.7500`, and NDCG@1/@3 `0.5000/0.6250`. The threshold frontier contains eligible decisions, selected count, coverage, TP, FP, precision, recall, review remainder, and conflict/incomplete abstention. Calibration reasons are explicit: one independent group, insufficient score variation, and missing class. No threshold was selected or promoted.
+
+Formal G5 remains `PENDING`, `inference_validity_mode=UNVALIDATED`, and automation `NOT_AUTHORIZED` because required Valentine/Splink task outputs remain unavailable. G4/G4A remain PASS. Step19 was not started.

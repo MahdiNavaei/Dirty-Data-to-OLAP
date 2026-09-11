@@ -289,13 +289,22 @@ def main() -> int:
             baselines["ind_inclusion_coverage"].extend(dep.coverage_ratio for dep in result.inclusion_dependencies)
     _write("relationship/baselines.json", baselines)
     cal_scores = [item["score"] for item in calibration["scores"]]
-    calibration_status = {"split":"CALIBRATION","task":"RELATIONSHIP_FUSION","status":"SUFFICIENT" if calibration["independent_group_count"] >= 2 and len(set(cal_scores)) >= 2 else "INSUFFICIENT_CALIBRATION_DATA","independent_group_count":calibration["independent_group_count"],"score_observation_count":calibration["score_observation_count"],"reasons":[] if calibration["independent_group_count"] >= 2 and len(set(cal_scores)) >= 2 else ["INSUFFICIENT_SCORE_VARIATION"]}
+    truth_by_query = {row["query_id"]: row for row in rel_truth["labels"]}
+    calibration_positive_count = sum(row["expected"] == "MATCH" for row in truth_by_query.values() if row["scenario_group_id"] in calibration_groups)
+    calibration_reasons = []
+    if calibration["independent_group_count"] < 2:
+        calibration_reasons.append("ONLY_ONE_INDEPENDENT_RELATIONSHIP_CALIBRATION_GROUP" if calibration["independent_group_count"] == 1 else "NO_INDEPENDENT_RELATIONSHIP_CALIBRATION_GROUP")
+    if len(set(cal_scores)) < 2:
+        calibration_reasons.append("INSUFFICIENT_SCORE_VARIATION")
+    if calibration_positive_count == 0 or calibration_positive_count == len([row for row in truth_by_query.values() if row["scenario_group_id"] in calibration_groups]):
+        calibration_reasons.append("MISSING_CLASS")
+    calibration_status = {"split":"CALIBRATION","task":"RELATIONSHIP_FUSION","status":"SUFFICIENT" if not calibration_reasons else "INSUFFICIENT_CALIBRATION_DATA","independent_group_count":calibration["independent_group_count"],"score_observation_count":calibration["score_observation_count"],"reasons":calibration_reasons}
     points = []
     for threshold in sorted({0.0, 0.5, 1.0, *[float(score) for score in cal_scores]}, reverse=True):
         selected = [row for row in calibration["scores"] if float(row["score"]) >= threshold]
-        points.append({"threshold":threshold,"eligible_decisions":len(calibration["scores"]),"coverage":_safe_ratio(len(selected),len(calibration["scores"]),"NO_CALIBRATION_DECISIONS").model_dump(mode="json"),"selected_count":len(selected),"review_remainder":len(calibration["scores"])-len(selected),"conflict_or_incomplete_abstention":sum(row["decision"]["decision_state"] != "REVIEW_REQUIRED" for row in selected)})
+        true_selected = [row for row in selected if truth_by_query.get(row["query_id"], {}).get("expected") == "MATCH" and _endpoint(row["decision"]) == _truth_endpoint(truth_by_query[row["query_id"]])]
+        points.append({"threshold":threshold,"eligible_decisions":len(calibration["scores"]),"selected_count":len(selected),"coverage":_safe_ratio(len(selected),len(calibration["scores"]),"NO_CALIBRATION_DECISIONS").model_dump(mode="json"),"tp":len(true_selected),"fp":len(selected)-len(true_selected),"precision":_safe_ratio(len(true_selected),len(selected),"NO_SELECTED_CALIBRATION_DECISIONS").model_dump(mode="json"),"recall":_safe_ratio(len(true_selected),calibration_positive_count,"NO_CALIBRATION_POSITIVES").model_dump(mode="json"),"review_remainder":len(calibration["scores"])-len(selected),"conflict_incomplete_abstention":sum(row["decision"]["decision_state"] == "INCOMPLETE_REQUIRED_EVIDENCE" or row["decision"]["confidence_band"] == "CONFLICTED" for row in selected)})
     _write("calibration/sufficiency.json", calibration_status); _write("thresholds/frontier.json", {"split":"CALIBRATION","status":"STUDIED_ONLY" if points else "INSUFFICIENT_EVIDENCE","points":points,"selected_threshold":None,"selection_reason":"NO_PRODUCT_APPROVED_AUTOMATION_TARGET","runtime_policy_mutated":False})
-    truth_by_query = {row["query_id"]: row for row in rel_truth["labels"]}
     positive_test_groups = {row["scenario_group_id"] for row in rel_truth["labels"] if row["scenario_group_id"] in test_groups and row["expected"] == "MATCH"}
     grouped_hits: dict[str, list[int]] = {group: [0] for group in positive_test_groups}
     for query_id, rows in rel_queries.items():
