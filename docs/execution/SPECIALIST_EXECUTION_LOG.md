@@ -1139,3 +1139,17 @@ handoff_to:
 - calibration_thresholds: explicit insufficiency reasons recorded; frontier contains eligibility, selection, coverage, TP/FP, precision/recall, review remainder, and conflict/incomplete abstention; no threshold selected or promoted
 - verification: focused Step18 integrity `14 passed`; integration `33 passed, 2 skipped`; full regression and validators required before final handoff
 - current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; Step19 not started
+
+## Final Step18 Cupid + Splink + Joint Schema Fusion Closure
+
+- execution_step: `18` continuation only; starting HEAD `c03c2e503fab3e8b281b72b39a7ad1ad4c1d204b`; Step19 implementation was not started; preserved untracked `tests/quality_unit_artifacts/` untouched
+- content_commit_sha: `00f7d98d09ff0d9190c0a678c7436fb441f070ef` (`fix: complete Step18 matcher and ER evaluation`)
+- offline_resources: local wheelhouse only with `--no-index --find-links`; NLTK `3.10.3`; project-local `step18-nltk-data`; `punkt_tab`, `stopwords`, `wordnet`, and `omw-1.4` present and hashed; global NLTK search disabled
+- valentine: `1.0.0` executed all 11 frozen schema groups; Coma `11/11 COMPLETE`; Cupid `11/11 COMPLETE`; independent family ranking retained
+- schema_joint: candidate generation from the combined `item["result"]`; TEST `5` candidates, `3` true, `2` false, precision `0.6000`, recall `1.0000`; one Fusion request per scenario; `5` decisions, AP `0.4778`, candidate-conditional precision/recall/F1 `0.6000/1.0000/0.7500`, no failures; both `matcher:coma:rank` and `matcher:cupid:rank` present in joint evidence
+- schema_required_producers: actual ProfileResult, QualityResult, and DependencyResult results `22/22/22`, all COMPLETE and bound per schema source
+- splink: `4.0.17` COMPLETE; real `LINK_AND_DEDUPE` over 24 records including same-source `crm-r9/crm-r10`; `cmp-name`, `cmp-email`, `cmp-phone`; complementary EM rules `block-email` and `block-phone`; no TEST truth labels or hand-authored parameters
+- entity_evaluation: TEST universe `10` records and `45` defined TN pairs; TP `0`, FP `0`, FN `8`; precision undefined with no strong links; recall/F1 `0.0000`; false merges `0`; contaminated clusters `0`; false splits `0`; review edges `5`; r4/r5/r6 hard negatives preserved
+- controls: truth shuffle, input-order, provider/schema/entity mutation, exact population binding, leakage audit, and semantic reproducibility PASS; unequal volatile artifact bytes retained separately
+- verification: unit `127 passed`; contract `7 passed`; integration `33 passed, 2 skipped`; architecture `9 passed`; security `24 passed`; full regression `200 passed, 2 skipped`; compileall, diff check, and all validators PASS
+- state: formal `G5_INFERENCE_VALIDITY=PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; automation=`NOT_AUTHORIZED`; selected threshold=`NONE`; `last_completed_step=18`; `current_step=19`; current_role=`canonical_model_engineer`; Step19 implementation not started

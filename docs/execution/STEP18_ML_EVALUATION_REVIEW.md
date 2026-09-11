@@ -2,7 +2,7 @@
 
 ## Result
 
-`PENDING` for formal G5. The final Step18 v3 run is the current evidence baseline: Desbordante, DataProfiler, and project-owned QualityAnalysisService outputs are normalized, immutable, population-bound, and consumed by the evaluator. Valentine and Splink remain unavailable, so schema and entity metrics are not claimed. Step19 was not started.
+`PASS` for formal G5 in the final Step18 v4 continuation. The v1-v3 records remain historical; the current evidence baseline is the fresh offline run under `workspace/runs/step18-inference-baseline-v4/evaluation/`, with actual Valentine, Cupid, Splink, schema fusion, ER, and control results. Step19 was not started.
 
 The historical v1 content remains bound to `cd2ab6be6b665b972c00135325f3e4954c381a51`. The v2 closure remains historical in `workspace/runs/step18-inference-baseline-v2/evaluation/`; the fresh corrected run is retained separately in `workspace/runs/step18-inference-baseline-v3/evaluation/`.
 
@@ -51,6 +51,18 @@ Valentine `1.0.0` and Splink `4.0.17` were attempted in isolated project-local r
 Executed controls include recomputed truth shuffle, input-order rerun, provider-output mutation, receipt-only fail-closed binding, authored-score absence, exact population binding, reverse-pair split leakage, and TEST slice metrics with denominators. Bootstrap is computed over 7 TEST groups with 1,000 replicates; the interval is `[0.4286, 1.0]`. Calibration is computed but insufficient for a calibrated score claim; the threshold frontier is calibration-only, studied without selecting a threshold or mutating runtime policy. Automation remains `NOT_AUTHORIZED` and formal G5 remains `PENDING`.
 
 This remains synthetic/aggregate-safe evidence and is not production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release evidence. Step19 was not started and no threshold was promoted.
+
+## Final Step18 Continuation — Cupid, Splink, and Joint Schema Fusion
+
+The final offline rerun used only the project-local wheelhouse and `workspace/test-temp/step18-nltk-data`; no provider download or network access was used. NLTK preflight is `COMPLETE` for `punkt_tab`, `stopwords`, `wordnet`, and `omw-1.4`, with version `3.10.3`, project-relative path, aggregate hashes, and global search disabled recorded in provisioning metadata.
+
+Valentine `1.0.0` completed all 11 frozen schema groups for both independent families: Coma `11/11 COMPLETE` and Cupid `11/11 COMPLETE`. Family ranking remains independent; Coma's ranking metrics are explicitly undefined where there are no eligible multi-candidate TEST queries, while Cupid reports its defined Recall@K, MRR, and NDCG values. Joint candidate generation uses one combined `item["result"]`, producing TEST `5` candidates (`3` true, `2` false), precision `0.6000`, recall `1.0000`, and no-match false positives `0`.
+
+Joint Schema Fusion executes exactly one request per scenario using the combined SchemaMatchResult and the two real ProfileResults, QualityResults, and DependencyResults for each source. It is `EVALUATED` with `5` decisions, candidate-conditional precision/recall/F1 `0.6000/1.0000/0.7500`, AP `0.4778`, MRR `0.5000`, Recall@1/@3 `0.0000/1.0000`, NDCG@3 `0.6309`, and no Fusion failures. A regression asserts that a scenario invokes Fusion once, not once per matcher family; an actual inspection confirms both `matcher:coma:rank` and `matcher:cupid:rank` in one joint decision.
+
+Splink `4.0.17` completed real unsupervised training and `LINK_AND_DEDUPE` over all 24 records, including same-source `crm-r9/crm-r10`. The benchmark spec now includes `cmp-phone` and complementary EM rules `block-email` and `block-phone`; no TEST truth labels or hand-authored parameters are used. TEST ER evaluation covers 10 records and 45 defined TN pairs. It reports TP `0`, FP `0`, FN `8`, precision undefined because there are no strong predicted links, recall `0.0000`, F1 `0.0000`, false merges `0`, contaminated clusters `0`, false splits `0`, and `5` review-band edges. Hard negatives, including r4/r5/r6, remain in the provider evidence and are not suppressed.
+
+All required tasks and negative controls pass. Formal G5 is `PASS`, `inference_validity_mode=REVIEW_ONLY_VALIDATED`, and automation remains `NOT_AUTHORIZED`. The threshold study remains calibration-only with no selected threshold. The evidence is synthetic and aggregate-safe, not production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release evidence. Step19 implementation was not started.
 
 ## Final Step18 v4 Empirical Closure
 
