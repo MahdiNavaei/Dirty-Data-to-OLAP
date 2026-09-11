@@ -2,6 +2,8 @@
 
 Status: `PASS`
 
+The earlier v4 PASS is a superseded provisional record. The current closure is v5 under `workspace/runs/step18-inference-baseline-v5/evaluation/`; v4 is retained for audit history and is not accepted as the current ER metric evidence.
+
 The final Step18 v3 empirical closure supersedes the v1 quality claim and preserves v2 as historical evidence. v3 binds normalized Desbordante, Profiling, and Quality outputs to exact scenario populations and consumes them in TEST evaluation. Valentine and Splink were attempted in isolated project-local runtimes but remain unavailable, so schema and entity metrics are not claimed.
 
 The final Step18 v4 continuation is the current evidence base. It preserves v1-v3, uses a fresh immutable run, and records actual relationship candidate and Fusion quality. Valentine and Splink provisioning failed in persistent local sandboxes with `NETWORK_TIMEOUT`; schema and entity outputs therefore remain unavailable. Relationship semantic reproducibility is `PASS` across two clean runs, while exact output-byte hashes are unequal and retained separately. This resolves the reproducibility harness defect but does not complete the missing provider tasks.
@@ -15,5 +17,7 @@ The offline continuation verifies both optional runtimes from the local wheelhou
 ## Final Step18 status
 
 The final offline continuation supplied the project-local NLTK resources and reran the real providers. Valentine `1.0.0` is complete for Coma and Cupid (`11/11` each); Splink `4.0.17` is complete and fully trained with phone comparison plus complementary email/phone EM blocking. Joint schema candidate generation and one-call-per-scenario Schema Fusion use the combined result and the real `22/22/22` producer estate. All required task completion, negative controls, population binding, leakage audit, and semantic reproducibility checks pass.
+
+The corrected v5 closure additionally fixes ER accounting and project clustering policy. The TEST universe is 10 records and 45 pairs, with 8 positive and 37 negative pairs; classification reconciles to 45. Complete-partition false-split and truth-cluster completeness metrics are computed independently of explicit-cluster purity. Final clusters honor strong/review policy bands and exclude below-threshold edges. Relationship, schema, and ER truth-shuffle, input-order, and provider-mutation controls are task-scoped and all pass.
 
 Formal G5 is `PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; `automation_recommendation=NOT_AUTHORIZED`; and no automation threshold was selected. The TEST evidence remains synthetic and aggregate-safe. It does not approve production, temporal generalization, human acceptance, canonical identity, repair execution, deployment, or release. Step19 implementation was not started.

@@ -1153,3 +1153,16 @@ handoff_to:
 - controls: truth shuffle, input-order, provider/schema/entity mutation, exact population binding, leakage audit, and semantic reproducibility PASS; unequal volatile artifact bytes retained separately
 - verification: unit `127 passed`; contract `7 passed`; integration `33 passed, 2 skipped`; architecture `9 passed`; security `24 passed`; full regression `200 passed, 2 skipped`; compileall, diff check, and all validators PASS
 - state: formal `G5_INFERENCE_VALIDITY=PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; automation=`NOT_AUTHORIZED`; selected threshold=`NONE`; `last_completed_step=18`; `current_step=19`; current_role=`canonical_model_engineer`; Step19 implementation not started
+
+## POST-STEP18 G5 ER Metric and Cluster Policy Integrity Closure
+
+- execution_step: `18` surgical repair only; starting HEAD `6f7bd299ee31a6020759b0dad6113dd37b0697be`; Step19 implementation was not started; preserved untracked `tests/quality_unit_artifacts/` untouched
+- supersession: v4 G5 PASS was provisional and is superseded by corrected v5 ER accounting; v4 artifacts remain historical and were not overwritten
+- current_run: `workspace/runs/step18-inference-baseline-v5/evaluation/`; protocol `step18-evaluation-protocol-v5`; unchanged relationship/schema evidence reused only through immutable bindings; Valentine/Splink rerun offline
+- providers: all 8 required components `EXECUTED`; Valentine `1.0.0` Coma/Cupid `11/11`; Splink `4.0.17` trained over `24` `LINK_AND_DEDUPE` records with `cmp-name/cmp-email/cmp-phone` and `block-email/block-phone`
+- pair_accounting: TEST `10` records, `45` evaluated pairs, `8` truth-positive, `37` truth-negative; classification `TP+FP+FN+TN=45` (`0+0+8+37`); no `defined_tn_universe` semantics
+- cluster_policy: final project clusters are derived from authorized strong edges, optionally review edges; below-threshold edges never connect; native Splink clusters are diagnostic only; implicit singletons complete the TEST partition
+- er_quality: false-split and truth-cluster completeness are computed from the complete partition; explicit predicted purity is separately undefined with `NO_PREDICTED_CLUSTERS` when no explicit clusters exist; ER cluster evaluation requires partition validation, not non-null purity
+- controls: relationship/schema/entity truth shuffle, input-order, and provider-mutation controls all `PASS`; no `NOT_RUN` on G5 PASS; threshold `NONE`; no TEST-driven threshold/model tuning
+- verification: focused v5 integrity tests `10 passed`; v5 behavioral validator PASS; full regression, compileall, diff check, and all validators required before handoff
+- state: formal `G5_INFERENCE_VALIDITY=PASS`; `inference_validity_mode=REVIEW_ONLY_VALIDATED`; automation=`NOT_AUTHORIZED`; `last_completed_step=18`; `current_step=19`; current_role=`canonical_model_engineer`; Step19 not started

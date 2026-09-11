@@ -2,6 +2,8 @@
 
 Status: `PASS`
 
+The v4 PASS was provisional and is superseded by the corrected v5 closure. v4 remains retained as historical evidence; the authoritative current report is `workspace/runs/step18-inference-baseline-v5/evaluation/` and protocol `step18-evaluation-protocol-v5`.
+
 Current baseline: `step18-inference-baseline-v4`; protocol: `step18-evaluation-protocol-v4`; seed: `20260911`. The v1, v2, and v3 runs remain historical and are retained separately. Step19 was not started.
 
 The v3 chain is shared provider fixture -> real adapter or explicit unavailable receipt -> normalized project-owned output -> immutable content-hashed receipt -> exact population binding -> isolated truth join -> TEST metric. Development is diagnostic-only; calibration is threshold/calibration-only.
@@ -37,3 +39,11 @@ Joint Schema Fusion uses one combined SchemaMatchResult per scenario and the rea
 Splink `4.0.17` is `COMPLETE` and trained with `cmp-name`, `cmp-email`, `cmp-phone` plus EM rules `block-email` and `block-phone`, over the full 24-record `LINK_AND_DEDUPE` population. ER TEST metrics cover 10 records and 45 TN pairs: TP `0`, FP `0`, FN `8`, recall/F1 `0.0000`, precision undefined for no strong links, false merges `0`, contaminated clusters `0`, false splits `0`, and `5` review edges. Mutation, truth-shuffle, input-order, population, leakage, and semantic reproducibility controls pass.
 
 Final state is formal G5 `PASS`, `REVIEW_ONLY_VALIDATED`, automation `NOT_AUTHORIZED`, and selected threshold `NONE`. This remains synthetic aggregate-safe evidence and is not a production or temporal claim. Step19 implementation was not started.
+
+## Corrected v5 ER closure
+
+The v5 repair preserves the frozen truth and split estate and reuses unchanged relationship/schema evidence where immutable bindings permit it. Valentine `1.0.0` and Splink `4.0.17` were re-executed offline with the same provider settings. All eight required providers are `EXECUTED` and bound.
+
+ER TEST accounting is now explicit: 10 evaluated records yield 45 evaluated pairs, with 8 truth-positive and 37 truth-negative pairs; `TP+FP+FN+TN=45` (`0+0+8+37`). Final project clusters are built only from authorized project edge bands, so review edges do not connect when `include_review_edges=false` and below-threshold edges never connect. Native Splink clusters are diagnostic only. The complete partition contains implicit singletons; false splits are computed from that partition and truth-cluster completeness remains defined even when explicit predicted-cluster purity is legitimately undefined.
+
+Evaluation-wide relationship, schema, and entity truth-shuffle, input-order, and provider-mutation controls all pass. No TEST-driven tuning was performed. Formal G5 is `PASS` / `REVIEW_ONLY_VALIDATED`; automation is `NOT_AUTHORIZED`; no threshold was selected; Step19 implementation was not started.
