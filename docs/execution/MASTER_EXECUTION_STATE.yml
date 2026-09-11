@@ -32,7 +32,7 @@ specialist_execution:
   current_specialist: "Step18 - ML Evaluation Engineer"
   last_completed_step: 17
   last_completed_role: "evidence_fusion_engineer"
-  last_completed_specialist: "Step18 - ML Evaluation Engineer"
+  last_completed_specialist: "Step17 - Evidence Fusion Engineer"
   last_completed_content_commit: "1c5004f7226ab291b90f43c3175ca37842fd7407"
   next_step: "Step18 - ML Evaluation Engineer"
 gates:
@@ -62,7 +62,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "ea95e8fe2a37a555900a275223632af4551a0254"
+  last_verified_commit: "7571f728e561c087d64340b1c4414a3c28e582b2"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   commit_recording_note: "last_verified_commit identifies the latest verified content commit, not a later metadata-only commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content commit."
 filesystem_boundary:

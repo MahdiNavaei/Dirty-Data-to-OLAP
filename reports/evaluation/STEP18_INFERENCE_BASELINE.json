@@ -1,6 +1,6 @@
 {
   "report_id": "step18-inference-baseline-v2",
-  "git_content_commit": "ea95e8fe2a37a555900a275223632af4551a0254",
+  "git_content_commit": "7571f728e561c087d64340b1c4414a3c28e582b2",
   "dataset_id": "step18-inference-quality-v2",
   "protocol_version": "step18-evaluation-protocol-v2",
   "formal_gate": "PENDING",
@@ -12,15 +12,17 @@
   "threshold_study_status": "NO_AUTOMATION_THRESHOLD_SELECTED",
   "provider_status": {
     "dependency_discovery": "EXECUTED",
+    "profiling": "EXECUTED",
+    "quality": "EXECUTED",
     "schema_matching": "INSUFFICIENT_EVIDENCE",
     "entity_resolution": "INSUFFICIENT_EVIDENCE"
   },
   "metrics": {
     "relationship_candidate_generation": {"candidate_recall": 0.15384615384615385, "truth_query_count": 13, "generated_true_candidate_count": 2, "generated_false_candidate_count": 9, "missing_candidate_query_count": 11},
-    "relationship_fusion": {"status": "INSUFFICIENT_EVIDENCE"},
+    "relationship_fusion": {"status": "EVALUATED", "decision_count": 11, "failures": []},
     "schema_matching": {"status": "INSUFFICIENT_EVIDENCE", "no_match_false_positive_count": 0},
     "entity_resolution": {"status": "INSUFFICIENT_EVIDENCE"}
   },
-  "limitations": ["v1 provider smoke metrics were not provider-bound and are superseded", "Valentine and Splink v2 outputs unavailable", "Fusion ProfileResult and QualityResult artifacts unavailable", "no automation or canonicalization"],
+  "limitations": ["v1 provider smoke metrics were not provider-bound and are superseded", "Valentine and Splink v2 outputs unavailable", "schema and entity metrics remain unclaimed", "no automation or canonicalization"],
   "step19_started": false
 }

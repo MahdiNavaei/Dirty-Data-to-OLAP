@@ -1069,4 +1069,15 @@ handoff_to:
 - verification: v2 binding validator `19` checks PASS; binding/unit regression `5 passed`; Desbordante v2 provider `COMPLETE`; Valentine/Splink execution blocked by unavailable pinned runtimes
 - state: G4/G4A remain PASS; G5-G15 remain PENDING; no automation, calibration, canonical identity, ReviewDecision, repair execution or release claim
 - concrete_missing_requirement: execute and bind v2 Valentine and Splink normalized outputs over the frozen scenario/truth populations, and produce actual ProfileResult and QualityResult artifacts for Fusion before G5 can move to PASS
+
+## Post-Step18 Empirical Integrity Closure Amendment
+
+- scope: Step18 only; Step19 not started
+- content_commit: `7571f72` (`fix: bind Step18 fusion producer artifacts`)
+- repaired: executed real DataProfiler `0.13.4` Profiling and project-owned QualityAnalysisService over all 13 frozen relationship scenarios; persisted normalized ProfileResult and QualityResult artifacts with hashed receipts; loaded both into actual EvidenceFusionService calls
+- fusion: 11 provider-generated relationship decisions, no Fusion failures; relationship baselines now report `EVALUATED` from actual DependencyResult/ProfileResult/QualityResult artifacts
+- regression: fixed `_profile_items` to serialize `ColumnProfile.rows_observed` without reading the table-only `rows_profiled` field; added a real ColumnProfile Fusion regression
+- current_provider_status: Desbordante=`EXECUTED`, Profiling=`EXECUTED`, Quality=`EXECUTED`, Valentine=`INSUFFICIENT_EVIDENCE`, Splink=`INSUFFICIENT_EVIDENCE`
+- current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`
+- concrete_missing_requirement: execute and bind v2 Valentine and Splink normalized outputs over the frozen schema/entity truth populations; no G5 PASS or Step19 transition is authorized by this amendment
 - handoff: remains `Step18 - ML Evaluation Engineer`; Step19 implementation not started
