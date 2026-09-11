@@ -91,10 +91,6 @@ def main() -> int:
     for component, rel in (("dependency_discovery","dependency_discovery/provider_receipt.json"),("schema_matching","schema_matching/provider_receipt.json"),("entity_resolution","entity_resolution/provider_receipt.json"),("profiling","profiling_quality/profiling_receipt.json"),("quality","profiling_quality/quality_receipt.json")):
         expected = {"manifest": _sha(rel_manifest) if component in {"dependency_discovery", "profiling", "quality"} else _sha(schema_manifest) if component == "schema_matching" else _sha(entity_fixture)}
         receipt_path = RUN / rel
-        if receipt_path.is_file():
-            receipt = _load_json(receipt_path)
-            receipt.update({"content_commit": content_commit, "protocol_hash": protocol_hash, "dataset_manifest_hash": dataset.content_hash, "truth_artifact_hash": dataset.truth_artifact_hashes["entity" if component == "entity_resolution" else "schema" if component == "schema_matching" else "relationship"], "split_hash": split_hash, "scenario_fixture_hashes": expected})
-            receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         bindings[component] = bind_provider_output(root=RUN, component=component, receipt_path=RUN / rel, protocol_hash=protocol_hash, dataset_manifest_hash=dataset.content_hash, truth_artifact_hash=dataset.truth_artifact_hashes["entity" if component == "entity_resolution" else "schema" if component == "schema_matching" else "relationship"], split_hash=split_hash, content_commit=content_commit, expected_fixture_hashes=expected)
 
     provider_payloads: dict[str, Any] = {}

@@ -1,0 +1,22 @@
+{
+  "schema_version":"3",
+  "truth_id":"step18-relationship-topology-truth-v3",
+  "truth_kind":"RELATIONSHIP",
+  "provenance":"domain-reviewed Step18 topology labels; provider candidate IDs are never truth identity",
+  "labels":[
+    {"query_id":"rq-clean","scenario_group_id":"rel-clean","from_table_id":"orders-rel-clean","from_column_ids":["orders-rel-clean-customer_id"],"to_table_id":"customers-rel-clean","to_column_ids":["customers-rel-clean-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-orphan-005","scenario_group_id":"rel-orphan-005","from_table_id":"orders-rel-orphan-005","from_column_ids":["orders-rel-orphan-005-customer_id"],"to_table_id":"customers-rel-orphan-005","to_column_ids":["customers-rel-orphan-005-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-orphan-02","scenario_group_id":"rel-orphan-02","from_table_id":"orders-rel-orphan-02","from_column_ids":["orders-rel-orphan-02-customer_id"],"to_table_id":"customers-rel-orphan-02","to_column_ids":["customers-rel-orphan-02-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-orphan-10","scenario_group_id":"rel-orphan-10","from_table_id":"orders-rel-orphan-10","from_column_ids":["orders-rel-orphan-10-customer_id"],"to_table_id":"customers-rel-orphan-10","to_column_ids":["customers-rel-orphan-10-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-duplicate","scenario_group_id":"rel-duplicate-target","from_table_id":"orders-rel-duplicate-target","from_column_ids":["orders-rel-duplicate-target-customer_id"],"to_table_id":"customers-rel-duplicate-target","to_column_ids":["customers-rel-duplicate-target-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-null-heavy","scenario_group_id":"rel-null-heavy","from_table_id":"orders-rel-null-heavy","from_column_ids":["orders-rel-null-heavy-customer_id"],"to_table_id":"customers-rel-null-heavy","to_column_ids":["customers-rel-null-heavy-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-type-trap","scenario_group_id":"rel-type-trap","from_table_id":"orders-rel-type-trap","from_column_ids":["orders-rel-type-trap-customer_id"],"to_table_id":"customers-rel-type-trap","to_column_ids":["customers-rel-type-trap-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-low-cardinality","scenario_group_id":"rel-low-cardinality","from_table_id":"orders-rel-low-cardinality","from_column_ids":["orders-rel-low-cardinality-customer_id"],"to_table_id":"customers-rel-low-cardinality","to_column_ids":["customers-rel-low-cardinality-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-same-domain","scenario_group_id":"rel-same-domain","from_table_id":"orders-rel-same-domain","from_column_ids":["orders-rel-same-domain-customer_id"],"to_table_id":"customers-rel-same-domain","to_column_ids":["customers-rel-same-domain-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-composite","scenario_group_id":"rel-composite","from_table_id":"orders-rel-composite","from_column_ids":["orders-rel-composite-customer_id","orders-rel-composite-tenant_id"],"to_table_id":"customers-rel-composite","to_column_ids":["customers-rel-composite-customer_id","customers-rel-composite-tenant_id"],"expected":"MATCH"},
+    {"query_id":"rq-partial-composite","scenario_group_id":"rel-partial-composite","from_table_id":"orders-rel-partial-composite","from_column_ids":["orders-rel-partial-composite-customer_id","orders-rel-partial-composite-tenant_id"],"to_table_id":"customers-rel-partial-composite","to_column_ids":["customers-rel-partial-composite-customer_id","customers-rel-partial-composite-tenant_id"],"expected":"MATCH"},
+    {"query_id":"rq-missing","scenario_group_id":"rel-missing-candidate","from_table_id":"orders-rel-missing-candidate","from_column_ids":["orders-rel-missing-candidate-customer_id"],"to_table_id":"customers-rel-missing-candidate","to_column_ids":["customers-rel-missing-candidate-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-multiple-target","scenario_group_id":"rel-multiple-target","from_table_id":"orders-rel-multiple-target","from_column_ids":["orders-rel-multiple-target-customer_id"],"to_table_id":"customers-rel-multiple-target","to_column_ids":["customers-rel-multiple-target-customer_id"],"expected":"MATCH"},
+    {"query_id":"rq-multiple-target-legacy","scenario_group_id":"rel-multiple-target","from_table_id":"orders-rel-multiple-target","from_column_ids":["orders-rel-multiple-target-customer_id"],"to_table_id":"legacy_customers-rel-multiple-target","to_column_ids":["legacy_customers-rel-multiple-target-customer_id"],"expected":"NO_MATCH"}
+  ]
+}

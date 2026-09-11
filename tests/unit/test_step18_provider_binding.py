@@ -15,7 +15,9 @@ def _write_bound_fixture(root: Path, *, include_output: bool) -> Path:
     if include_output:
         output.write_bytes(payload)
     receipt = run / "provider_receipt.json"
-    receipt.write_text(json.dumps({"output_artifact": "workspace/runs/step18-inference-baseline-v2/evaluation/normalized.json", "output_hash": hashlib.sha256(payload).hexdigest(), "scenario_fixture_hashes": {"manifest": "fixture"}, "execution_result": "COMPLETE"}), encoding="utf-8")
+    receipt_data = {"component": "dependency_discovery", "provider": "fixture", "version": "1", "adapter": "fixture", "output_artifact": "workspace/runs/step18-inference-baseline-v2/evaluation/normalized.json", "output_hash": hashlib.sha256(payload).hexdigest(), "scenario_fixture_hashes": {"manifest": "fixture"}, "population_fingerprint": "fixture-population", "scenario_group_ids": ["fixture"], "execution_result": "COMPLETE"}
+    receipt_data["receipt_content_hash"] = hashlib.sha256((json.dumps(receipt_data, sort_keys=True, separators=(",", ":")) + "\n").encode()).hexdigest()
+    receipt.write_text(json.dumps(receipt_data), encoding="utf-8")
     return receipt
 
 

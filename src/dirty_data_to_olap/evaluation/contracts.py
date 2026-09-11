@@ -246,6 +246,7 @@ class ProviderEvaluationBinding(_SourceModel):
     receipt_path: str
     output_path: str
     receipt_output_hash: str
+    receipt_content_hash: str = ""
     loaded_output_hash: str
     content_commit: str
     protocol_hash: str
@@ -257,6 +258,8 @@ class ProviderEvaluationBinding(_SourceModel):
     status: str
     loaded_for_metrics: bool = False
     population_match: bool = False
+    expected_population_fingerprint: str = ""
+    observed_population_fingerprint: str = ""
     failure_reasons: tuple[str, ...] = ()
 
     @model_validator(mode="after")

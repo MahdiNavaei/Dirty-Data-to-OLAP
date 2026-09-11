@@ -1,0 +1,19 @@
+{
+  "schema_version": "3",
+  "fixture_id": "step18-provider-relationship-scenarios-v3",
+  "scenarios": [
+    {"scenario_group_id":"rel-clean","task_id":"rq-clean","kind":"clean"},
+    {"scenario_group_id":"rel-orphan-005","task_id":"rq-orphan-005","kind":"orphan","orphan_rate":0.005,"row_count":200},
+    {"scenario_group_id":"rel-orphan-02","task_id":"rq-orphan-02","kind":"orphan","orphan_rate":0.02,"row_count":200},
+    {"scenario_group_id":"rel-orphan-10","task_id":"rq-orphan-10","kind":"orphan","orphan_rate":0.10,"row_count":200},
+    {"scenario_group_id":"rel-duplicate-target","task_id":"rq-duplicate","kind":"duplicate_target"},
+    {"scenario_group_id":"rel-null-heavy","task_id":"rq-null-heavy","kind":"null_heavy"},
+    {"scenario_group_id":"rel-type-trap","task_id":"rq-type-trap","kind":"type_mismatch"},
+    {"scenario_group_id":"rel-low-cardinality","task_id":"rq-low-cardinality","kind":"low_cardinality"},
+    {"scenario_group_id":"rel-same-domain","task_id":"rq-same-domain","kind":"same_domain"},
+    {"scenario_group_id":"rel-composite","task_id":"rq-composite","kind":"composite"},
+    {"scenario_group_id":"rel-partial-composite","task_id":"rq-partial-composite","kind":"partial_composite"},
+    {"scenario_group_id":"rel-missing-candidate","task_id":"rq-missing","kind":"missing_candidate"},
+    {"scenario_group_id":"rel-multiple-target","task_id":"rq-multiple-target","kind":"multiple_target"}
+  ]
+}

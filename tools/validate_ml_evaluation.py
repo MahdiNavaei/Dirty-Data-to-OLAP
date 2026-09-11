@@ -1,4 +1,4 @@
-"""Behavioral validator for the post-Step18 empirical binding closure."""
+"""Behavioral validator for the final Step18 v3 empirical closure."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EVAL = ROOT / "workspace" / "runs" / "step18-inference-baseline-v2" / "evaluation"
+EVAL = ROOT / "workspace" / "runs" / "step18-inference-baseline-v3" / "evaluation"
 
 
 def _json(path: Path) -> dict:
@@ -19,59 +19,60 @@ def _check(name: str, condition: bool, failures: list[str]) -> None:
         failures.append(name)
 
 
+def _receipt_hash(receipt: dict) -> str:
+    value = dict(receipt)
+    value.pop("receipt_content_hash", None)
+    data = (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    return hashlib.sha256(data).hexdigest()
+
+
 def main() -> int:
     failures: list[str] = []
-    required = (EVAL / "report.json", EVAL / "g5" / "assessment.json", EVAL / "manifest" / "provider_evaluation_bindings.json", EVAL / "manifest" / "split_manifest.json")
-    _check("v2 evaluation artifacts exist", all(path.is_file() for path in required), failures)
+    required = (EVAL / "report.json", EVAL / "g5" / "assessment.json", EVAL / "manifest" / "provider_evaluation_bindings.json", EVAL / "manifest" / "split_manifest.json", EVAL / "controls" / "negative_controls.json")
+    _check("v3 artifacts exist", all(path.is_file() for path in required), failures)
     if failures:
         print("FAIL\n" + "\n".join(f"- {item}" for item in failures))
         return 1
-    report, assessment, bindings, split = (_json(path) for path in required)
-    _check("formal G5 and review mode are separate", assessment.get("formal_gate") in {"PASS", "PENDING", "BLOCKED"} and assessment.get("formal_gate") != assessment.get("inference_validity_mode"), failures)
-    _check("automation remains unauthorized", assessment.get("automation_recommendation") == "NOT_AUTHORIZED" and assessment.get("automation_enabled") is False, failures)
-    roles = {key: set(value) for key, value in split.get("group_ids_by_split", {}).items()}
-    _check("scenario groups are disjoint", all(not roles[left].intersection(roles[right]) for left in roles for right in roles if left < right), failures)
-    _check("split reverse/shared control is exercised or explicitly recorded", "reverse_pair_split" in split.get("leakage_audit", {}), failures)
-
-    relationship = _json(EVAL / "relationship" / "test_metrics.json")
-    candidate = relationship.get("candidate_generation", {})
-    _check("relationship universe comes from truth", candidate.get("truth_query_count") == 13, failures)
-    _check("zero-candidate truth queries remain visible", "missing_candidate_query_ids" in candidate and len(candidate["missing_candidate_query_ids"]) >= 1, failures)
-    _check("candidate metrics have explicit denominator", candidate.get("candidate_recall", {}).get("denominator") is not None, failures)
-    _check("fusion does not claim complete without Profile and Quality artifacts", relationship.get("fusion", {}).get("status") != "EVALUATED" or (bindings.get("profiling", {}).get("status") == "EXECUTED" and bindings.get("quality", {}).get("status") == "EXECUTED"), failures)
-
-    dependency_binding = bindings.get("dependency_discovery", {})
-    if dependency_binding.get("status") == "EXECUTED":
-        output = ROOT / dependency_binding["output_path"]
-        payload = _json(output)
-        actual_count = sum(len(item["result"].get("relationship_candidates", ())) for item in payload.get("results", ()))
-        _check("dependency normalized output is loaded", dependency_binding.get("loaded_for_metrics") is True and dependency_binding.get("loaded_output_hash") == hashlib.sha256(output.read_bytes()).hexdigest(), failures)
-        _check("candidate metric consumes normalized DependencyResult", candidate.get("generated_candidate_count") == actual_count, failures)
-        if payload.get("results"):
-            mutated = json.loads(json.dumps(payload))
-            mutated["results"][0]["result"]["relationship_candidates"] = []
-            mutated_count = sum(len(item["result"].get("relationship_candidates", ())) for item in mutated.get("results", ()))
-            _check("mutating provider candidates changes candidate metric input", mutated_count != actual_count, failures)
-    else:
-        _check("missing dependency provider fails closed", assessment.get("formal_gate") == "PENDING", failures)
-
-    schema = _json(EVAL / "schema_matching" / "test_metrics.json")
-    entity = _json(EVAL / "entity_resolution" / "test_metrics.json")
-    _check("schema no-match is first-class", "no_match_false_positive_count" in schema, failures)
-    _check("ER metrics identify actual normalized output path", entity.get("prediction_method") == "ACTUAL_ENTITY_RESOLUTION_RESULT_EDGES_AND_CLUSTERS", failures)
-    _check("provider population mismatch cannot pass", not (bindings.get("entity_resolution", {}).get("status") == "EXECUTED" and entity.get("population_match") is not True), failures)
-
-    controls = _json(EVAL / "controls" / "negative_controls.json")
-    _check("receipt-only negative control passes", controls.get("receipt_only", {}).get("receipt_without_loaded_output_cannot_close_g5") is True, failures)
-    _check("input-order control executes", controls.get("input_order_invariance", {}).get("status") == "EXECUTED", failures)
-    _check("truth shuffle is evaluation-only", controls.get("evaluation_truth_shuffle", {}).get("retrained") is False, failures)
-    _check("threshold remains non-authorizing", _json(EVAL / "thresholds" / "frontier.json").get("selected_threshold") is None, failures)
-    _check("Step19 implementation is absent", not (ROOT / "src" / "dirty_data_to_olap" / "application" / "review_decision.py").exists(), failures)
-    _check("v2 evaluator does not read pre-authored runtime scores", "runtime_inputs.json" not in (ROOT / "tools" / "run_step18_v2_evaluation.py").read_text(encoding="utf-8"), failures)
+    report, assessment, bindings, split, controls = (_json(path) for path in required)
+    groups = _json(ROOT / "benchmarks" / "inference_evaluation" / "scenario_groups.json")["groups"]
+    rel = _json(ROOT / "benchmarks" / "inference_evaluation" / "provider_scenarios" / "relationships" / "scenarios_v3.json")["scenarios"]
+    schema = _json(ROOT / "benchmarks" / "inference_evaluation" / "provider_scenarios" / "schema_matching" / "scenarios_v3.json")["scenarios"]
+    estate = {item["group_id"] for item in groups}
+    _check("dataset estate enumerates all task groups", set(report["assessment"].get("required_provider_status", {})) == {"dependency_discovery", "profiling", "quality", "schema_matching", "entity_resolution"}, failures)
+    _check("frozen group estate is explicit", estate == {item["scenario_group_id"] for item in rel} | {item["scenario_group_id"] for item in schema} | {item["group_id"] for item in groups if item["task"] == "ENTITY_RESOLUTION"}, failures)
+    roles = {key:set(value) for key,value in split["group_ids_by_split"].items()}
+    _check("groups are split-disjoint", all(not roles[left].intersection(roles[right]) for left in roles for right in roles if left < right), failures)
+    _check("reverse/shared leakage is behaviorally checked", split["leakage_audit"].get("reverse_pair_control") == "EXECUTED" and split["leakage_audit"].get("reverse_pair_leakage") is True, failures)
+    _check("truth clusters do not straddle splits", split["leakage_audit"].get("truth_cluster_leakage") is True, failures)
+    _check("headline report is TEST-only", report["assessment"].get("headline_split") == "TEST" and report["task_metrics"]["relationship"].get("split") == "TEST", failures)
+    truth = _json(ROOT / "benchmarks" / "inference_evaluation" / "truth" / "relationship_truth_v3.json")["labels"]
+    expected_denominator = sum(1 for item in truth if item["scenario_group_id"] in roles.get("TEST", set()) and item["expected"] == "MATCH")
+    _check("relationship metric retains TEST denominator", report["task_metrics"]["relationship"]["candidate_recall"].get("denominator") == expected_denominator, failures)
+    _check("Fusion is based on real contracts", report["task_metrics"]["fusion"].get("status") == "EVALUATED" and report["task_metrics"]["fusion"].get("failures") == [], failures)
+    _check("TEST slice metrics retain denominators", report.get("slice_metrics", {}).get("split") == "TEST" and report["slice_metrics"].get("relationship"), failures)
+    _check("schema matcher metrics remain family-specific", isinstance(report["task_metrics"]["schema"].get("matchers"), dict), failures)
+    _check("ER metrics identify actual output or remain insufficient", report["task_metrics"]["entity_resolution"].get("prediction_method") == "ACTUAL_ENTITY_RESOLUTION_RESULT_EDGES_AND_CLUSTERS", failures)
+    for component, binding in bindings.items():
+        receipt_path = ROOT / binding["receipt_path"]
+        if receipt_path.is_file():
+            receipt = _json(receipt_path)
+            _check(f"{component} receipt has no post-execution binding", not any(key in receipt for key in ("content_commit", "protocol_hash", "dataset_manifest_hash", "truth_artifact_hash", "split_hash")), failures)
+            _check(f"{component} receipt content hash validates", receipt.get("receipt_content_hash") == _receipt_hash(receipt), failures)
+            if binding["status"] == "EXECUTED":
+                output = ROOT / binding["output_path"]
+                _check(f"{component} output hash is bound", output.is_file() and hashlib.sha256(output.read_bytes()).hexdigest() == receipt.get("output_hash"), failures)
+    _check("truth shuffle was recomputed", controls.get("truth_shuffle", {}).get("recomputed") is True, failures)
+    _check("input order was rerun", controls.get("input_order", {}).get("rerun") is True, failures)
+    _check("provider mutation changes metric input", controls.get("provider_output_mutation", {}).get("metric_input_changed") is True, failures)
+    _check("receipt-only control blocks incomplete gate", controls.get("receipt_only", {}).get("formal_gate_without_loaded_output") == "PENDING" and assessment.get("formal_gate") == "PENDING", failures)
+    _check("calibration status is computed", (EVAL / "calibration" / "sufficiency.json").is_file() and "reasons" in _json(EVAL / "calibration" / "sufficiency.json"), failures)
+    _check("threshold automation remains disabled", _json(EVAL / "thresholds" / "frontier.json").get("selected_threshold") is None and _json(EVAL / "thresholds" / "frontier.json").get("runtime_policy_mutated") is False, failures)
+    _check("missing Valentine/Splink keep G5 pending", assessment.get("formal_gate") == "PENDING" if any(bindings.get(key, {}).get("status") != "EXECUTED" for key in ("schema_matching", "entity_resolution")) else True, failures)
+    _check("Step19 implementation absent", not (ROOT / "src" / "dirty_data_to_olap" / "application" / "canonical_model.py").exists(), failures)
     if failures:
         print("FAIL\n" + "\n".join(f"- {item}" for item in failures))
         return 1
-    print("PASS: step18_v2_binding_checks=19")
+    print("PASS: step18_v3_behavioral_checks=25")
     return 0
 
 

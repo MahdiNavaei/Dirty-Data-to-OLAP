@@ -1081,3 +1081,19 @@ handoff_to:
 - current_gate: formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`
 - concrete_missing_requirement: execute and bind v2 Valentine and Splink normalized outputs over the frozen schema/entity truth populations; no G5 PASS or Step19 transition is authorized by this amendment
 - handoff: remains `Step18 - ML Evaluation Engineer`; Step19 implementation not started
+
+## Final Step18 G5 Empirical Closure
+
+- execution_step: `18` surgical closure only; Step19 implementation was not started
+- starting_head: `1ef3f7e013ea4e0133211a46aa5c26ced7a394eb`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- current_run: fresh `workspace/runs/step18-inference-baseline-v3/evaluation/`; v2 run and v2 manifests remain historical and were not overwritten
+- protocol: explicit 13 relationship, 11 schema, and 11 ER groups; TEST-only headline metrics; shared relationship generator; exact orphan rates; complete cluster-derived ER truth; order-safe composite endpoint identity; calibration-only threshold study
+- relationship_provider: Desbordante `2.4.1` `COMPLETE`; 13 scenarios executed; TEST candidate-generation recall `5/7 = 0.7143`; 17 candidates, 5 true, 12 false; missing positives `rq-orphan-10` and `rq-missing`
+- profiling_quality: DataProfiler `0.13.4` and project-owned QualityAnalysisService `COMPLETE` for all 13 scenarios; actual `DependencyResult`, `ProfileResult`, and `QualityResult` consumed by Fusion; 17 TEST decisions; zero Fusion failures
+- schema_provider: Valentine `1.0.0` isolated provisioning attempted; proxy refused and no matching distribution available; binding=`INSUFFICIENT_EVIDENCE`; no schema metric claimed and no Coma/Cupid family aggregation
+- entity_provider: Splink `4.0.17` isolated provisioning attempted; same retained failure; binding=`INSUFFICIENT_EVIDENCE`; no ER metric claimed and no heuristic substituted
+- receipts: separate execution receipt and evaluation binding; content hashes, output hashes, fixture hashes, and exact population fingerprints verified; missing or post-execution binding fields fail closed
+- controls: truth shuffle recomputed; input-order rerun; provider-output mutation changed metric input; receipt-only control remained pending; authored-score absence; exact population binding; reverse-pair split control; TEST slice denominators
+- uncertainty: bootstrap over 7 TEST groups with 1,000 replicates, interval `[0.4286, 1.0]`; calibration computed but insufficient score variation; threshold frontier `STUDIED_ONLY`, no threshold selected, no runtime policy mutation
+- verification: v3 behavioral validator `25` checks PASS; focused Step18 regression `28 passed`; full repository regression and all validators required before final handoff
+- state: G4/G4A remain PASS; formal `G5_INFERENCE_VALIDITY=PENDING`; `inference_validity_mode=UNVALIDATED`; automation=`NOT_AUTHORIZED`; current_step remains `18`; Step19 not started

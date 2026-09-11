@@ -53,7 +53,8 @@ def build_split_manifest(*, examples: Iterable[InferenceEvaluationExample], trut
     reverse_pair_groups = reverse_pair_groups or {}
     reverse_split = {pair: group_roles.get(group) for pair, group in reverse_pair_groups.items()}
     leakage["reverse_pair_split"] = reverse_split
-    leakage["reverse_pair_leakage"] = len({value for value in reverse_split.values() if value}) <= 1 if reverse_split else None
+    leakage["reverse_pair_pairs"] = [{"group": pair, "paired_group": group, "split": group_roles.get(pair), "paired_split": group_roles.get(group)} for pair, group in sorted(reverse_pair_groups.items())]
+    leakage["reverse_pair_leakage"] = all(item["split"] == item["paired_split"] for item in leakage["reverse_pair_pairs"]) if reverse_split else None
     leakage["reverse_pair_control"] = "EXECUTED" if reverse_split else "NOT_EXERCISED"
     return SplitManifest(
         split_id=f"step18-split-{seed}",

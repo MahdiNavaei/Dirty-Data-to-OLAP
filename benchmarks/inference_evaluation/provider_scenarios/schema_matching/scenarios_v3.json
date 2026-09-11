@@ -1,0 +1,19 @@
+{
+  "schema_version":"3",
+  "fixture_id":"step18-provider-schema-scenarios-v3",
+  "source_id":"crm-v3",
+  "target_source_id":"erp-v3",
+  "scenarios":[
+    {"scenario_group_id":"schema-renamed","source_columns":[{"name":"customer_code","type":"text"}],"target_columns":[{"name":"client_no","type":"text"}],"expected":"MATCH","case":"renamed_true"},
+    {"scenario_group_id":"schema-hard-negative","source_columns":[{"name":"status","type":"text","meaning":"lifecycle_status"}],"target_columns":[{"name":"status","type":"text","meaning":"shipment_status"}],"expected":"NO_MATCH","case":"same_name_different_meaning"},
+    {"scenario_group_id":"schema-same-semantics","source_columns":[{"name":"order_total","type":"numeric"}],"target_columns":[{"name":"gross_amount","type":"numeric"}],"expected":"MATCH","case":"different_name_same_meaning"},
+    {"scenario_group_id":"schema-type-trap","source_columns":[{"name":"customer_code","type":"text"}],"target_columns":[{"name":"customer_code","type":"numeric"}],"expected":"NO_MATCH","case":"type_incompatible"},
+    {"scenario_group_id":"schema-low-cardinality","source_columns":[{"name":"region_code","type":"text","cardinality":"low"}],"target_columns":[{"name":"region_code","type":"text","cardinality":"low"}],"expected":"NO_MATCH","case":"low_cardinality"},
+    {"scenario_group_id":"schema-multilingual","source_columns":[{"name":"نام_مشتری","type":"text"}],"target_columns":[{"name":"نام مشتری","type":"text"}],"expected":"MATCH","case":"multilingual"},
+    {"scenario_group_id":"schema-abbreviation","source_columns":[{"name":"event_code","type":"text"}],"target_columns":[{"name":"evt_cd","type":"text"}],"expected":"MATCH","case":"abbreviation"},
+    {"scenario_group_id":"schema-context","source_columns":[{"name":"id","type":"integer","table_context":"orders"}],"target_columns":[{"name":"id","type":"integer","table_context":"customers"}],"expected":"NO_MATCH","case":"table_context"},
+    {"scenario_group_id":"schema-no-match","source_columns":[{"name":"unmatched_date","type":"date"}],"target_columns":[{"name":"unmatched_label","type":"text"}],"expected":"NO_MATCH","case":"no_match"},
+    {"scenario_group_id":"schema-multiple-target","source_columns":[{"name":"customer_code","type":"text"}],"target_columns":[{"name":"client_no","type":"text"},{"name":"legacy_customer_code","type":"text"}],"expected":"MATCH","case":"multiple_target","correct_target":"client_no"},
+    {"scenario_group_id":"schema-disagreement","source_columns":[{"name":"account_ref","type":"text"}],"target_columns":[{"name":"account_id","type":"text"}],"expected":"MATCH","case":"matcher_disagreement"}
+  ]
+}

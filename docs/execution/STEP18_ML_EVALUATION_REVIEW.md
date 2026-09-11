@@ -2,9 +2,9 @@
 
 ## Result
 
-`PENDING` for formal G5. The post-Step18 closure identified that v1 real-provider receipts were capability evidence, not the source of the published quality metrics. The v2 path now fails closed and binds normalized output where available. Step19 was not started.
+`PENDING` for formal G5. The final Step18 v3 run is the current evidence baseline: Desbordante, DataProfiler, and project-owned QualityAnalysisService outputs are normalized, immutable, population-bound, and consumed by the evaluator. Valentine and Splink remain unavailable, so schema and entity metrics are not claimed. Step19 was not started.
 
-The historical v1 content remains bound to `cd2ab6be6b665b972c00135325f3e4954c381a51`. The corrected closure is recorded separately in the v2 run under `workspace/runs/step18-inference-baseline-v2/evaluation/`.
+The historical v1 content remains bound to `cd2ab6be6b665b972c00135325f3e4954c381a51`. The v2 closure remains historical in `workspace/runs/step18-inference-baseline-v2/evaluation/`; the fresh corrected run is retained separately in `workspace/runs/step18-inference-baseline-v3/evaluation/`.
 
 ## Post-Step18 Empirical Integrity Closure
 
@@ -39,3 +39,15 @@ The threshold frontier was studied on CALIBRATION only. No threshold was selecte
 ## Boundary
 
 This result is not production performance, temporal generalization, human acceptance, canonical identity, repair execution, release readiness, or authorization for automation. Step19 may decide whether additional truth and calibration work is warranted; Step19 implementation and `ReviewDecision` artifacts are intentionally absent.
+
+## Final Step18 v3 Empirical Closure
+
+The v3 run is a fresh, non-overwriting evaluation under `workspace/runs/step18-inference-baseline-v3/evaluation/`. It uses explicit relationship, schema, and entity group estates; TEST-only headline metrics; a shared relationship fixture generator; exact orphan-rate controls; complete cluster-derived ER truth; order-safe composite endpoint identity; and strict immutable provider receipts with exact population fingerprints.
+
+The current TEST relationship result is candidate-generation recall `5/7 = 0.7143`, with 17 generated candidates, 5 true candidates, 12 false candidates, and missing positive queries `rq-orphan-10` and `rq-missing`. Fusion is `EVALUATED` from actual DependencyResult, ProfileResult, and QualityResult artifacts, with 17 decisions and no Fusion failures. Profile and Quality executions completed for all 13 relationship scenarios.
+
+Valentine `1.0.0` and Splink `4.0.17` were attempted in isolated project-local runtimes and remain unavailable: package installation failed because the configured proxy was refused and no matching distribution was available. Their bindings are `INSUFFICIENT_EVIDENCE`; no schema or ER quality number is published. Coma and Cupid are represented as separate matcher families when provider output exists; no family aggregation is performed.
+
+Executed controls include recomputed truth shuffle, input-order rerun, provider-output mutation, receipt-only fail-closed binding, authored-score absence, exact population binding, reverse-pair split leakage, and TEST slice metrics with denominators. Bootstrap is computed over 7 TEST groups with 1,000 replicates; the interval is `[0.4286, 1.0]`. Calibration is computed but insufficient for a calibrated score claim; the threshold frontier is calibration-only, studied without selecting a threshold or mutating runtime policy. Automation remains `NOT_AUTHORIZED` and formal G5 remains `PENDING`.
+
+This remains synthetic/aggregate-safe evidence and is not production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release evidence. Step19 was not started and no threshold was promoted.

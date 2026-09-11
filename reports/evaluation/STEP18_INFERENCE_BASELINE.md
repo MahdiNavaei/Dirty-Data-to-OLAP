@@ -2,12 +2,14 @@
 
 Status: `PENDING`
 
-Dataset: `step18-inference-quality-v2`; protocol: `step18-evaluation-protocol-v2`; seed: `20260911`. v1 remains historical/provisional and is superseded for G5 quality claims.
+Current baseline: `step18-inference-quality-v3`; protocol: `step18-evaluation-protocol-v3`; seed: `20260911`. The v2 run remains historical and is retained separately. Step19 was not started.
 
-The corrected v2 chain is: provider or project-contract execution -> normalized project-owned output -> frozen artifact -> hashed binding -> topology truth join -> metric. Desbordante v2 executed over 13 provider scenarios and its candidate output is consumed by candidate-generation metrics. Real Profiling and Quality contracts executed over the same frozen scenarios and are consumed by Fusion. Valentine and Splink v2 outputs are absent in the current interpreter, so their metrics are not claimed.
+The v3 chain is shared provider fixture -> real adapter or explicit unavailable receipt -> normalized project-owned output -> immutable content-hashed receipt -> exact population binding -> isolated truth join -> TEST metric. Development is diagnostic-only; calibration is threshold/calibration-only.
 
-Observed v2 relationship candidate-generation recall is `2/13 = 0.1538`; eleven topology-positive queries are retained as provider misses, including the zero-candidate cases. This is provider evidence, not a product-quality pass.
+TEST relationship candidate-generation recall is `5/7 = 0.7143`: 17 candidates, 5 true, 12 false, and missing positives `rq-orphan-10` and `rq-missing`. Fusion is `EVALUATED` from actual DependencyResult, ProfileResult, and QualityResult artifacts, with 17 decisions and no failures. Profile and Quality completed for all 13 relationship scenarios.
 
-Provider binding status: Desbordante `EXECUTED`; Profiling `EXECUTED`; Quality `EXECUTED`; Valentine `INSUFFICIENT_EVIDENCE`; Splink `INSUFFICIENT_EVIDENCE`. Fusion is `EVALUATED` from actual normalized DependencyResult/ProfileResult/QualityResult artifacts, with 11 decisions and no Fusion failures. Calibration remains evidence-derived insufficient; the threshold study is calibration-only with `NO_AUTOMATION_THRESHOLD_SELECTED`; automation is `NOT_AUTHORIZED`.
+Provider status: Desbordante `EXECUTED`; Profiling `EXECUTED`; Quality `EXECUTED`; Valentine `INSUFFICIENT_EVIDENCE`; Splink `INSUFFICIENT_EVIDENCE`. Valentine `1.0.0` and Splink `4.0.17` were attempted in isolated project-local runtimes, but installation failed after the configured proxy was refused and no matching distribution was available. Schema and entity quality metrics are therefore not claimed, and no Coma/Cupid family aggregation or ER heuristic is substituted.
 
-This is an incomplete empirical closure over synthetic/aggregate-safe evidence. G4 and G4A remain PASS. Step19 implementation was not started.
+Bootstrap uses 7 TEST groups and 1,000 replicates; the relationship recall interval is `[0.4286, 1.0]`. Calibration sufficiency is computed and remains insufficient for a calibrated score claim. The threshold frontier is calibration-only, `STUDIED_ONLY`, with no selected threshold and no runtime-policy mutation. Automation is `NOT_AUTHORIZED`.
+
+G4 and G4A remain PASS. Formal G5 remains `PENDING` with `inference_validity_mode=UNVALIDATED`. This is synthetic/aggregate-safe evidence only, not production, temporal, causal, human-acceptance, canonical-identity, repair, deployment, or release evidence.

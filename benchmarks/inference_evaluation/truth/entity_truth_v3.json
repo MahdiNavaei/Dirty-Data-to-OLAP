@@ -1,0 +1,10 @@
+{
+  "schema_version":"3",
+  "truth_id":"step18-entity-truth-v3",
+  "provenance":"Step14 labelled fixture; complete evaluated universe derived from truth-cluster membership",
+  "fixture":"benchmarks/entity_resolution/step14_labeled_fixture.json",
+  "fixture_sha256":"BOUND_AT_EVALUATION",
+  "pair_truth_rule":"all unordered pairs over evaluated_record_refs; same truth cluster is positive and different truth clusters are negative",
+  "truth_clusters":[{"entity_id":"truth_a","record_refs":["crm-r1","erp-r1"]},{"entity_id":"truth_b","record_refs":["crm-r2","erp-r2"]},{"entity_id":"truth_c","record_refs":["crm-r3","erp-r3"]},{"entity_id":"truth_d","record_refs":["crm-r7","erp-r7"]},{"entity_id":"truth_e","record_refs":["crm-r8","erp-r8"]},{"entity_id":"truth_f","record_refs":["crm-r9","crm-r10"]},{"entity_id":"truth_g","record_refs":["crm-r11","erp-r11","crm-r12"]},{"entity_id":"truth_h","record_refs":["crm-r13","erp-r13","erp-r14"]}],
+  "evaluated_record_refs":["crm-r1","erp-r1","crm-r2","erp-r2","crm-r3","erp-r3","crm-r4","erp-r4","crm-r5","erp-r5","crm-r6","erp-r6","crm-r7","erp-r7","crm-r8","erp-r8","crm-r9","crm-r10","crm-r11","erp-r11","crm-r12","crm-r13","erp-r13","erp-r14"]
+}
