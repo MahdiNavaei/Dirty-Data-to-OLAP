@@ -156,6 +156,8 @@ Step23 implementation is `NOT_STARTED`.
 
 Status: `PASS`
 
+Verified closure content commit: `f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2`
+
 This is the critical post-Step22 G6 integrity closure. It is not Primary
 Prompt 23/41 and it does not start Step23. The first blocked attempt above is
 retained as temporal history: its content commit was
@@ -235,9 +237,11 @@ and manifests.
 
 The executed validator returned `PASS` for both runs with 20 positive
 behavioral assertions, 25 checks per run and zero positive discrepancies.
-Focused Step22 tests returned `21 passed`. Full unit/contract/integration/
-architecture/security regression, all repository validators, compileall and
-diff-check are recorded in the final execution log after the closure commit.
+Focused Step22 tests returned `21 passed`. Final verification returned unit
+`157 passed`, contract `31 passed`, integration `47 passed, 2 skipped`,
+architecture `17 passed`, security `37 passed`, and full regression
+`289 passed, 2 skipped`. All `23/23` repository validators passed;
+`compileall` and `git diff --check` also passed.
 Known non-failing pytest dependency/profiling warnings and the non-fatal
 dlt/SQLite cursor-cleanup traceback remain local-environment limitations; no
 exit status or G6 check was affected.
