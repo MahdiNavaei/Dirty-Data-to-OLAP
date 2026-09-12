@@ -1,0 +1,28 @@
+{
+  "truth_id": "step22-generic-source-truth-v1",
+  "truth_version": "step22-source-truth-1.0",
+  "source_snapshot_id": "step22-generic-source-snapshot-v1",
+  "source_schema_fingerprints": {"telemetry": "schema-telemetry-step20"},
+  "records": [
+    {"record_ref": "telemetry-device-1", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "devices", "extraction_ordinal": 1, "subject_type": "device", "canonical_entity_id": "device-1", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "device-1", "values": {"device_code": "D-001", "device_name": "Pump A"}, "provenance_refs": ["truth:independent-json"]},
+    {"record_ref": "telemetry-device-2", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "devices", "extraction_ordinal": 2, "subject_type": "device", "canonical_entity_id": "device-2", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "device-2", "values": {"device_code": "D-002", "device_name": "Pump B"}, "provenance_refs": ["truth:independent-json"]},
+    {"record_ref": "telemetry-location-1", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "locations", "extraction_ordinal": 1, "subject_type": "location", "canonical_entity_id": "location-1", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "location-1", "values": {"location_code": "L-001", "region": "north"}, "provenance_refs": ["truth:independent-json"]},
+    {"record_ref": "telemetry-location-2", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "locations", "extraction_ordinal": 2, "subject_type": "location", "canonical_entity_id": "location-2", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "location-2", "values": {"location_code": "L-002", "region": "south"}, "provenance_refs": ["truth:independent-json"]},
+    {"record_ref": "telemetry-reading-1", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "readings", "extraction_ordinal": 1, "subject_type": "reading", "canonical_entity_id": "reading-1", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "fact_device_reading:reading-1", "values": {"reading_id": "reading-1", "device_ref": "device-1", "location_ref": "location-1", "observed_on": "2026-02-01", "temperature": "10.5"}, "provenance_refs": ["truth:independent-json"]},
+    {"record_ref": "telemetry-reading-2", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "readings", "extraction_ordinal": 2, "subject_type": "reading", "canonical_entity_id": "reading-2", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "fact_device_reading:reading-2", "values": {"reading_id": "reading-2", "device_ref": "device-1", "location_ref": "location-1", "observed_on": "2026-02-02", "temperature": "11.0"}, "provenance_refs": ["truth:independent-json"]},
+    {"record_ref": "telemetry-reading-3", "source_id": "telemetry", "snapshot_id": "step22-generic-source-snapshot-v1", "table_id": "readings", "extraction_ordinal": 3, "subject_type": "reading", "canonical_entity_id": "reading-3", "terminal_disposition": "EMITTED_DIRECT", "output_reference": "fact_device_reading:reading-3", "values": {"reading_id": "reading-3", "device_ref": "device-2", "location_ref": "location-2", "observed_on": "2026-02-01", "temperature": "9.5"}, "provenance_refs": ["truth:independent-json"]}
+  ],
+  "entities": [],
+  "relationships": [],
+  "facts": [
+    {"fact_ref": "telemetry-reading-1", "source_record_refs": ["telemetry-reading-1"], "canonical_event_id": "reading-1", "grain_values": {"reading_id": "reading-1"}, "dimension_entity_ids": {"dimension_device": "device-1", "dimension_location": "location-1"}, "measure_values": {"temperature": "10.5"}, "date_value": "2026-02-01", "provenance_refs": ["truth:independent-json"]},
+    {"fact_ref": "telemetry-reading-2", "source_record_refs": ["telemetry-reading-2"], "canonical_event_id": "reading-2", "grain_values": {"reading_id": "reading-2"}, "dimension_entity_ids": {"dimension_device": "device-1", "dimension_location": "location-1"}, "measure_values": {"temperature": "11.0"}, "date_value": "2026-02-02", "provenance_refs": ["truth:independent-json"]},
+    {"fact_ref": "telemetry-reading-3", "source_record_refs": ["telemetry-reading-3"], "canonical_event_id": "reading-3", "grain_values": {"reading_id": "reading-3"}, "dimension_entity_ids": {"dimension_device": "device-2", "dimension_location": "location-2"}, "measure_values": {"temperature": "9.5"}, "date_value": "2026-02-01", "provenance_refs": ["truth:independent-json"]}
+  ],
+  "expected_aggregates": {"aggregates": [
+    {"aggregate_id": "temperature-global", "measure_field": "temperature", "operation": "MAX", "expected": "11.0", "group_by": []},
+    {"aggregate_id": "temperature-by-location", "measure_field": "temperature", "operation": "MAX", "group_by": ["dimension_location"], "expected_by_key": {"location-1": "11.0", "location-2": "9.5"}}
+  ]},
+  "duplicate_groups": [],
+  "provenance_refs": ["benchmarks/validation/step22_generic_source_truth.json", "truth:independent-from-target"]
+}

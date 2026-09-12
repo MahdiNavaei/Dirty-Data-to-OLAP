@@ -2,7 +2,7 @@ schema_version: "1.0"
 scope: "v1 implementation plan after the frozen product, domain, data and software architecture"
 provenance:
   authority: "05_MASTER_BUILD_SEQUENCE.md, product/domain/data/solution contracts, Step 05 cross-artifact audit"
-  status: "G2 PASS; Step21 content is implemented; G5 PASS and G6 remains PENDING for Step22"
+  status: "G2 PASS; Step21 and Step22 validation content are implemented; G5 PASS and G6 remains PENDING until canonical source membership evidence is complete"
 
 sequence_authority:
   master_sequence_path: docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md
@@ -38,7 +38,7 @@ specialist_sequence:
   - {step: 19, role: Canonical Data Model Engineer, phase: implementation}
   - {step: 20, role: OLAP Engineer, phase: implementation}
   - {step: 21, role: Semantic Layer Engineer, phase: implementation}
-  - {step: 22, role: Data QA Engineer, phase: validation}
+  - {step: 22, role: Data QA Engineer, phase: validation, implementation_status: IMPLEMENTED, gate_status: G6_PENDING_SOURCE_CANONICAL_EVIDENCE}
   - {step: 23, role: Data Platform Engineer, phase: platform}
   - {step: 24, role: Distributed Systems Engineer, phase: platform}
   - {step: 25, role: UX Engineer, phase: product_surface}

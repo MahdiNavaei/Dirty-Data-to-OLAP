@@ -402,18 +402,18 @@ components:
     name: Validation and Reconciliation Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [validate target, grain, relationships, measures and record accounting]
-    input_contracts: [AnalyticalPlan, MaterializationArtifact, SemanticModel, SemanticValidationResult, RecordAccounting, Lineage]
-    output_contracts: [ValidationReport, ReconciliationResult]
-    depends_on: [application.materializer, application.analytical_planner, domain.contracts]
+    responsibilities: [independently reconcile source snapshot truth, canonical membership, scoped record accounting, analytical grain, dimensions, relationships, measures, dates, lineage and semantic projection]
+    input_contracts: [SourceTruthManifest, CanonicalModel, RecordAccountingArtifact, AnalyticalPlan, CompiledPlan, MaterializationArtifact, SemanticModel, SemanticValidationResult, ValidationPolicy, ValidationArtifactBindings]
+    output_contracts: [ValidationReport, ReconciliationResult, ValidationDiscrepancy]
+    depends_on: [application.source_snapshot, application.canonical_finalization, application.materializer, application.analytical_planner, application.semantic_layer, domain.contracts]
     ports_used: [ArtifactStorePort, ControlStorePort]
     implementation_owner: Step22 Data QA Engineer
     implementation_step: 22
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
-    failure_behavior: failed validation makes run FAILED and target non-accepted
+    failure_behavior: FAIL or required NOT_EVALUATED/REVIEW_REQUIRED evidence makes G6 ineligible; target remains non-accepted and discrepancies are retained
   - component_id: adapters.source
     name: Source Adapter Family
     layer: adapters
