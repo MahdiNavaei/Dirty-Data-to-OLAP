@@ -163,9 +163,11 @@ def main() -> int:
         if gate is None or gate.status is not GateEvidenceStatus.PASS or not gate.eligible:
             raise RuntimeError("the exact persisted Step23 G6 PASS receipt is unavailable")
         run = platform.control_store.get_run(RUN_ID)
+        content_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
         if run is None:
-            content_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
             run = platform.create_run(RunRecord(run_id=RUN_ID, project_id="dirty-data-to-olap", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=content_commit, metadata={"scope": "step24-reference-scale", "external_engine": "NONE"}))
+        elif run.git_content_commit != content_commit:
+            run = platform.control_store.update_run(run.model_copy(update={"git_content_commit": content_commit}), expected_revision=run.revision)
         dataset = _dataset(gate)
         service = ScaleService(artifact_store=platform.artifact_store, control_store=platform.control_store)
         service.authorize_g6(dataset, gate)
@@ -219,7 +221,7 @@ def main() -> int:
         one_worker = service.execute(dataset, one_worker_plan, one_worker_policy)
         worker_invariant = one_worker.status is ScaleExecutionStatus.SUCCEEDED and one_worker.merged_output.semantic_hash == execution.merged_output.semantic_hash and one_worker_plan.partition_plan_hash == plan.partition_plan_hash
         materialization_equivalence = execution.merged_output.fact_grain_keys == reference.fact_grain_keys and execution.merged_output.warehouse_keys == reference.warehouse_keys and execution.merged_output.exact_measure_sum == reference.exact_measure_sum
-        report = service.equivalence_report(dataset, local_reference_execution_id="step24-local-reference", local_reference_output=reference, partitioned_execution=execution, plan=plan, failure_test_evidence={**failure_evidence, "partition_count_invariance": len({item["output_hash"] for item in invariant_outputs.values()}) == 1, "worker_count_invariance": worker_invariant}, materialization_equivalence=materialization_equivalence)
+        report = service.equivalence_report(dataset, local_reference_execution_id="step24-local-reference", local_reference_output=reference, partitioned_execution=execution, plan=plan, failure_test_evidence={**failure_evidence, "partition_count_invariance": len({item["output_hash"] for item in invariant_outputs.values()}) == 1, "worker_count_invariance": worker_invariant}, materialization_equivalence=materialization_equivalence, verified_content_commit=content_commit)
         if report.status.value != "PASS":
             raise RuntimeError(f"G7A equivalence failed: {report.model_dump(mode='json')}")
         report_ref = _publish_json(platform, artifact_id=report.report_id, kind="Step24ScaleEquivalenceReport", payload=report.model_dump(mode="json"), dependencies=(reference_ref.artifact_id, plan_ref.artifact_id, *[item for result in execution.partition_results for item in result.output_artifact_refs]))

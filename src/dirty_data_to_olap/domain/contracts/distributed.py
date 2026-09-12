@@ -628,6 +628,7 @@ class ScaleExecutionResult(_ScaleModel):
 
 class ScaleEquivalenceReport(_ScaleModel):
     report_id: str = Field(min_length=1)
+    verified_content_commit: str = Field(default="0" * 40, pattern=r"^[0-9a-f]{40}$")
     operation_id: str = Field(min_length=1)
     local_reference_execution_id: str = Field(min_length=1)
     local_reference_output_hash: str
@@ -652,6 +653,11 @@ class ScaleEquivalenceReport(_ScaleModel):
     provenance_refs: tuple[str, ...] = ()
 
     _validate_hashes = field_validator("local_reference_output_hash", "partitioned_output_hash", "partition_plan_hash")(_content_hash)
+
+    @field_validator("verified_content_commit")
+    @classmethod
+    def normalize_commit(cls, value: str) -> str:
+        return value.lower()
 
     @model_validator(mode="after")
     def eligibility_shape(self) -> "ScaleEquivalenceReport":
