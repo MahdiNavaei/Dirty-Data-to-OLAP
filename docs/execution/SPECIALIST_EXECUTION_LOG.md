@@ -1233,3 +1233,21 @@ handoff_to:
 - limitations: synthetic/domain-reviewed inputs only; generic parameter binding is controlled local execution, not a production ingestion adapter; no G6 promotion, source-to-canonical-to-OLAP reconciliation, production SCD2, semantic/KPI layer or Step21 implementation
 - content_commit_sha: `b8cebf561addbc4a9e21c8ce1da9792293cec64c` (`fix: bind analytical specs and generalize Step20 runtime`)
 - state: repair closure PASS; formal `G5_INFERENCE_VALIDITY=PASS`; `last_completed_step=20`; `current_step=21`; current_role=`analytical_semantic_layer_engineer`; `G6=PENDING`; Step21 not started
+
+## Specialist Step21 - Analytical Model / Semantic Layer Engineer
+
+- execution_step: `21`
+- role_id: `analytical_semantic_layer_engineer`
+- specialist_file: `17_ANALYTICAL_MODEL_SEMANTIC_LAYER_ENGINEER.md`
+- status: `PASS` for the bounded review-gated semantic-layer scope
+- starting_head: `23b6cd8ed53cdb6d814fc5d6807f0d51d8d8c5ff`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- implementation: generic immutable semantic contracts; exact Step20 plan/spec/review/compiled/materialization/target binding; dimensions, attributes, roles, hierarchies, time roles, measures, base and bounded derived metric policy; explicit relationship scopes; lineage/provenance; parameterized read-only query plans and DuckDB adapter
+- architecture: inserted `SEMANTIC_MODELING` between materialization and validation; added `application.semantic_layer`; no new review checkpoint, no target write, and no Step22 implementation
+- relationship_hardening: added `FactRelationshipScope`; canonical accepted relationships and analytical time roles are distinct; unknown/unclassified references fail closed
+- reference_artifacts: retail `workspace/runs/step21-reference-run/semantic/` with semantic model `smodel_87c4a232fc1c5363f2aef8569d02d7b5` / hash `45c18516d85bc8d566e0da4198fcd3600706a101b76beee55814381d66eec4c1`; generic `workspace/runs/step21-generic-reference-run/semantic/` with semantic model `smodel_52665974504f84e641cce0385e47e1ee` / hash `69641224856f0e755b8dcc6a58ba91c05d888ab2f9faeadfe12ac12bd974a970`
+- evidence: retail five same-target read-only query comparisons PASS with Units Ordered overall `6`; generic two same-target read-only comparisons PASS with semi-additive Temperature MAX and explicit date scope
+- verification: focused Step21 `16 passed`; unit `153 passed`; contract `25 passed`; integration `42 passed, 2 skipped`; architecture `14 passed`; security `30 passed`; full regression `264 passed, 2 skipped`; Step20 validator `49 checks PASS`; Step21 validator `24 checks PASS`; solution architecture and engineering validators PASS; compileall and diff-check PASS
+- limitations: synthetic/domain-reviewed local evidence only; no source-to-canonical-to-OLAP reconciliation or G6 promotion; READY is not production or G6 certification; optional Valentine/Splink skips remain skips; no revenue/GMV/gross amount inference
+- content_commit_sha: `1d031b6815579b81c9a08b91d896dab12db4440c` (`feat: implement generic analytical semantic layer`)
+- handoff_to: `Step22 - Data QA Engineer`
+- next_state: `last_completed_step=21`, `current_step=22`, `current_role=data_qa_engineer`, `G5=PASS`, `G6=PENDING`, `step22_started=false`; Step22 implementation not started
