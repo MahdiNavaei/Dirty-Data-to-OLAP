@@ -1315,3 +1315,19 @@ handoff_to:
 - blocking_issues: none within the Step23 local platform scope
 - handoff_to: `Step24 - Distributed Data Engineer`
 - verified_content_commit: `a35944fda71f93cba6cdacf8a7fdee5aa565e513`
+
+## CRITICAL POST-STEP23 REPAIR - Platform Identity, Cleanup Authorization and Gate Receipt Integrity Closure
+
+- execution_step: `23` surgical repair only; this was not Primary Prompt 24; Step24 remains not started
+- starting_baseline: branch `main`; `HEAD=origin/main=54b2de70a583be7e4967b1ba37f6e5b772d6da45`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- preserved_boundary: the original Step23 implementation and report remain preserved; this repair adds integrity closure and does not modify source systems or raw source/Step22 data
+- repaired_cleanup: `CleanupPlan.content_hash` is deterministic over exact semantic plan content, normalized candidates, expected hashes, byte sizes, retention/actions, dependent IDs, run scope and dry-run mode; `CleanupAuthorization` binds that hash; per-artifact `CleanupDeletionPermit` is hash/size/run/retention/action/dependent-set bound; selected artifact stores are reverified immediately before tombstoning; active, pinned, dependent, external, missing and tampered artifacts fail closed
+- repaired_staging: staged part IDs and logical keys bind run/source/snapshot/table/dataset/version/part/schema; SQLite staged primary key is `(run_id, dataset_id, dataset_version)`; `get_staged_dataset` requires `run_id`; registration closes exact kind/publication/storage/logical-key/run/schema/unique-part/known-row-count constraints; cross-run same-name coexistence and injection rejection are covered
+- repaired_gate: G6 persistence accepts only the exact registered, published, verified `ValidationReport` reference and matching bytes; status, eligibility and policy version are derived from typed report fields; report run/report ID are stored separately from platform run; wrong kind, stale ref, content mismatch and status laundering fail closed; external locator argument must equal manifest locator
+- migration: SQLite schema `V1 -> V2 -> V3` is forward-only and non-destructive; legacy staged rows are marked `legacy-v1`, legacy gate rows are marked unverified, and newer schemas remain rejected
+- evidence: Step23 validator `50 checks PASS`; focused Step23 unit/contract/integration/architecture/security suites `27 passed`; full regression `316 passed, 2 skipped, 41 warnings`; all `23/23` repository validators PASS; compileall and `git diff --check` PASS
+- negative_controls: cleanup mode mutation, candidate injection, cross-run cleanup, hash/size permit mismatch, active/pinned/dependent protection, cross-run staged injection, source/table/schema/kind/publication/row-count mismatch, wrong gate artifact kind, FAIL/PENDING report derivation, status laundering, external locator mismatch, tampered deletion bytes and future schema rejection
+- reference_evidence: current Step22 `ValidationReport` remains G6 `PASS` and eligible; Step20 target remains a controlled external reference and was not copied or mutated; latest local control schema is `3`; Step24 capability remains `FUTURE_NOT_EXECUTED` and distributed execution is absent
+- content_commit_sha: `496ca80647a7a5b752803dab6d50491f5663e4a7` (`fix: close Step23 platform integrity gaps`)
+- metadata_commit_sha: recorded in the final metadata-only Git commit
+- state: `last_completed_step=23`; `current_step=24`; `current_role=distributed_data_engineer`; G5 `PASS`; G6 `PASS`; G7 `PENDING`; Step24 `NOT_STARTED`
