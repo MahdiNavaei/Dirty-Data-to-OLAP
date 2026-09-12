@@ -1,7 +1,7 @@
 """Provider-neutral contracts for bounded, meaning-preserving data scale.
 
 These models describe data work only.  They deliberately do not contain
-executor objects, callables, pickle payloads, queue state or scheduler state.
+executor objects, callables, unsafe binary payloads, queue state or scheduler state.
 """
 
 from __future__ import annotations
