@@ -19,7 +19,7 @@ entrypoints -> application/orchestration -> domain contracts and ports
 ## Logical zones and components
 
 - **Domain and contracts:** source identities, observations, hypotheses, decisions, canonical entities, analytical plans, artifacts, validation results, run/stage status, and policies.
-- **Application services:** run manager, stage planner, evidence fusion, review/policy, canonical hypothesis/finalization, analytical planning, compilation, materialization, validation, resume, and cancellation.
+- **Application services:** run manager, stage planner, evidence fusion, review/policy, canonical hypothesis/finalization, analytical planning, compilation, materialization, semantic modeling/query resolution, validation, resume, and cancellation.
 - **Adapters:** source, profiling, dependency discovery, schema matching, optional semantic evidence, and entity resolution providers. Each implements a project-owned port.
 - **Persistence:** Control Store repositories and Artifact/Data Plane stores. Control holds metadata, indexes, state, decisions, and artifact references; large or immutable data stays in the Artifact/Data Plane.
 - **Runtime and entrypoints:** StageExecutor, capability registry, CLI/API, and composition root.
@@ -38,10 +38,11 @@ SCHEMA_MATCHING, QUALITY_ANALYSIS} -> EVIDENCE_FUSION
 -> CANONICAL_FINALIZATION -> ANALYTICAL_PLANNING
 -> REVIEW_ANALYTICAL_PLAN -> COMPILATION
 -> REVIEW_MATERIALIZATION_PLAN -> MATERIALIZATION
+-> SEMANTIC_MODELING
 -> VALIDATION_RECONCILIATION
 ```
 
-Optional semantic evidence is a declared branch into evidence fusion. Each review checkpoint is a first-class stage boundary backed by the one reusable Review / Policy Service; it is entered only after its subject artifact exists. Evidence review covers relationships, mappings, conflicts and repairs before canonical hypotheses. Entity resolution is conditional and produces linkage evidence only: `EntityMatchEdge` and `EntityCluster`; identity/linkage review follows those artifacts when ER is required. Analytical-plan review follows `AnalyticalPlan`, and materialization approval follows `CompiledPlan`/`GeneratedSQL`. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`; a policy-recorded skip is explicit and versioned. Entity resolution never produces `canonical_entity_id` or `SourceRecordCanonicalMap`. Canonical Finalization is the sole producer of accepted canonical identity and `SourceRecordCanonicalMap`. For an ER-required entity family, finalization requires complete acceptable ER output and a compatible post-ER identity/linkage decision; for an ER-not-required family, absent or policy-recorded skipped ER and policy-permitted identity-review skip are legal. The graph is acyclic and all stage outputs are typed project-owned artifacts.
+Optional semantic evidence is a declared branch into evidence fusion. Each review checkpoint is a first-class stage boundary backed by the one reusable Review / Policy Service; it is entered only after its subject artifact exists. Evidence review covers relationships, mappings, conflicts and repairs before canonical hypotheses. Entity resolution is conditional and produces linkage evidence only: `EntityMatchEdge` and `EntityCluster`; identity/linkage review follows those artifacts when ER is required. Analytical-plan review follows `AnalyticalPlan`, and materialization approval follows `CompiledPlan`/`GeneratedSQL`. `SEMANTIC_MODELING` is a deterministic, read-only projection of the exact reviewed analytical package and consumable target; it creates no additional human review checkpoint and cannot claim G6. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`; a policy-recorded skip is explicit and versioned. Entity resolution never produces `canonical_entity_id` or `SourceRecordCanonicalMap`. Canonical Finalization is the sole producer of accepted canonical identity and `SourceRecordCanonicalMap`. For an ER-required entity family, finalization requires complete acceptable ER output and a compatible post-ER identity/linkage decision; for an ER-not-required family, absent or policy-recorded skipped ER and policy-permitted identity-review skip are legal. The graph is acyclic and all stage outputs are typed project-owned artifacts.
 
 ## Run and stage lifecycle
 

@@ -281,11 +281,21 @@ stages:
     idempotency: attempt-scoped target publication
     review_boundary: controlled target write after policy-conditional materialization approval
     required_review_checkpoint: REVIEW_MATERIALIZATION_PLAN
+  - stage_id: SEMANTIC_MODELING
+    required: true
+    dependencies: [ANALYTICAL_PLANNING, MATERIALIZATION]
+    optional_dependencies: []
+    input_artifact_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, CompiledPlan, MaterializationArtifact, DomainAssertion, ReviewDecision]
+    output_artifact_types: [SemanticModel, SemanticDimension, SemanticMeasure, MetricSpec, DimensionHierarchy, TimeRole, SemanticRelationship, SemanticQueryRequest, SemanticQueryPlan, SemanticValidationResult]
+    failure_consequence: FAILED or NEEDS_REVIEW; semantic artifacts are not consumable
+    cacheable: true
+    idempotency: exact Step20 hashes, semantic policy version and target file hash
+    review_boundary: deterministic projection and compatibility validation over already reviewed/materialized Step20 artifacts; no new human checkpoint
   - stage_id: VALIDATION_RECONCILIATION
     required: true
-    dependencies: [MATERIALIZATION, ANALYTICAL_PLANNING, CANONICAL_FINALIZATION]
+    dependencies: [MATERIALIZATION, SEMANTIC_MODELING, ANALYTICAL_PLANNING, CANONICAL_FINALIZATION]
     optional_dependencies: []
-    input_artifact_types: [MaterializationArtifact, AnalyticalPlan, RecordAccounting, Lineage]
+    input_artifact_types: [MaterializationArtifact, AnalyticalPlan, SemanticModel, SemanticValidationResult, RecordAccounting, Lineage]
     output_artifact_types: [ValidationReport, ReconciliationResult]
     failure_consequence: run FAILED; target not accepted
     cacheable: true

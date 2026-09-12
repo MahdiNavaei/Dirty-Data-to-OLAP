@@ -14,6 +14,7 @@ from dirty_data_to_olap.domain.contracts.analytical import (
     AnalyticalReviewState,
     DimensionRole,
     DimensionSpec,
+    FactRelationshipScope,
     FactSpec,
     GrainNullPolicy,
     GrainSpec,
@@ -129,9 +130,28 @@ class AnalyticalPlannerService:
             missing = sorted(requested - relationship_ids)
             raise AnalyticalPlanningError("accepted canonical relationships missing: " + ",".join(missing))
         for fact in request.facts:
-            missing = set(fact.relationship_refs) - requested
+            foreign_key_refs = {item.relationship_ref for item in fact.dimension_foreign_keys}
+            undeclared = foreign_key_refs - set(fact.relationship_refs)
+            if undeclared:
+                raise AnalyticalPlanningError("fact FK relationship is not declared: " + ",".join(sorted(undeclared)))
+            unclassified = set(fact.relationship_refs) - foreign_key_refs
+            if unclassified:
+                raise AnalyticalPlanningError("fact relationship is not classified: " + ",".join(sorted(unclassified)))
+            canonical_refs = {
+                item.relationship_ref
+                for item in fact.dimension_foreign_keys
+                if item.relationship_scope is FactRelationshipScope.CANONICAL_ACCEPTED
+            }
+            analytical_refs = {
+                item.relationship_ref
+                for item in fact.dimension_foreign_keys
+                if item.relationship_scope is FactRelationshipScope.ANALYTICAL_TIME_ROLE
+            }
+            missing = canonical_refs - requested
             if missing:
                 raise AnalyticalPlanningError("fact relationship is not accepted: " + ",".join(sorted(missing)))
+            if analytical_refs & requested:
+                raise AnalyticalPlanningError("analytical relationship cannot be accepted as canonical: " + ",".join(sorted(analytical_refs & requested)))
 
     def build_plan(
         self,

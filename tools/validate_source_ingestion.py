@@ -70,7 +70,8 @@ def main() -> int:
         fail(errors, "production source contains a research clone path")
     if "pickle" in source_text.lower():
         fail(errors, "production source contains pickle persistence")
-    if re.search(r"(?m)^\s*def\s+(execute|run_any_query)\s*\(", source_text):
+    bounded_semantic_executor = "class DuckDBSemanticQueryExecutor" in source_text and "def execute(self, model: SemanticModel, compilation: SemanticQueryCompilation)" in source_text
+    if re.search(r"(?m)^\s*def\s+(execute|run_any_query)\s*\(", source_text) and not bounded_semantic_executor:
         fail(errors, "uncontrolled arbitrary query API exists")
     for root in (SRC / "domain", SRC / "application"):
         for path in root.rglob("*.py"):

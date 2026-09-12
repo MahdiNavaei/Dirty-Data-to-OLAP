@@ -45,6 +45,7 @@ stage_test_requirements:
   - {stage_id: COMPILATION, required_categories: [contract, integration, security, data], owner: "Step20"}
   - {stage_id: REVIEW_MATERIALIZATION_PLAN, required_categories: [contract, security, failure_recovery], owner: "Step27"}
   - {stage_id: MATERIALIZATION, required_categories: [adapter_contract, integration, data, security, failure_recovery], owner: "Step20"}
+  - {stage_id: SEMANTIC_MODELING, required_categories: [unit, contract, architecture, integration, data, security, failure_recovery], owner: "Step21"}
   - {stage_id: VALIDATION_RECONCILIATION, required_categories: [data, e2e, failure_recovery], owner: "Step22"}
 
 interface_test_requirements:

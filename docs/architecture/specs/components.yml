@@ -382,12 +382,28 @@ components:
     persistence_access: ArtifactStorePort
     optional: false
     failure_behavior: unresolved or incompatible materialization approval, target traversal or input mismatch is NEEDS_REVIEW/FAILED; incomplete target is non-consumable; orphan policies are recorded behaviorally
+  - component_id: application.semantic_layer
+    name: Analytical Semantic Layer Service
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [project reviewed analytical specs into business-readable semantic metadata, validate metric/dimension/grain compatibility, resolve bounded read-only semantic queries, retain analytical and canonical lineage]
+    input_contracts: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, CompiledPlan, MaterializationArtifact, DomainAssertion, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
+    output_contracts: [SemanticModel, SemanticDimension, SemanticMeasure, MetricSpec, DimensionHierarchy, TimeRole, SemanticRelationship, SemanticQueryRequest, SemanticQueryPlan, SemanticValidationResult]
+    depends_on: [application.analytical_planner, application.compiler, application.materializer, domain.contracts]
+    ports_used: [ArtifactStorePort]
+    implementation_owner: Step21 Analytical Model / Semantic Layer Engineer
+    implementation_step: 21
+    implementation_status: IMPLEMENTED
+    side_effect_class: artifact_write_metadata_only
+    persistence_access: ArtifactStorePort for semantic artifacts; no target writes
+    optional: false
+    failure_behavior: stale or unreviewed Step20 inputs, unsupported semantics, incompatible grain/dimension paths or unsafe query requests fail closed; no new human review checkpoint
   - component_id: application.validation
     name: Validation and Reconciliation Service
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [validate target, grain, relationships, measures and record accounting]
-    input_contracts: [AnalyticalPlan, MaterializationArtifact, RecordAccounting, Lineage]
+    input_contracts: [AnalyticalPlan, MaterializationArtifact, SemanticModel, SemanticValidationResult, RecordAccounting, Lineage]
     output_contracts: [ValidationReport, ReconciliationResult]
     depends_on: [application.materializer, application.analytical_planner, domain.contracts]
     ports_used: [ArtifactStorePort, ControlStorePort]

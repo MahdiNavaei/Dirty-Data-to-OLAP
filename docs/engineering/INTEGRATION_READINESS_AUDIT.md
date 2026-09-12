@@ -2,7 +2,7 @@
 
 Status: PASS for repaired G2 readiness; runtime implementation remains future work.
 
-The 19-stage graph has one owner and test strategy per stage in `specs/ownership_map.yml` and `specs/test_matrix.yml`. The 11 declared ports have one owner and contract-test requirement each. The material contract matrix identifies producer, consumer, producing stage, persistence plane, review guard, invalidators and future owner for source, evidence, review, canonical, analytical, compilation, materialization, validation and accounting artifacts.
+The current 22-stage graph has one owner and test strategy per stage in `specs/ownership_map.yml` and `specs/test_matrix.yml`. The 11 declared ports have one owner and contract-test requirement each. The material contract matrix identifies producer, consumer, producing stage, persistence plane, review guard, invalidators and future owner for source, evidence, review, canonical, analytical, compilation, materialization, semantic, validation and accounting artifacts.
 
 Readiness decisions:
 

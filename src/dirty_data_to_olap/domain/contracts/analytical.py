@@ -63,6 +63,11 @@ class UnknownMemberPolicy(str, Enum):
     EXPLICIT_UNKNOWN_MEMBER = "EXPLICIT_UNKNOWN_MEMBER"
 
 
+class FactRelationshipScope(str, Enum):
+    CANONICAL_ACCEPTED = "CANONICAL_ACCEPTED"
+    ANALYTICAL_TIME_ROLE = "ANALYTICAL_TIME_ROLE"
+
+
 class GrainNullPolicy(str, Enum):
     REJECT_NULLS = "REJECT_NULLS"
     QUARANTINE_NULLS = "QUARANTINE_NULLS"
@@ -210,6 +215,7 @@ class DimensionSpec(_SourceModel):
 
 class FactForeignKeySpec(_SourceModel):
     relationship_ref: str = Field(min_length=1)
+    relationship_scope: FactRelationshipScope = FactRelationshipScope.CANONICAL_ACCEPTED
     dimension_id: str = Field(min_length=1)
     fact_column: str = Field(min_length=1)
     dimension_key_column: str = Field(min_length=1)

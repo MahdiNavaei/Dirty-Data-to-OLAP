@@ -48,6 +48,7 @@ components:
   - {component_id: application.analytical_planner, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "generic typed input, exact spec package, grain, measure and model contract tests"}
   - {component_id: application.compiler, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "exact spec mutation, generic DDL/load, type and SQL privacy contract tests"}
   - {component_id: application.materializer, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "generic controlled-target, orphan-policy and atomic publication integration tests"}
+  - {component_id: application.semantic_layer, primary_specialist: "Step21 Analytical Model / Semantic Layer Engineer", implementation_step: 21, implementation_status: IMPLEMENTED, test_strategy: "semantic contract, exact Step20 binding, grain/dimension compatibility, read-only query security and two-domain integration"}
   - {component_id: application.validation, primary_specialist: "Step22 Data QA Engineer", implementation_step: 22, test_strategy: "reconciliation and release acceptance suite"}
   - {component_id: adapters.source, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source adapter contract tests"}
   - {component_id: adapters.database_security, primary_specialist: "Step11 Database Security Specialist", implementation_step: 11, test_strategy: "SQLite authorizer and SQLAlchemy/dlt hook tests"}
@@ -103,7 +104,8 @@ stages:
   - {stage_id: COMPILATION, owner_component: application.compiler, implementation_step: 20, test_strategy: "compiled-plan contract"}
   - {stage_id: REVIEW_MATERIALIZATION_PLAN, owner_component: application.review_policy, implementation_step: 27, test_strategy: "materialization review guard"}
   - {stage_id: MATERIALIZATION, owner_component: application.materializer, implementation_step: 20, test_strategy: "DuckDB integration"}
-  - {stage_id: VALIDATION_RECONCILIATION, owner_component: application.validation, implementation_step: 22, test_strategy: "reconciliation acceptance"}
+  - {stage_id: SEMANTIC_MODELING, owner_component: application.semantic_layer, implementation_step: 21, test_strategy: "semantic compatibility, lineage and read-only query validation"}
+  - {stage_id: VALIDATION_RECONCILIATION, owner_component: application.validation, implementation_step: 22, test_strategy: "reconciliation acceptance including semantic validation inputs"}
 
 handoff:
   first_implementation_step: 6

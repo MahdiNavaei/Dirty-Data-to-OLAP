@@ -355,7 +355,7 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
         "REVIEW_CANONICAL_IDENTITY", "REVIEW_ANALYTICAL_PLAN",
         "REVIEW_MATERIALIZATION_PLAN",
         "CANONICAL_FINALIZATION", "ANALYTICAL_PLANNING", "COMPILATION",
-        "MATERIALIZATION", "VALIDATION_RECONCILIATION",
+        "MATERIALIZATION", "SEMANTIC_MODELING", "VALIDATION_RECONCILIATION",
     }
     require(required_ids <= stage_ids, "stage DAG is missing a required semantic stage")
     require("REVIEW_DECISIONS" not in stage_ids, "generic early REVIEW_DECISIONS stage remains active")
@@ -400,6 +400,9 @@ def check_stage_graph(data: dict[str, Any]) -> tuple[set[str], int]:
     require(set(by_id["ANALYTICAL_PLANNING"].get("output_artifact_types", [])) >= {"AnalyticalPlan", "FactSpec", "DimensionSpec", "GrainSpec", "MeasureSpec"}, "analytical planning output contracts are incomplete")
     require(set(by_id["COMPILATION"].get("input_artifact_types", [])) >= {"AnalyticalPlan", "FactSpec", "DimensionSpec", "GrainSpec", "MeasureSpec", "ReviewDecision"}, "compilation must consume typed reviewed analytical contracts")
     require(set(by_id["MATERIALIZATION"].get("input_artifact_types", [])) >= {"CompiledPlan", "GeneratedSQL", "ReviewDecision"}, "materialization must consume exact reviewed compiled SQL")
+    require(by_id["SEMANTIC_MODELING"].get("dependencies") == ["ANALYTICAL_PLANNING", "MATERIALIZATION"], "semantic modeling must depend on analytical planning and materialization")
+    require(set(by_id["SEMANTIC_MODELING"].get("output_artifact_types", [])) >= {"SemanticModel", "SemanticValidationResult"}, "semantic modeling outputs are incomplete")
+    require({"SemanticModel", "SemanticValidationResult"}.issubset(set(by_id["VALIDATION_RECONCILIATION"].get("input_artifact_types", []))), "validation must consume semantic artifacts")
     return stage_ids, len(stages)
 
 

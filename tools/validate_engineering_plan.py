@@ -77,6 +77,16 @@ CRITICAL_TOPOLOGY = {
     "CompiledPlan": ("application.compiler", "COMPILATION"),
     "GeneratedSQL": ("application.compiler", "COMPILATION"),
     "MaterializationArtifact": ("application.materializer", "MATERIALIZATION"),
+    "SemanticModel": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "SemanticDimension": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "SemanticMeasure": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "MetricSpec": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "DimensionHierarchy": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "TimeRole": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "SemanticRelationship": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "SemanticQueryRequest": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "SemanticQueryPlan": ("application.semantic_layer", "SEMANTIC_MODELING"),
+    "SemanticValidationResult": ("application.semantic_layer", "SEMANTIC_MODELING"),
     "ValidationReport": ("application.validation", "VALIDATION_RECONCILIATION"),
     "ReconciliationResult": ("application.validation", "VALIDATION_RECONCILIATION"),
 }
@@ -269,7 +279,7 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
             "post-gate current specialist is an authorized specialist handoff when G3 passes",
@@ -288,7 +298,8 @@ def main() -> int:
             or (execution.get("current_step") == 18 and execution.get("current_role") == "ml_evaluation_engineer" and execution.get("last_completed_step") == 17 and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 19 and execution.get("current_role") == "canonical_model_engineer" and execution.get("last_completed_step") == 18 and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 20 and execution.get("current_role") == "olap_engineer" and execution.get("last_completed_step") == 19 and gates.get("G3_SOURCE_SAFETY") == "PASS")
-            or (execution.get("current_step") == 21 and execution.get("current_role") == "analytical_semantic_layer_engineer" and execution.get("last_completed_step") == 20 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
+            or (execution.get("current_step") == 21 and execution.get("current_role") == "analytical_semantic_layer_engineer" and execution.get("last_completed_step") == 20 and gates.get("G3_SOURCE_SAFETY") == "PASS")
+            or (execution.get("current_step") == 22 and execution.get("current_role") == "data_qa_engineer" and execution.get("last_completed_step") == 21 and gates.get("G3_SOURCE_SAFETY") == "PASS"),
         )
 
     # 4-5: required artifacts parse and carry provenance.
@@ -320,10 +331,10 @@ def main() -> int:
     owned_components = {item.get("component_id") for item in ownership.get("components", [])}
     owned_interfaces = {item.get("interface_id") for item in ownership.get("interfaces", [])}
     owned_stages = {item.get("stage_id") for item in ownership.get("stages", [])}
-    check("ownership covers exactly all 40 components", len(component_ids) == 40 and owned_components == component_ids)
+    check("ownership covers exactly all 41 components", len(component_ids) == 41 and owned_components == component_ids)
     check("ownership covers exactly all 13 interfaces", len(interface_ids) == 13 and owned_interfaces == interface_ids)
     non_primary_subboundaries = {"CANONICAL_IDENTITY_PREPARATION"}
-    check("ownership covers 20 primary stages plus declared sub-boundaries", len(stage_ids - non_primary_subboundaries) == 20 and owned_stages == stage_ids)
+    check("ownership covers 21 primary stages plus declared sub-boundaries", len(stage_ids - non_primary_subboundaries) == 21 and owned_stages == stage_ids)
     check("every component has owner and test strategy", all(item.get("primary_specialist") and item.get("test_strategy") for item in ownership.get("components", [])))
     check("every interface has owner and test strategy", all(item.get("owner_component") and item.get("test_strategy") for item in ownership.get("interfaces", [])))
     check("every stage has owner, step and test strategy", all(item.get("owner_component") and item.get("implementation_step") and item.get("test_strategy") for item in ownership.get("stages", [])))
@@ -346,7 +357,9 @@ def main() -> int:
         "SemanticMappingDecision", "ReviewDecision", "CanonicalModelHypothesis", "EntityResolutionSpec",
         "CanonicalIdentityProposal", "CanonicalIdentityMembership", "EntityMatchEdge", "EntityCluster", "EntityResolutionResult", "SourceRecordCanonicalMap", "CanonicalModel",
         "AnalyticalPlan", "FactSpec", "DimensionSpec", "GrainSpec", "MeasureSpec", "CompiledPlan",
-        "GeneratedSQL", "MaterializationArtifact", "ValidationReport", "ReconciliationResult", "RecordAccounting",
+        "GeneratedSQL", "MaterializationArtifact", "SemanticModel", "SemanticDimension", "SemanticMeasure",
+        "MetricSpec", "DimensionHierarchy", "TimeRole", "SemanticRelationship", "SemanticQueryRequest",
+        "SemanticQueryPlan", "SemanticValidationResult", "ValidationReport", "ReconciliationResult", "RecordAccounting",
     }
     check("integration matrix covers every critical contract", expected_contracts.issubset(contract_names))
     check("critical contracts have producer/consumer/stage/storage", all(item.get("producer_component") and item.get("producer_stage") and item.get("consumers") and item.get("storage_plane") for item in contracts if item.get("contract") in expected_contracts))
@@ -388,7 +401,7 @@ def main() -> int:
     position = {name: stage_order.index(name) for name in stage_order}
     check("evidence fusion follows its evidence producers", all(position[producer] < position["EVIDENCE_FUSION"] for producer in ["PROFILING", "DEPENDENCY_DISCOVERY", "SCHEMA_MATCHING", "QUALITY_ANALYSIS"]))
     check("canonical finalization follows evidence and evaluation", position["EVIDENCE_FUSION"] < position["CANONICAL_FINALIZATION"] and position["ENTITY_RESOLUTION"] < position["CANONICAL_FINALIZATION"])
-    check("OLAP stages follow canonical finalization", position["CANONICAL_FINALIZATION"] < position["ANALYTICAL_PLANNING"] < position["COMPILATION"] < position["MATERIALIZATION"])
+    check("OLAP and semantic stages follow canonical finalization", position["CANONICAL_FINALIZATION"] < position["ANALYTICAL_PLANNING"] < position["COMPILATION"] < position["MATERIALIZATION"] < position["SEMANTIC_MODELING"] < position["VALIDATION_RECONCILIATION"])
     check("review checkpoints precede their guarded stages", position["REVIEW_EVIDENCE_DECISIONS"] < position["CANONICAL_HYPOTHESES"] and position["REVIEW_CANONICAL_IDENTITY"] < position["CANONICAL_FINALIZATION"] and position["REVIEW_ANALYTICAL_PLAN"] < position["COMPILATION"] and position["REVIEW_MATERIALIZATION_PLAN"] < position["MATERIALIZATION"])
     check("performance is after correctness in master sequence", plan.get("sequence_authority", {}).get("sequence_order", []).index(37) > plan.get("sequence_authority", {}).get("sequence_order", []).index(22))
     master_text = (ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base" / "05_MASTER_BUILD_SEQUENCE.md").read_text(encoding="utf-8")
