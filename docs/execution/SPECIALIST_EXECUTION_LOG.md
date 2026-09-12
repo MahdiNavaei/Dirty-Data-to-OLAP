@@ -1238,7 +1238,7 @@ handoff_to:
 
 - execution_step: `21`
 - role_id: `analytical_semantic_layer_engineer`
-- specialist_file: `17_ANALYTICAL_MODEL_SEMANTIC_LAYER_ENGINEER.md`
+- specialist_file: `17_ANALYTICAL_SEMANTIC_LAYER_ENGINEER.md`
 - status: `PASS` for the bounded review-gated semantic-layer scope
 - starting_head: `23b6cd8ed53cdb6d814fc5d6807f0d51d8d8c5ff`; preserved untracked `tests/quality_unit_artifacts/` untouched
 - implementation: generic immutable semantic contracts; exact Step20 plan/spec/review/compiled/materialization/target binding; dimensions, attributes, roles, hierarchies, time roles, measures, base and bounded derived metric policy; explicit relationship scopes; lineage/provenance; parameterized read-only query plans and DuckDB adapter
@@ -1251,3 +1251,16 @@ handoff_to:
 - content_commit_sha: `1d031b6815579b81c9a08b91d896dab12db4440c` (`feat: implement generic analytical semantic layer`)
 - handoff_to: `Step22 - Data QA Engineer`
 - next_state: `last_completed_step=21`, `current_step=22`, `current_role=data_qa_engineer`, `G5=PASS`, `G6=PENDING`, `step22_started=false`; Step22 implementation not started
+
+## CRITICAL POST-STEP21 Repair - Semantic Query Trust Boundary and Derived Metric Integrity Closure
+
+- execution_step: `21` surgical repair only; starting HEAD and `origin/main`: `3aa0de9c54ebab882ba6f45f95bf350751162979`; existing Step21 content commit: `1d031b6815579b81c9a08b91d896dab12db4440c`; Step22 was not started; preserved untracked `tests/quality_unit_artifacts/` untouched
+- finding: the semantic executor trusted caller-provided SQL after SELECT, semicolon and blacklist checks; this did not authorize physical tables, joins, subqueries or DuckDB file/table functions from the bound semantic model, and `read_only=True` alone did not provide that authorization
+- repaired: deterministic structural SQL renderer rebuilt statements from the bound `SemanticModel` and validated `SemanticQueryPlan`; exact model binding, metric/measure/fact/grain, exposed dimensions/attributes, reviewed aggregation, physical bindings, relationship path/scope, time role, parameter shape, sort and limit are checked before DuckDB is opened
+- security_boundary: tampered SQL, unknown or declaration-out-of-path tables, undeclared joins, arbitrary subqueries, `read_csv`, `read_parquet`, `parquet_scan`, `csv_scan`, `glob`, `sqlite_scan`, `read_text` and `read_blob` are rejected before DuckDB; target remains path-contained, SHA-bound and read-only
+- derived_metric_policy: V1 rejects `AVAILABLE` derived metrics with explicit `DERIVED_METRIC_NOT_EXECUTABLE_V1`; derived ratios cannot reach the executable compiler and no `KeyError`/`IndexError` path is used
+- evidence: legitimate retail and generic queries execute through the bounded adapter; filter values remain parameters and are not retained in the query plan or persisted artifacts
+- verification: focused Step21 `20 passed`; unit `154 passed`; contract `25 passed`; integration `42 passed, 2 skipped`; architecture `14 passed`; security `33 passed`; full regression `268 passed, 2 skipped`; Step21 validator `38 checks PASS`; all `21` repository validators PASS; compileall and diff-check PASS
+- limitations: synthetic/domain-reviewed local evidence only; no G6 promotion, production deployment, source-to-canonical-to-OLAP reconciliation or unrestricted SQL support; optional Valentine/Splink runtimes remain unavailable/skipped
+- content_commit_sha: `e8933a5b07199acbd5ef6cf26c037375210f39b6` (`fix: close semantic query execution trust boundary`)
+- state: repair closure PASS; `last_completed_step=21`; `current_step=22`; current_role=`data_qa_engineer`; `G5=PASS`; `G6=PENDING`; `step22_started=false`
