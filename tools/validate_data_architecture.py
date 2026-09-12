@@ -511,6 +511,7 @@ def main() -> int:
         value != "PENDING" for key, value in state["gates"].items()
         if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY", "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY"}
         and not (key == "G5_INFERENCE_VALIDITY" and value in {"REVIEW_ONLY_VALIDATED", "PASS"})
+        and not (key == "G6_DATA_CORRECTNESS" and value in {"PENDING", "PASS"})
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:
