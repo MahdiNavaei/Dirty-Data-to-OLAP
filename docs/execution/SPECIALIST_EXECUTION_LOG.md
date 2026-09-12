@@ -1385,3 +1385,16 @@ handoff_to:
 - content_commit_sha: `8cafc28b6f560dc200661b7e1d5a6bda68616b68` (`feat: add deterministic visualization contracts and projections`)
 - report: `docs/execution/STEP26_DATA_VISUALIZATION_REVIEW.md`
 - handoff_to: `Step27 - Senior Backend Engineer`; Step27 remains `NOT_STARTED`
+
+## CRITICAL POST-STEP26 REPAIR - Visualization Integrity Closure
+
+- execution_step: `26` surgical post-Step26 repair only; Step27 was not started
+- starting_baseline: branch `main`; `HEAD=origin/main=7ce1ab6c735e2015781910554f987c03a530ab14`; original Step26 report preserved; protected `tests/quality_unit_artifacts/` untouched
+- findings_closed: authoritative validation now consumes a complete hash-bound `ValidationReport` projection without re-deriving G6; exploratory subsets cannot claim global PASS/G6; reviewed Step20 `MeasureSpec`/`FactSpec`/`AnalyticalPlan` semantics are the only authoritative measure source; filters, disclosure invariants, accessible graph closure, ER linkage distinction, and focused-path terminology are closed
+- evidence: Step26 validator `47 checks PASS`, `22 scenarios`, `16 negative controls`; final focused repair suite `25 passed`; full regression `363 passed, 2 skipped, 41 warnings`; all `26/26` repository validators PASS; compileall, YAML parse and diff-check PASS
+- benchmark: synthetic representative graph `3,668` nodes and `3,667` edges; generated artifact `workspace/runs/step26-visualization/visualization_reference.json` inspected
+- g7b_evaluation: `PASS` from repaired evidence; `G7_END_TO_END_PRODUCT` remains `PENDING`
+- limitations: no browser/renderer/API/network/physical/production-capacity claim; Splink and Valentine remain optional skips; known non-fatal dlt/SQLite cursor-cleanup traceback remains
+- content_commit_sha: `6f108e924444fe72b6d93c7d297b8aa51988aae9` (`fix: close Step26 visualization integrity boundaries`)
+- receipt: `docs/execution/STEP26_VISUALIZATION_INTEGRITY_REPAIR.md`
+- state: `last_completed_step=26`; `current_step=27`; `current_role=senior_backend_engineer`; `step27_started=false`; Step27 `NOT_STARTED`; `G7B=PASS`; `G7=PENDING`; `blocked=false`
