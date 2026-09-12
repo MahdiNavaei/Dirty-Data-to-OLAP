@@ -1264,3 +1264,23 @@ handoff_to:
 - limitations: synthetic/domain-reviewed local evidence only; no G6 promotion, production deployment, source-to-canonical-to-OLAP reconciliation or unrestricted SQL support; optional Valentine/Splink runtimes remain unavailable/skipped
 - content_commit_sha: `e8933a5b07199acbd5ef6cf26c037375210f39b6` (`fix: close semantic query execution trust boundary`)
 - state: repair closure PASS; `last_completed_step=21`; `current_step=22`; current_role=`data_qa_engineer`; `G5=PASS`; `G6=PENDING`; `step22_started=false`
+
+## Specialist Step22 - Data QA Engineer
+
+- execution_step: `22`
+- role_id: `data_qa`
+- specialist_file: `24_DATA_QA_ENGINEER.md`
+- status: `BLOCKED` for G6 acceptance; validation boundary implementation is complete
+- starting_head: `d16b86e4e6d28d0853945723ed4e27c488d9887e`; preserved untracked `tests/quality_unit_artifacts/` untouched
+- implementation: project-owned `SourceTruthManifest`, scoped `RecordAccountingArtifact`, exact `ValidationArtifactBindings`, versioned `ValidationPolicy`, status/severity-aware `ValidationReport` and `ReconciliationResult`, generic `ValidationService`, and read-only DuckDB target inspection adapter
+- validation_boundary: source/domain truth is independent JSON QA oracle; same-target semantic output is not source truth; target path and SHA-256 are checked through a read-only adapter; validation performs no source or target writes
+- required_checks: source snapshot universe, accounting, canonical membership/dedup, canonical counts/events/relationships, fact count/values/grain/duplicates, keys, FK/orphan policy, dates, global/sliced measures, bidirectional lineage, semantic downstream compatibility, exact artifact binding and no blocking discrepancy
+- reference_artifacts: retail `workspace/runs/step22-reference-run/validation/`; generic `workspace/runs/step22-generic-reference-run/validation/`; each contains policy, truth, bindings, accounting, canonical/relationship/fact/dimension/grain/RI/aggregate/date/lineage/semantic artifacts, negative controls, report, reconciliation, G6 gate evidence and manifest
+- reference_evidence: both runs emitted 21 checks with `16 PASS`, `1 NOT_APPLICABLE` monetary check, `1 REVIEW_REQUIRED` derived gate check and `3 NOT_EVALUATED` canonical checks; both G6 reports are `PENDING` and ineligible
+- negative_controls: same-total wrong allocation, same-count remove/duplicate, wrong valid FK, quantity compensation, lineage loss, unexplained filter, orphan FK, warehouse-key collision, stale canonical/plan/semantic bindings and stale target hash all detected; positive two-record-to-one-canonical dedup control preserves input accounting
+- limitation_blocking_g6: current bound Step20 `CanonicalModel` has no `CanonicalEntityInstance` or `SourceRecordCanonicalMap`; source-to-canonical membership, canonical entity counts/events and legitimate deduplication cannot be independently proven, so G6 is not promoted
+- verification: Step22 validator PASS with 16 behavioral assertions, 21 checks per retail/generic run, and zero discrepancies; focused Step22 unit/contract/integration/architecture/security tests `14 passed`; full regression `282 passed, 2 skipped` (optional Valentine/Splink runtimes unavailable); all `22/22` repository validators PASS, including engineering `73` checks, Step20 `49` checks, and Step21 `38` checks; compileall and `git diff --check` PASS; pytest emitted 41 non-failing dependency/profiling warnings and a non-fatal dlt/SQLite cursor-cleanup traceback after the successful source integration run
+- content_commit_sha: `898662c87ffc1aa6fe2bbef3d39a80ad88df17c6` (`feat: implement source-to-OLAP data correctness validation`)
+- report: `docs/execution/STEP22_DATA_CORRECTNESS_REVIEW.md`
+- handoff: no Step23 handoff because G6 remains pending; Step23 implementation not started
+- state: `last_completed_step=21`; `current_step=22`; current_role=`data_qa_engineer`; `G5=PASS`; `G6=PENDING`; `step22_started=true`; blocked on source-bound canonical membership evidence
