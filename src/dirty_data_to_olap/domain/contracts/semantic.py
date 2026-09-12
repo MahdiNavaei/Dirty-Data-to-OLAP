@@ -425,6 +425,8 @@ class MetricSpec(_SourceModel):
         if self.metric_kind is SemanticMetricKind.BASE_AGGREGATE:
             if self.expression.expression_type is not SemanticExpressionType.AGGREGATE_MEASURE or self.expression.measure_id not in self.measure_ids:
                 raise ValueError("base metrics must aggregate one referenced measure")
+        if self.metric_kind is SemanticMetricKind.DERIVED and self.availability is SemanticAvailability.AVAILABLE:
+            raise ValueError("DERIVED_METRIC_NOT_EXECUTABLE_V1: derived metrics cannot be AVAILABLE in V1")
         if self.availability is SemanticAvailability.AVAILABLE and not self.allowed_aggregation_operations:
             raise ValueError("available metrics require allowed aggregation operations")
         if self.availability is not SemanticAvailability.AVAILABLE and not self.failure_reason:
@@ -509,6 +511,38 @@ class SemanticQuerySort(_SourceModel):
         return _safe_identifier(value)
 
 
+class SemanticQueryFilterShape(_SourceModel):
+    """A filter's executable shape without retaining its bound values."""
+
+    attribute_id: str = Field(min_length=1)
+    operator: SemanticFilterOperator
+    value_count: int = Field(ge=1, le=100)
+    logical_type: str = Field(min_length=1)
+    null_value: bool = False
+
+    @field_validator("attribute_id")
+    @classmethod
+    def filter_shape_attribute_is_safe(cls, value: str) -> str:
+        return _safe_identifier(value)
+
+    @field_validator("logical_type")
+    @classmethod
+    def filter_shape_type_is_safe(cls, value: str) -> str:
+        return _text(value)
+
+    @model_validator(mode="after")
+    def filter_shape_is_bounded(self) -> "SemanticQueryFilterShape":
+        if self.operator is SemanticFilterOperator.EQUALS and self.value_count != 1:
+            raise ValueError("EQUALS filter shapes require one value")
+        if self.operator is SemanticFilterOperator.DATE_RANGE and self.value_count != 2:
+            raise ValueError("DATE_RANGE filter shapes require two values")
+        if self.operator is SemanticFilterOperator.IN and self.value_count < 1:
+            raise ValueError("IN filter shapes require at least one value")
+        if self.null_value and self.operator is not SemanticFilterOperator.EQUALS:
+            raise ValueError("only EQUALS filter shapes may represent NULL")
+        return self
+
+
 class SemanticQueryRequest(_SourceModel):
     request_id: str = Field(min_length=1)
     metric_ids: tuple[str, ...] = Field(min_length=1)
@@ -552,8 +586,12 @@ class SemanticQueryPlan(_SourceModel):
     grain_ids: tuple[str, ...] = Field(min_length=1)
     join_path_relationship_ids: tuple[str, ...] = ()
     group_by_attribute_ids: tuple[str, ...] = ()
+    time_role_id: str | None = None
     aggregation_operations: Mapping[str, str] = Field(default_factory=dict)
     physical_bindings: Mapping[str, str] = Field(default_factory=dict)
+    filter_shapes: tuple[SemanticQueryFilterShape, ...] = ()
+    sort_specs: tuple[SemanticQuerySort, ...] = ()
+    limit: int = Field(default=1000, gt=0, le=10000)
     parameter_count: int = Field(ge=0)
     parameter_logical_types: tuple[str, ...] = ()
     sql_template: str = Field(min_length=1)
@@ -568,8 +606,6 @@ class SemanticQueryPlan(_SourceModel):
             raise ValueError("semantic query parameter metadata does not match parameter count")
         if not upper.startswith("SELECT ") or ";" in statement:
             raise ValueError("semantic query plans must contain one SELECT without a semicolon")
-        if any(token in upper for token in (" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " CREATE ", " PRAGMA", " ATTACH ", " INSTALL ", " LOAD ", " READ_CSV", " READ_PARQUET", " HTTPFS")):
-            raise ValueError("unsafe operation in semantic query plan")
         return self
 
 

@@ -177,3 +177,30 @@ def test_step20_non_additive_measures_never_become_sum_metrics():
     assert all("SUM" not in item.allowed_aggregation_operations for item in model.metrics if item.display_name != "Units Ordered")
     assert not any("revenue" in item.display_name.casefold() for item in model.metrics)
 
+
+def test_available_derived_metric_is_rejected_by_v1_contract():
+    with pytest.raises(ValueError, match="DERIVED_METRIC_NOT_EXECUTABLE_V1"):
+        MetricSpec(
+            metric_id="metric_available_ratio",
+            semantic_name="available_ratio",
+            display_name="Available Ratio",
+            description="This must remain non-executable in V1.",
+            metric_kind=SemanticMetricKind.DERIVED,
+            fact_ids=("fact_order_line",),
+            grain_ids=("grain_order_line_event_v1",),
+            measure_ids=("measure_quantity",),
+            expression=MetricExpression(
+                expression_type=SemanticExpressionType.RATIO,
+                numerator_metric_id="metric_units_ordered",
+                denominator_metric_id="metric_units_ordered",
+                zero_denominator_behavior=ZeroDenominatorBehavior.NULL,
+                result_unit_semantics="units per event",
+            ),
+            unit_semantics="units per event",
+            currency_semantics="NOT_APPLICABLE",
+            domain_assertion_refs=("test:ratio",),
+            lineage_refs=("test:ratio",),
+            provenance_refs=("test:ratio",),
+            availability=SemanticAvailability.AVAILABLE,
+            allowed_aggregation_operations=("DIVIDE",),
+        )

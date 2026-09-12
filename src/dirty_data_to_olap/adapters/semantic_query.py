@@ -12,6 +12,7 @@ from dirty_data_to_olap.domain.contracts.semantic import (
     SemanticQueryCompilation,
     SemanticQueryResult,
 )
+from dirty_data_to_olap.domain.semantic_query_renderer import SemanticQueryRenderError, render_semantic_query_sql
 
 
 class SemanticQueryExecutionError(ValueError):
@@ -44,12 +45,15 @@ class DuckDBSemanticQueryExecutor:
         query_plan = compilation.query_plan
         if query_plan.semantic_model_id != model.semantic_model_id or query_plan.semantic_model_content_hash != model.content_hash:
             raise SemanticQueryExecutionError("STALE_SEMANTIC_MODEL: query plan is not bound to this model")
-        statement = query_plan.sql_template.strip()
-        upper = statement.upper()
-        if not upper.startswith("SELECT ") or ";" in statement:
-            raise SemanticQueryExecutionError("semantic executor accepts one generated SELECT only")
-        if any(token in upper for token in (" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " CREATE ", " PRAGMA", " ATTACH ", " INSTALL ", " LOAD ", " READ_CSV", " READ_PARQUET", " HTTPFS")):
-            raise SemanticQueryExecutionError("unsafe semantic statement")
+        try:
+            trusted_statement = render_semantic_query_sql(model, query_plan)
+        except SemanticQueryRenderError as exc:
+            raise SemanticQueryExecutionError(f"STRUCTURAL_QUERY_REJECTED: {exc}") from exc
+        if query_plan.sql_template != trusted_statement:
+            raise SemanticQueryExecutionError("STRUCTURAL_QUERY_REJECTED: SQL template does not match the bound semantic query structure")
+        if len(compilation.parameters) != query_plan.parameter_count:
+            raise SemanticQueryExecutionError("STRUCTURAL_QUERY_REJECTED: bound parameter count does not match the semantic query structure")
+        statement = trusted_statement
         target = self._target_path(model)
         connection = duckdb.connect(str(target), read_only=True)
         try:

@@ -16,7 +16,15 @@ sys.path.insert(0, str(ROOT))
 from dirty_data_to_olap.adapters.semantic_query import DuckDBSemanticQueryExecutor, SemanticQueryExecutionError
 from dirty_data_to_olap.application.semantic_layer import SemanticLayerError, SemanticLayerService
 from dirty_data_to_olap.domain.contracts.analytical import MaterializationStatus
-from dirty_data_to_olap.domain.contracts.semantic import SemanticQueryRequest
+from dirty_data_to_olap.domain.contracts.semantic import (
+    MetricExpression,
+    MetricSpec,
+    SemanticAvailability,
+    SemanticExpressionType,
+    SemanticMetricKind,
+    SemanticQueryRequest,
+    ZeroDenominatorBehavior,
+)
 from tools.run_step21_generic_reference import main as run_generic
 from tools.run_step21_reference import main as run_retail
 from tools.step21_reference_support import generic_context, retail_context
@@ -96,6 +104,90 @@ def main() -> int:
     result = executor.execute(retail_model, overall)
     check(result.rows[0][units.metric_id] == 6, "semantic overall result does not equal direct target SUM(quantity)", checks)
     check(overall.query_plan.sql_template.startswith("SELECT ") and ";" not in overall.query_plan.sql_template and overall.parameters == (), "semantic plan is not a generated read-only SELECT", checks)
+
+    generic_temperature = next(item for item in generic_model.metrics if item.display_name == "Observed Temperature")
+    generic_region = next(attribute for dimension in generic_model.dimensions if dimension.semantic_dimension_id == "dimension_location" for attribute in dimension.attributes if attribute.physical_column_ref == "region")
+    generic_date = next(attribute for dimension in generic_model.dimensions if dimension.semantic_dimension_id == "dimension_observed_date" for attribute in dimension.attributes if attribute.physical_column_ref == "full_date")
+    generic_query = service.resolve_query(
+        generic_model,
+        SemanticQueryRequest(
+            request_id="validator_generic_region",
+            metric_ids=(generic_temperature.metric_id,),
+            group_by_attribute_ids=(generic_region.semantic_attribute_id, generic_date.semantic_attribute_id),
+            time_role_id=generic_model.time_roles[0].time_role_id,
+        ),
+        analytical_plan=generic_context_value.plan,
+        compiled_plan=generic_context_value.compiled_plan,
+        materialization=generic_context_value.materialization,
+    )
+    generic_result = executor.execute(generic_model, generic_query)
+    check(generic_result.rows and all(generic_temperature.metric_id in row for row in generic_result.rows), "generic semantic query did not execute through the bounded executor", checks)
+
+    tampered_templates = (
+        'SELECT SUM(f."quantity") AS "metric" FROM "undeclared_table" AS f LIMIT 1000',
+        'SELECT SUM(f."quantity") AS "metric" FROM "fact_order_line" AS f LEFT JOIN "dim_customer" AS d0 ON f."customer_key" = d0."customer_key" LIMIT 1000',
+        'SELECT (SELECT 1) AS "metric" FROM "fact_order_line" AS f LIMIT 1000',
+        "SELECT * FROM read_csv('C:/blocked.csv')",
+        "SELECT * FROM read_parquet('C:/blocked.parquet')",
+        "SELECT * FROM parquet_scan('C:/blocked.parquet')",
+        "SELECT * FROM csv_scan('C:/blocked.csv')",
+        "SELECT glob('C:/blocked/*')",
+        "SELECT * FROM sqlite_scan('C:/blocked.sqlite', 'items')",
+        "SELECT read_text('C:/blocked.txt')",
+        "SELECT read_blob('C:/blocked.bin')",
+    )
+    for statement in tampered_templates:
+        tampered = overall.model_copy(update={"query_plan": overall.query_plan.model_copy(update={"sql_template": statement})})
+        expect_failure(lambda tampered=tampered: executor.execute(retail_model, tampered), "STRUCTURAL_QUERY_REJECTED", checks)
+
+    product_attribute = next(attribute for dimension in retail_model.dimensions if dimension.semantic_dimension_id == "dim_product" for attribute in dimension.attributes if attribute.physical_column_ref == "product_name")
+    product_query = service.resolve_query(
+        retail_model,
+        SemanticQueryRequest(request_id="validator_product_path", metric_ids=(units.metric_id,), group_by_attribute_ids=(product_attribute.semantic_attribute_id,)),
+        analytical_plan=retail_context_value.plan,
+        compiled_plan=retail_context_value.compiled_plan,
+        materialization=retail_context_value.materialization,
+    )
+    forged_join = product_query.query_plan.model_copy(update={"join_path_relationship_ids": ("srel_unknown",)})
+    expect_failure(lambda: executor.execute(retail_model, product_query.model_copy(update={"query_plan": forged_join})), "STRUCTURAL_QUERY_REJECTED", checks)
+
+    reviewed_ratio = MetricSpec(
+        metric_id="metric_validator_ratio",
+        semantic_name="validator_ratio",
+        display_name="Validator Ratio",
+        description="Explicit ratio retained as review-only metadata.",
+        metric_kind=SemanticMetricKind.DERIVED,
+        fact_ids=units.fact_ids,
+        grain_ids=units.grain_ids,
+        measure_ids=units.measure_ids,
+        expression=MetricExpression(
+            expression_type=SemanticExpressionType.RATIO,
+            numerator_metric_id=units.metric_id,
+            denominator_metric_id=units.metric_id,
+            zero_denominator_behavior=ZeroDenominatorBehavior.NULL,
+            result_unit_semantics="units per event",
+        ),
+        unit_semantics="units per event",
+        currency_semantics="NOT_APPLICABLE",
+        domain_assertion_refs=("validator:ratio",),
+        lineage_refs=("validator:ratio",),
+        provenance_refs=("validator:ratio",),
+        availability=SemanticAvailability.REVIEW_REQUIRED,
+        failure_reason="REVIEW_REQUIRED: V1 has no derived metric compiler",
+    )
+    available_ratio = reviewed_ratio.model_copy(update={"availability": SemanticAvailability.AVAILABLE, "failure_reason": None, "allowed_aggregation_operations": ("DIVIDE",)})
+    forged_ratio_model = retail_model.model_copy(update={"metrics": (*retail_model.metrics, available_ratio)})
+    expect_failure(
+        lambda: service.resolve_query(
+            forged_ratio_model,
+            SemanticQueryRequest(request_id="validator_derived", metric_ids=(available_ratio.metric_id,)),
+            analytical_plan=retail_context_value.plan,
+            compiled_plan=retail_context_value.compiled_plan,
+            materialization=retail_context_value.materialization,
+        ),
+        "DERIVED_METRIC_NOT_EXECUTABLE_V1",
+        checks,
+    )
 
     expect_failure(lambda: service.resolve_query(retail_model, SemanticQueryRequest(request_id="validator_price", metric_ids=(next(item.metric_id for item in retail_model.metrics if item.display_name == "Unit Price"),)), analytical_plan=retail_context_value.plan, compiled_plan=retail_context_value.compiled_plan, materialization=retail_context_value.materialization), "UNSUPPORTED_AGGREGATION", checks)
     bad_grain_metric = units.model_copy(update={"metric_id": "metric_other_grain", "grain_ids": ("grain_other",)})

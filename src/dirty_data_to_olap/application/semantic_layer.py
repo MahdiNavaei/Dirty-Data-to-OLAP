@@ -44,6 +44,7 @@ from dirty_data_to_olap.domain.contracts.semantic import (
     SemanticModel,
     SemanticModelStatus,
     SemanticQueryCompilation,
+    SemanticQueryFilterShape,
     SemanticQueryPlan,
     SemanticQueryRequest,
     SemanticRelationship,
@@ -56,6 +57,7 @@ from dirty_data_to_olap.domain.contracts.semantic import (
     semantic_query_plan_id,
     metric_id as semantic_metric_id,
 )
+from dirty_data_to_olap.domain.semantic_query_renderer import SemanticQueryRenderError, render_semantic_query_sql
 from dirty_data_to_olap.domain.contracts.source import stable_digest
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 
@@ -525,6 +527,8 @@ class SemanticLayerService:
         known_measure_ids = {item.measure_spec_id for item in semantic_measures}
         metric_by_id = {item.metric_id: item for item in metric_specs}
         for derived_metric in derived_metrics:
+            if derived_metric.availability is SemanticAvailability.AVAILABLE:
+                raise SemanticLayerError("DERIVED_METRIC_NOT_EXECUTABLE_V1: derived metrics cannot be executable in V1")
             if derived_metric.metric_kind is not SemanticMetricKind.DERIVED:
                 raise SemanticLayerError("DERIVED_METRIC_REQUIRED: supplied derived metric is not marked DERIVED")
             if any(item not in all_metric_ids for item in (derived_metric.expression.numerator_metric_id, derived_metric.expression.denominator_metric_id) if item):
@@ -603,6 +607,9 @@ class SemanticLayerService:
         if any(metric_id not in metrics for metric_id in request.metric_ids):
             raise SemanticLayerError("UNKNOWN_METRIC: semantic query may select only declared metrics")
         selected_metrics = tuple(metrics[item] for item in request.metric_ids)
+        derived = next((item for item in selected_metrics if item.metric_kind is SemanticMetricKind.DERIVED), None)
+        if derived is not None:
+            raise SemanticLayerError("DERIVED_METRIC_NOT_EXECUTABLE_V1: derived metrics have no V1 executable compiler")
         unavailable = next((item for item in selected_metrics if item.availability is not SemanticAvailability.AVAILABLE), None)
         if unavailable is not None:
             raise SemanticLayerError(unavailable.failure_reason or "UNAVAILABLE_METRIC")
@@ -758,14 +765,33 @@ class SemanticLayerService:
             grain_ids=(grain_id,),
             join_path_relationship_ids=tuple(item.relationship_id for item in relationships),
             group_by_attribute_ids=tuple(item.semantic_attribute_id for item in group_attributes),
+            time_role_id=request.time_role_id,
             aggregation_operations=aggregation_operations,
             physical_bindings=physical_bindings,
+            filter_shapes=tuple(
+                SemanticQueryFilterShape(
+                    attribute_id=semantic_filter.attribute_id,
+                    operator=semantic_filter.operator,
+                    value_count=len(semantic_filter.values),
+                    logical_type=attribute.logical_type,
+                    null_value=semantic_filter.operator is SemanticFilterOperator.EQUALS and semantic_filter.values[0] is None,
+                )
+                for semantic_filter, attribute in filter_attributes
+            ),
+            sort_specs=tuple(request.sort),
+            limit=request.limit,
             parameter_count=len(parameters),
             parameter_logical_types=tuple(parameter_types),
             sql_template=sql_template,
             query_hash=query_hash,
             provenance_refs=model.provenance_refs,
         )
+        try:
+            trusted_sql = render_semantic_query_sql(model, query_plan)
+        except SemanticQueryRenderError as exc:
+            raise SemanticLayerError(f"INTERNAL_SEMANTIC_RENDER_REJECTED: {exc}") from exc
+        if trusted_sql != sql_template:
+            raise SemanticLayerError("INTERNAL_SEMANTIC_RENDER_MISMATCH: compiler output is not structurally renderable")
         return SemanticQueryCompilation(query_plan=query_plan, parameters=tuple(parameters))
 
     def resolve_query(self, model: SemanticModel, request: SemanticQueryRequest, **kwargs: object) -> SemanticQueryCompilation:
