@@ -279,7 +279,7 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer", "data_qa_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer", "data_qa_engineer", "data_platform_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
             "post-gate current specialist is an authorized specialist handoff when G3 passes",
@@ -300,7 +300,8 @@ def main() -> int:
             or (execution.get("current_step") == 20 and execution.get("current_role") == "olap_engineer" and execution.get("last_completed_step") == 19 and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 21 and execution.get("current_role") == "analytical_semantic_layer_engineer" and execution.get("last_completed_step") == 20 and gates.get("G3_SOURCE_SAFETY") == "PASS")
             or (execution.get("current_step") == 22 and execution.get("current_role") == "data_qa_engineer" and execution.get("last_completed_step") == 21 and gates.get("G3_SOURCE_SAFETY") == "PASS")
-            or (execution.get("current_step") == 23 and execution.get("current_role") == "data_platform_engineer" and execution.get("last_completed_step") == 22 and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS"),
+            or (execution.get("current_step") == 23 and execution.get("current_role") == "data_platform_engineer" and execution.get("last_completed_step") == 22 and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS")
+            or (execution.get("current_step") == 24 and execution.get("current_role") == "distributed_data_engineer" and execution.get("last_completed_step") == 23 and execution.get("last_completed_role") == "data_platform_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS"),
         )
 
     # 4-5: required artifacts parse and carry provenance.
