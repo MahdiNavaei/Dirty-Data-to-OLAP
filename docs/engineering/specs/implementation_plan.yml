@@ -2,14 +2,14 @@ schema_version: "1.0"
 scope: "v1 implementation plan after the frozen product, domain, data and software architecture"
 provenance:
   authority: "05_MASTER_BUILD_SEQUENCE.md, product/domain/data/solution contracts, Step 05 cross-artifact audit"
-  status: "G2 PASS; Step22 G6 closure is complete; G5 PASS and G6 PASS; Step23 local platform foundation and Step24 bounded scale semantics are implemented; Step25 remains not started"
+  status: "G2 PASS; Step22 G6 closure is complete; G5 PASS and G6 PASS; Step23 local platform foundation, Step24 bounded scale semantics, Step25 UX design contracts and Step26 visualization projections are implemented; Step27 remains not started"
 
 sequence_authority:
   master_sequence_path: docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md
   sequence_order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41]
   first_implementation_step: 6
   first_implementation_role: "Step06 Database Engineer / DBA"
-  current_handoff: "Step26 Data Visualization Engineer"
+  current_handoff: "Step27 Senior Backend Engineer"
 
 component_ownership_policy:
   source: docs/engineering/specs/ownership_map.yml
@@ -41,9 +41,9 @@ specialist_sequence:
   - {step: 22, role: Data QA Engineer, phase: validation, implementation_status: IMPLEMENTED, gate_status: G6_PASS, completion_status: COMPLETED_G6_PASS}
   - {step: 23, role: Data Platform Engineer, phase: platform, implementation_status: IMPLEMENTED, completion_status: COMPLETED_LOCAL_PLATFORM}
   - {step: 24, role: Distributed Systems Engineer, phase: platform, implementation_status: IMPLEMENTED, completion_status: COMPLETED_DISTRIBUTED_SCALE_G7A_PASS}
-  - {step: 25, role: UX Engineer, phase: product_surface}
-  - {step: 26, role: Visualization Engineer, phase: product_surface}
-  - {step: 27, role: Backend Engineer, phase: product_surface}
+  - {step: 25, role: UX Engineer, phase: product_surface, implementation_status: IMPLEMENTED, completion_status: COMPLETED_UX_DESIGN}
+  - {step: 26, role: Visualization Engineer, phase: product_surface, implementation_status: IMPLEMENTED, completion_status: COMPLETED_DATA_VISUALIZATION, milestone: G7B_PASS}
+  - {step: 27, role: Backend Engineer, phase: product_surface, implementation_status: NOT_STARTED}
   - {step: 28, role: Jobs / Distributed Systems Engineer, phase: orchestration}
   - {step: 29, role: Frontend Engineer, phase: product_surface}
   - {step: 30, role: DevOps / Release Engineer, phase: delivery}
@@ -104,3 +104,11 @@ step24_distributed_scale_slice:
   required_outputs: ["typed scale decision", "deterministic partition plan and result contracts", "bounded partitioned-local executor", "global reduction and comparison routing semantics", "skew/shuffle/resource evidence", "G6-bound local equivalence and G7A report", "isolated Step23 validator negative-state harness"]
   forbidden_outputs: ["Spark/Ray/Dask runtime", "multi-node capacity claim", "job queue", "scheduler", "cancellation API", "Step28 StageExecutorPort implementation", "Step25 UX implementation", "source-system writes"]
   handoff_to_step25: ["G7A scale-preserving equivalence report", "bounded execution limitations", "Step25 UX/Product Designer remains not started"]
+
+step26_visualization_slice:
+  step: 26
+  status: IMPLEMENTED
+  allowed_paths: [src/dirty_data_to_olap/domain/contracts/visualization.py, src/dirty_data_to_olap/application/visualization.py, src/dirty_data_to_olap/domain/contracts/__init__.py, src/dirty_data_to_olap/application/__init__.py, tests/unit/, tests/contract/, tests/integration/, tests/architecture/, tools/validate_step26_visualization.py, docs/visualization/, docs/execution/STEP26_DATA_VISUALIZATION_REVIEW.md]
+  required_outputs: ["project-owned graph and chart view-model contracts", "deterministic stable IDs/content hashes", "bounded overview/neighborhood/focused-lineage disclosure", "evidence/conflict/schema/ER/canonical/OLAP semantic encodings", "quality/profile/validation views with explicit scope and status", "accessible nonvisual equivalents and privacy-safe labels", "representative synthetic large-graph benchmark and negative controls", "G7B reviewable-decision representation evidence"]
+  forbidden_outputs: ["frontend application or browser shell", "backend/API transport", "job queue or scheduler", "source-system writes", "new evidence/identity/canonical/OLAP truth", "third-party renderer dependency without an approved boundary", "browser FPS or user-research claim"]
+  handoff_to_step27: ["stable visualization view-model contracts", "disclosure and accessibility fields", "provenance/privacy constraints", "validator and inspected synthetic artifact", "G7B PASS with G7 still PENDING"]

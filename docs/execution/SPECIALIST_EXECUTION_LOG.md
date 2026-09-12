@@ -1363,3 +1363,25 @@ handoff_to:
 - scope_boundary: no frontend, backend/API, visualization, graph, scheduler, job control, authentication, provider, source write, score calibration, domain truth, canonical semantics or analytical semantics implementation
 - content_commit_sha: `1e52bc435eb869113edc35decd54c222503da4ac` (`docs: define Step25 UX review contracts`)
 - handoff_to: `Step26 - Data Visualization Engineer`; Step26 remains `NOT_STARTED`; `G7B_REVIEWABLE_DECISIONS` and `G7_END_TO_END_PRODUCT` remain `PENDING`
+
+## Specialist Step26 - Data Visualization Engineer
+
+- execution_step: `26`
+- role_id: `data_visualization_engineer`
+- specialist_file: `22_DATA_VISUALIZATION_ENGINEER.md`
+- status: `PASS` for bounded deterministic visualization projections and reviewable representation; this does not claim browser usability or G7
+- starting_baseline: `HEAD=origin/main=a54373c32f24e2eeb69393b125b334eb03bf108a`; branch `main`; protected `tests/quality_unit_artifacts/` preserved, not read, modified, staged, committed, or used as evidence
+- inputs_reviewed: full Step26 prompt; six governance files; eight base reports; Step26 playbook; Step25 UX handoff; Step24 G7A handoff; checkpoint architecture; and actual source contracts for source/snapshot, profiling, quality, privacy, schema matching, entity resolution, evidence fusion, canonical, analytical, and validation
+- implementation: project-owned immutable visualization contracts and deterministic service for source/schema, neighborhood, lineage, evidence/conflict, schema candidates, ER clusters, canonical mappings, OLAP fact/dimension/grain/measure, quality heatmap, profile distribution and validation views; stable IDs/content hashes; explicit state/scope/reliability/provenance; accessible graph rows; privacy-safe labels; exact Step25 interaction-state coverage
+- machine_contracts: `docs/visualization/specs/visualization_encoding.yml` and `docs/visualization/specs/graph_bounds.yml`; executable `tools/validate_step26_visualization.py`
+- oss_decision: no third-party renderer or copied OSS code; implementation is project-owned and renderer-neutral, with no renderer dependency in the service boundary
+- scenarios: `13` passed, including declared/inferred source graph, bounded neighborhood, evidence conflict, schema mapping, ER cluster/canonical boundary, lineage direction/non-causality, OLAP additivity/grain, quality scope/denominator, validation states, stale state, privacy-blocked profile, and large-graph progressive disclosure
+- negative_controls: `7` passed; uncalibrated probability language, non-additive `SUM`, missing quality denominator, sensitive label, unordered histogram, validation status laundering, and inconsistent disclosure accounting were rejected
+- benchmark: synthetic `3,668` nodes and `3,667` edges, `220` tables, more than `3,000` columns/nodes, thousands of relationships and a high-degree table; overview bounded to `250/500`, neighborhood bounded to `120/180`; validator elapsed approximately `0.0835` seconds; hidden node/edge counts and content hash were inspected in `workspace/runs/step26-visualization/visualization_reference.json`
+- accessibility_evidence: every rendered node has an `AccessibleGraphRow`; legends/descriptions expose shape, line style, state, evidence, reliability, scope, review, conflict and hidden counts without color-only meaning
+- tests: focused Step26 `10 passed`; validator `29 checks PASS`; pre-handoff Step25 validator `62 checks PASS`; Step24 validator `29 checks PASS`; engineering plan validator `73 checks PASS`; compileall and `git diff --check` passed
+- limitations: synthetic local projection evidence only; no browser, renderer/GPU, API/network, database, multi-node or production-capacity claim; no user research or assistive-technology runtime test; optional Splink/Valentine remain unavailable/skipped; known non-fatal dlt/SQLite cursor-cleanup traceback remains a prior broad-regression limitation
+- g7b_evidence: `PASS` because visual representations preserve what/why, uncertainty, conflicts, observed state, change/staleness, unresolved/not-evaluated status, accessibility equivalent, privacy boundary, and provenance. `G7_END_TO_END_PRODUCT` remains `PENDING`.
+- content_commit_sha: `8cafc28b6f560dc200661b7e1d5a6bda68616b68` (`feat: add deterministic visualization contracts and projections`)
+- report: `docs/execution/STEP26_DATA_VISUALIZATION_REVIEW.md`
+- handoff_to: `Step27 - Senior Backend Engineer`; Step27 remains `NOT_STARTED`
