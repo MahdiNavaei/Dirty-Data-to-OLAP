@@ -311,7 +311,7 @@ components:
     name: Canonical Finalization Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [accepted canonical instances, mappings, survivorship and conflicts]
+    responsibilities: [accepted canonical instances, source-record maps, explicit memberships, survivorship and conflicts]
     input_contracts: [CanonicalModelHypothesis, CanonicalIdentityProposal, EntityResolutionResult, ReviewDecision]
     output_contracts: [CanonicalModel, SourceRecordCanonicalMap, CanonicalAttribute, CanonicalIdentityMembership]
     depends_on: [application.canonical_hypotheses, application.review_policy, domain.contracts]
@@ -402,8 +402,8 @@ components:
     name: Validation and Reconciliation Service
     layer: application
     ownership: Dirty Data to OLAP
-    responsibilities: [independently reconcile source snapshot truth, canonical membership, scoped record accounting, analytical grain, dimensions, relationships, measures, dates, lineage and semantic projection]
-    input_contracts: [SourceTruthManifest, CanonicalModel, RecordAccountingArtifact, AnalyticalPlan, CompiledPlan, MaterializationArtifact, SemanticModel, SemanticValidationResult, ValidationPolicy, ValidationArtifactBindings]
+    responsibilities: [independently reconcile source snapshot truth, finalized canonical instances/maps, stage-scoped record accounting, bound analytical dataset, every fact grain and typed aggregate, dimensions, relationships, measures, dates, lineage and semantic projection]
+    input_contracts: [SourceTruthManifest, CanonicalModel with instances and SourceRecordCanonicalMap, RecordAccountingArtifact with SOURCE_TO_CANONICAL and CANONICAL_TO_ANALYTICAL scopes, AnalyticalInputDataset, AnalyticalInputBinding, AnalyticalPlan, CompiledPlan with all FactSpec entries, MaterializationArtifact, SemanticModel, SemanticValidationResult, ValidationPolicy, ValidationArtifactBindings]
     output_contracts: [ValidationReport, ReconciliationResult, ValidationDiscrepancy]
     depends_on: [application.source_snapshot, application.canonical_finalization, application.materializer, application.analytical_planner, application.semantic_layer, domain.contracts]
     ports_used: [ArtifactStorePort, ControlStorePort]
@@ -413,7 +413,7 @@ components:
     side_effect_class: artifact_write
     persistence_access: ArtifactStorePort and ControlStorePort through ports
     optional: false
-    failure_behavior: FAIL or required NOT_EVALUATED/REVIEW_REQUIRED evidence makes G6 ineligible; target remains non-accepted and discrepancies are retained
+    failure_behavior: FAIL or required NOT_EVALUATED/REVIEW_REQUIRED evidence makes G6 ineligible; target remains non-accepted and discrepancies are retained; monetary/revenue is informational NOT_APPLICABLE only when the domain contract has no monetary authority
   - component_id: adapters.source
     name: Source Adapter Family
     layer: adapters

@@ -24,6 +24,7 @@ contract_family_owners:
   canonical: "Step19 Canonical Model Engineer"
   analytical_and_olap: "Step20 OLAP Engineer"
   validation_and_reconciliation: "Step22 Data QA Engineer"
+  runtime_accounting_note: "Step19 and Step20 emit the runtime accounting inputs; Step22 independently checks both boundaries"
 
 components:
   - {component_id: domain.contracts, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, test_strategy: "contract and architecture tests"}
@@ -44,12 +45,12 @@ components:
   - {component_id: application.canonical_hypotheses, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, implementation_status: IMPLEMENTED, test_strategy: "canonical contract and lineage tests"}
   - {component_id: application.entity_resolution, primary_specialist: "Step14 Entity Resolution Engineer", implementation_step: 14, test_strategy: "ER adapter and false-merge evaluation"}
   - {component_id: application.learned_evidence, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "grouped ranking, leakage negatives, JSON artifact and unavailable-path tests"}
-  - {component_id: application.canonical_finalization, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, implementation_status: IMPLEMENTED, test_strategy: "identity, survivorship and accounting tests"}
+  - {component_id: application.canonical_finalization, primary_specialist: "Step19 Canonical Model Engineer", implementation_step: 19, implementation_status: IMPLEMENTED, test_strategy: "identity, survivorship, finalized instances, source-record maps and runtime accounting tests"}
   - {component_id: application.analytical_planner, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "generic typed input, exact spec package, grain, measure and model contract tests"}
   - {component_id: application.compiler, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "exact spec mutation, generic DDL/load, type and SQL privacy contract tests"}
   - {component_id: application.materializer, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "generic controlled-target, orphan-policy and atomic publication integration tests"}
   - {component_id: application.semantic_layer, primary_specialist: "Step21 Analytical Model / Semantic Layer Engineer", implementation_step: 21, implementation_status: IMPLEMENTED, test_strategy: "semantic contract, exact Step20 binding, grain/dimension compatibility, read-only query security and two-domain integration"}
-  - {component_id: application.validation, primary_specialist: "Step22 Data QA Engineer", implementation_step: 22, implementation_status: IMPLEMENTED, test_strategy: "independent source-to-target reconciliation, mutation detection and release acceptance suite"}
+  - {component_id: application.validation, primary_specialist: "Step22 Data QA Engineer", implementation_step: 22, implementation_status: IMPLEMENTED, test_strategy: "independent source-to-target reconciliation, exact canonical membership/counts, two accounting boundaries, all-fact typed aggregates, mutation detection and G6 acceptance suite"}
   - {component_id: adapters.source, primary_specialist: "Step07 Senior Data Engineer", implementation_step: 7, test_strategy: "source adapter contract tests"}
   - {component_id: adapters.database_security, primary_specialist: "Step11 Database Security Specialist", implementation_step: 11, test_strategy: "SQLite authorizer and SQLAlchemy/dlt hook tests"}
   - {component_id: adapters.profiling, primary_specialist: "Step08 Data Profiling Specialist", implementation_step: 8, test_strategy: "DataProfiler adapter contract tests"}
@@ -98,14 +99,14 @@ stages:
   - {stage_id: CANONICAL_IDENTITY_PREPARATION, owner_component: application.canonical_hypotheses, implementation_step: 19, test_strategy: "proposal contract, ER compatibility and identity graph integrity"}
   - {stage_id: LEARNED_EVIDENCE, owner_component: application.learned_evidence, implementation_step: 15, test_strategy: "grouped ranking and candidate-only evidence"}
   - {stage_id: REVIEW_CANONICAL_IDENTITY, owner_component: application.review_policy, implementation_step: 27, test_strategy: "identity review guard"}
-  - {stage_id: CANONICAL_FINALIZATION, owner_component: application.canonical_finalization, implementation_step: 19, test_strategy: "mapping and survivorship"}
+  - {stage_id: CANONICAL_FINALIZATION, owner_component: application.canonical_finalization, implementation_step: 19, test_strategy: "reviewed finalized instances/maps and source-to-canonical accounting"}
   - {stage_id: ANALYTICAL_PLANNING, owner_component: application.analytical_planner, implementation_step: 20, test_strategy: "grain and measures"}
   - {stage_id: REVIEW_ANALYTICAL_PLAN, owner_component: application.review_policy, implementation_step: 27, test_strategy: "analytical review guard"}
   - {stage_id: COMPILATION, owner_component: application.compiler, implementation_step: 20, test_strategy: "compiled-plan contract"}
   - {stage_id: REVIEW_MATERIALIZATION_PLAN, owner_component: application.review_policy, implementation_step: 27, test_strategy: "materialization review guard"}
   - {stage_id: MATERIALIZATION, owner_component: application.materializer, implementation_step: 20, test_strategy: "DuckDB integration"}
   - {stage_id: SEMANTIC_MODELING, owner_component: application.semantic_layer, implementation_step: 21, test_strategy: "semantic compatibility, lineage and read-only query validation"}
-  - {stage_id: VALIDATION_RECONCILIATION, owner_component: application.validation, implementation_step: 22, test_strategy: "reconciliation acceptance including semantic validation inputs"}
+  - {stage_id: VALIDATION_RECONCILIATION, owner_component: application.validation, implementation_step: 22, test_strategy: "independent truth versus runtime canonical membership, both accounting scopes, bound analytical dataset, every fact, lineage, semantic projection and adversarial controls"}
 
 handoff:
   first_implementation_step: 6

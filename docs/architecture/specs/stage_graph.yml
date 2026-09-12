@@ -295,9 +295,9 @@ stages:
     required: true
     dependencies: [MATERIALIZATION, SEMANTIC_MODELING, ANALYTICAL_PLANNING, CANONICAL_FINALIZATION]
     optional_dependencies: []
-    input_artifact_types: [SourceTruthManifest, CanonicalModel, RecordAccountingArtifact, AnalyticalPlan, CompiledPlan, MaterializationArtifact, SemanticModel, SemanticValidationResult, ValidationPolicy, ValidationArtifactBindings]
+    input_artifact_types: [SourceTruthManifest, CanonicalModel, SourceRecordCanonicalMap, RecordAccountingArtifact, AnalyticalInputDataset, AnalyticalInputBinding, AnalyticalPlan, CompiledPlan, FactSpec, GrainSpec, MeasureSpec, MaterializationArtifact, SemanticModel, SemanticValidationResult, ValidationPolicy, ValidationArtifactBindings]
     output_artifact_types: [ValidationReport, ReconciliationResult, ValidationDiscrepancy]
     failure_consequence: run FAILED; target not accepted
     cacheable: true
-    idempotency: pinned target/hash/validation policy
-    review_boundary: final acceptance; no new review checkpoint
+    idempotency: pinned source snapshot/truth, finalized canonical model, both accounting boundaries, analytical dataset/binding, all fact specs, target/hash and validation policy
+    review_boundary: final acceptance; no new review checkpoint; source truth is QA-only and never a transformation input

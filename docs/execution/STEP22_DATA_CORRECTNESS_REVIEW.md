@@ -1,6 +1,6 @@
 # Step22 — Data Correctness Review
 
-Status: `IMPLEMENTED_BOUNDARY_BLOCKED_G6_PENDING`
+Historical v1 status: `IMPLEMENTED_BOUNDARY_BLOCKED_G6_PENDING`
 
 Date: `2026-09-12`
 
@@ -151,3 +151,101 @@ G5 remains `PASS`. G6 remains `PENDING`. `last_completed_step` remains `21`;
 Step22 validation code is implemented, but the specialist acceptance is
 blocked on the exact canonical source-membership evidence described above.
 Step23 implementation is `NOT_STARTED`.
+
+## Corrected post-Step22 G6 closure
+
+Status: `PASS`
+
+This is the critical post-Step22 G6 integrity closure. It is not Primary
+Prompt 23/41 and it does not start Step23. The first blocked attempt above is
+retained as temporal history: its content commit was
+`898662c87ffc1aa6fe2bbef3d39a80ad88df17c6`, with repository metadata at
+`59f73af06a01936e136aba583f9d6c96627b40dc`. That attempt correctly kept G6
+pending, but its audit found circular truth/accounting construction, missing
+runtime canonical instances/maps, non-stage-scoped accounting, and first-fact-
+only validation.
+
+The repair executes the project-owned Step19 `CanonicalFinalizationService`
+before the QA oracle is loaded. `tools/step22_transformation_support.py` does
+not import or read the independent manifests under `benchmarks/validation/`.
+It produces source-snapshot-bound canonical instances/maps, a typed
+`AnalyticalInputDataset` and `AnalyticalInputBinding`, and runtime accounting
+for both `SOURCE_TO_CANONICAL` and `CANONICAL_TO_ANALYTICAL`. The QA-only
+`tools/step22_reference_support.py` then loads independent truth and validates
+the existing Step20/Step21 artifacts. No accounting artifact is constructed
+from truth and same-target semantic output is not truth.
+
+| Run | Truth records | Canonical instances/maps | Accounting denominators | Facts | Checks | G6 |
+|---|---:|---:|---|---:|---:|---|
+| retail | 12 | 11 / 12 | source 12; canonical 11 | 3 `fact_order_line` | 25 | `PASS`, eligible |
+| generic Device/Location/Reading | 7 | 7 / 7 | source 7; canonical 7 | 3 `fact_device_reading` | 25 | `PASS`, eligible |
+
+Both runs have 24 required blocking checks and one informational monetary
+check. All required checks, including `no_blocking_discrepancy`, are `PASS`;
+monetary/revenue is `NOT_APPLICABLE` with a reason because the reviewed domain
+contract defines no currency, amount, settlement or revenue authority. Both
+reports have zero discrepancies. Every `FactSpec` is evaluated, with typed
+fact-owned aggregate expectations: retail quantity `SUM` global/product/branch
+slices and generic temperature `MAX` global/location slices.
+
+Retail canonical evidence proves the reviewed Alice deduplication as two
+source maps to one canonical instance, with both source dispositions
+`CONSOLIDATED`; this is not source-record loss. Exact source IDs, snapshot IDs,
+table IDs, canonical IDs/types, event identities, relationships, group counts,
+fact values, grains, dimensions, FKs, dates, aggregates, lineage and semantic
+aggregation classes are checked against the independent oracle.
+
+Selected run identifiers are recorded in the generated manifests. Retail uses
+canonical `cmodel_b34a75cb26d5b976767aaf6acdbc210e`, accounting
+`racc_27e1b04f980823be8065f4930d11cc92`, dataset
+`step22-retail-transformation-fixture-v2`, binding
+`abind_c8d7a3b413d97938595788888f3b27a2`, compiled plan
+`cplan_4a5559c36a1a0055f92fe2fa6b8fc278`, materialization
+`mat_4368dc89a1a8bbb9377c181af3788405`, semantic model
+`smodel_ea328bf12c9a334352025a59e4c64eff`, report
+`vreport_d0165bbbb9c4f11e1c0fb0364e18e149` and reconciliation
+`recon_9c2d47bf9d0a5b72af915a372017fd07`. Generic uses canonical
+`cmodel_00486e276058d3c4b354ab96a09eb0c2`, accounting
+`racc_d77480e7f17f07bd3dd0e8167e952ed4`, dataset
+`step22-generic-transformation-dataset-v2`, binding
+`abind_3d3776cb64046c8f5c2a053ea47154dc`, compiled plan
+`cplan_abf1b04250ad11d2f0f38e97e1aa5896`, materialization
+`mat_1091981a18ce8ceb865338639b676ac0`, semantic model
+`smodel_bfc9b8de4869090f6376f4bafda469d9`, report
+`vreport_3f87c9e2d33ab575b06b6fd9fed8cb78` and reconciliation
+`recon_7a19206f35110d97b8438d3d7fa2739d`. Full content hashes, target SHA-256,
+source fingerprints and semantic validation hashes are in each run manifest.
+
+The validator preserves and detects target mutations for wrong allocation,
+grain replacement, valid-but-wrong FK, compensating measures, lineage loss,
+filtering, orphan FK and key collision. It also detects stale canonical,
+accounting, dataset, input-binding, plan, semantic and truth bindings, stale
+target hashes, wrong accounting dispositions/outputs, swapped/merged/split or
+stale canonical membership, wrong event type, removed instances, both oracle
+and transformation membership mismatches, and a second-fact scope with a
+missing expected fact. All executed controls are recorded as `DETECTED`.
+
+Evidence is under
+`workspace/runs/step22-reference-run/validation/` and
+`workspace/runs/step22-generic-reference-run/validation/`, including policy,
+source snapshot/truth, runtime accounting, canonical model, dataset/binding,
+plan/specs, compiled SQL, materialization, target snapshot, semantic
+artifacts, per-scope reconciliations, negative controls, reports, G6 evidence
+and manifests.
+
+The executed validator returned `PASS` for both runs with 20 positive
+behavioral assertions, 25 checks per run and zero positive discrepancies.
+Focused Step22 tests returned `21 passed`. Full unit/contract/integration/
+architecture/security regression, all repository validators, compileall and
+diff-check are recorded in the final execution log after the closure commit.
+Known non-failing pytest dependency/profiling warnings and the non-fatal
+dlt/SQLite cursor-cleanup traceback remain local-environment limitations; no
+exit status or G6 check was affected.
+
+After the verified closure content commit, the formal state is
+`last_completed_step=22`, `last_completed_role=data_qa_engineer`,
+`current_step=23`, `current_role=data_platform_engineer`,
+`step22_status=COMPLETED_G6_PASS`, `step22_started=true` and
+`step23_started=false`; Step23 implementation remains `NOT_STARTED`. G5
+remains `PASS`. The protected untracked `tests/quality_unit_artifacts/`
+directory was untouched.

@@ -22,6 +22,7 @@ from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.domain.contracts.analytical import (
     AggregationClass,
     AnalyticalInputBinding,
+    AnalyticalInputDataset,
     AnalyticalInputFixture,
     AnalyticalPlanningRequest,
     BranchFixtureRow,
@@ -146,7 +147,14 @@ def build_fixture(model: CanonicalModel) -> AnalyticalInputFixture:
     )
 
 
-def build_reference_plan(model: CanonicalModel, binding: AnalyticalInputBinding, fixture: AnalyticalInputFixture, *, created_at: datetime | None = None):
+def build_reference_plan(
+    model: CanonicalModel,
+    binding: AnalyticalInputBinding,
+    fixture: AnalyticalInputFixture,
+    *,
+    input_dataset: AnalyticalInputDataset | None = None,
+    created_at: datetime | None = None,
+):
     """Build the domain-reviewed retail request outside the generic app layer."""
 
     def entity_type(semantic_id: str) -> str:
@@ -211,7 +219,8 @@ def build_reference_plan(model: CanonicalModel, binding: AnalyticalInputBinding,
         provenance_refs=provenance,
     )
     from dirty_data_to_olap.application.analytical_planner import AnalyticalPlannerService
-    plan, dimensions, facts, grains, measures = AnalyticalPlannerService().build_plan(model, binding, fixture.to_analytical_dataset(), request, created_at=created_at or STAMP)
+    dataset = input_dataset or fixture.to_analytical_dataset()
+    plan, dimensions, facts, grains, measures = AnalyticalPlannerService().build_plan(model, binding, dataset, request, created_at=created_at or STAMP)
     return plan, dimensions, facts[0], grains[0], measures
 
 

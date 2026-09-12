@@ -121,6 +121,7 @@ class SourceTruthRelationship(_SourceModel):
 
 class SourceTruthFact(_SourceModel):
     fact_ref: str = Field(min_length=1)
+    fact_id: str | None = None
     source_record_refs: tuple[str, ...] = Field(min_length=1)
     canonical_event_id: str = Field(min_length=1)
     grain_values: Mapping[str, Any] = Field(min_length=1)
@@ -128,6 +129,51 @@ class SourceTruthFact(_SourceModel):
     measure_values: Mapping[str, Any] = Field(min_length=1)
     date_value: str | None = None
     provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+
+class SourceTruthAccountingExpectation(_SourceModel):
+    """Independent expected accounting for one explicit transformation boundary."""
+
+    boundary: AccountingBoundary
+    input_record_ref: str = Field(min_length=1)
+    expected_disposition: RecordDisposition
+    expected_output_or_group_ref: str | None = None
+    reason_contains: str | None = None
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def output_matches_disposition(self) -> "SourceTruthAccountingExpectation":
+        contributing = {
+            RecordDisposition.EMITTED_DIRECT,
+            RecordDisposition.CONSOLIDATED,
+            RecordDisposition.AGGREGATED,
+        }
+        if self.expected_disposition in contributing and not self.expected_output_or_group_ref:
+            raise ValueError("contributing accounting expectations require an output or group reference")
+        if self.expected_disposition not in contributing and self.expected_output_or_group_ref is not None:
+            raise ValueError("non-contributing accounting expectations cannot claim an output reference")
+        return self
+
+
+class SourceTruthAggregateExpectation(_SourceModel):
+    """Typed, fact-owned aggregate expectation; never an arbitrary SQL oracle."""
+
+    aggregate_id: str = Field(min_length=1)
+    fact_id: str = Field(min_length=1)
+    measure_field: str = Field(min_length=1)
+    semantic_measure_ref: str | None = None
+    operation: str = Field(pattern=r"^(SUM|MAX)$")
+    group_by: tuple[str, ...] = ()
+    expected: Any = None
+    expected_by_key: Mapping[str, Any] = Field(default_factory=dict)
+    unit_semantics: str = Field(min_length=1)
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def has_expected_values(self) -> "SourceTruthAggregateExpectation":
+        if self.expected is None and not self.expected_by_key:
+            raise ValueError("aggregate expectation requires expected or expected_by_key")
+        return self
 
 
 class SourceTruthDuplicateGroup(_SourceModel):
@@ -153,6 +199,8 @@ class SourceTruthManifest(_SourceModel):
     entities: tuple[SourceTruthEntity, ...] = ()
     relationships: tuple[SourceTruthRelationship, ...] = ()
     facts: tuple[SourceTruthFact, ...] = ()
+    accounting_expectations: tuple[SourceTruthAccountingExpectation, ...] = ()
+    aggregate_expectations: tuple[SourceTruthAggregateExpectation, ...] = ()
     expected_aggregates: Mapping[str, Any] = Field(default_factory=dict)
     duplicate_groups: tuple[SourceTruthDuplicateGroup, ...] = ()
     provenance_refs: tuple[str, ...] = Field(min_length=1)
@@ -175,6 +223,21 @@ class SourceTruthManifest(_SourceModel):
         for fact in self.facts:
             if not set(fact.source_record_refs).issubset(fact_refs):
                 raise ValueError("source truth fact references an unknown record")
+        accounting_keys = [(item.boundary, item.input_record_ref) for item in self.accounting_expectations]
+        if len(accounting_keys) != len(set(accounting_keys)):
+            raise ValueError("source truth accounting expectations must be unique per boundary and input")
+        if any(item.boundary is AccountingBoundary.SOURCE_TO_CANONICAL and item.input_record_ref not in fact_refs for item in self.accounting_expectations):
+            raise ValueError("source-to-canonical accounting expectation references an unknown source record")
+        canonical_refs = {item.canonical_entity_id for item in self.entities}
+        canonical_refs.update(item.canonical_event_id for item in self.facts)
+        if any(item.boundary is AccountingBoundary.CANONICAL_TO_ANALYTICAL and item.input_record_ref not in canonical_refs for item in self.accounting_expectations):
+            raise ValueError("canonical-to-analytical accounting expectation references an unknown canonical record")
+        aggregate_ids = [item.aggregate_id for item in self.aggregate_expectations]
+        if len(aggregate_ids) != len(set(aggregate_ids)):
+            raise ValueError("source truth aggregate IDs must be unique")
+        fact_ids = {item.fact_id or item.fact_ref for item in self.facts}
+        if any(item.fact_id not in fact_ids for item in self.aggregate_expectations):
+            raise ValueError("aggregate expectation references an unknown fact ID")
         return self
 
     @property
@@ -334,6 +397,11 @@ class ValidationArtifactBindings(_SourceModel):
     analytical_plan_id: str = Field(min_length=1)
     analytical_plan_content_hash: str = Field(min_length=1)
     analytical_spec_package_hash: str = Field(min_length=1)
+    analytical_dataset_id: str = Field(min_length=1)
+    analytical_dataset_content_hash: str = Field(min_length=1)
+    analytical_input_binding_id: str = Field(min_length=1)
+    analytical_input_binding_content_hash: str = Field(min_length=1)
+    analytical_input_source_snapshot_fingerprints: Mapping[str, str] = Field(min_length=1)
     compiled_plan_id: str = Field(min_length=1)
     compiled_plan_content_hash: str = Field(min_length=1)
     materialization_artifact_id: str = Field(min_length=1)

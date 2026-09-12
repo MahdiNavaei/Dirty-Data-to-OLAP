@@ -17,9 +17,9 @@ categories:
   - {category: architecture, purpose: "imports, layers, ownership, stage order and forbidden coupling", must_be_real: true, allowed_mocks: "none", owner: "Step05/Step40", tier: TIER1, blocking: true}
   - {category: adapter_contract, purpose: "normalize each external engine behind its port", must_be_real: true, allowed_mocks: "vendor boundary fixtures", owner: "adapter owner", tier: TIER2, blocking: true}
   - {category: integration, purpose: "stage and persistence interoperability", must_be_real: true, allowed_mocks: "controlled source fixtures", owner: "Step28", tier: TIER2, blocking: true}
-  - {category: data, purpose: "keys, grain, referential integrity, lineage and record accounting", must_be_real: true, allowed_mocks: "none for reconciliation", owner: "Step22", tier: TIER3, blocking: true}
+  - {category: data, purpose: "source snapshot universe, finalized canonical membership/counts, stage-scoped accounting, keys, all fact grains, referential integrity, typed aggregates and bidirectional lineage", must_be_real: true, allowed_mocks: "none for reconciliation", owner: "Step22", tier: TIER3, blocking: true}
   - {category: evaluation, purpose: "precision/recall, false merges, calibration and quality detection", must_be_real: true, allowed_mocks: "ground truth labels only", owner: "Step18", tier: TIER3, blocking: true}
-  - {category: e2e, purpose: "fresh controlled run from source snapshot to validated target", must_be_real: true, allowed_mocks: "none beyond fixture sources", owner: "Step31", tier: TIER3, blocking: true}
+  - {category: e2e, purpose: "fresh controlled run from source snapshot through canonical finalization and analytical input binding to validated target", must_be_real: true, allowed_mocks: "none beyond fixture sources", owner: "Step22 for G6 boundary; Step31 for later product E2E", tier: TIER3, blocking: true}
   - {category: failure_recovery, purpose: "failed stage, resume, cancellation, invalidation and retained artifacts", must_be_real: true, allowed_mocks: "fault injection", owner: "Step28", tier: TIER2, blocking: true}
   - {category: security, purpose: "read-only source, secrets, authorization and PII-safe logging", must_be_real: true, allowed_mocks: "safe test credentials", owner: "Step33", tier: TIER1, blocking: true}
   - {category: performance, purpose: "stage runtime, memory, rows scanned and cache behavior", must_be_real: true, allowed_mocks: "none for measurement", owner: "Step37", tier: TIER4, blocking: false}
@@ -46,7 +46,7 @@ stage_test_requirements:
   - {stage_id: REVIEW_MATERIALIZATION_PLAN, required_categories: [contract, security, failure_recovery], owner: "Step27"}
   - {stage_id: MATERIALIZATION, required_categories: [adapter_contract, integration, data, security, failure_recovery], owner: "Step20"}
   - {stage_id: SEMANTIC_MODELING, required_categories: [unit, contract, architecture, integration, data, security, failure_recovery], owner: "Step21"}
-  - {stage_id: VALIDATION_RECONCILIATION, required_categories: [unit, contract, architecture, data, e2e, security, failure_recovery], owner: "Step22"}
+  - {stage_id: VALIDATION_RECONCILIATION, required_categories: [unit, contract, architecture, data, e2e, security, failure_recovery], owner: "Step22", required_evidence: ["independent_source_truth", "runtime_canonical_instances_and_maps", "source_to_canonical_accounting", "canonical_to_analytical_accounting", "all_fact_specs", "typed_aggregate_expectations", "negative_controls", "zero_blocking_discrepancies"]}
 
 interface_test_requirements:
   - {interface_id: SourceAdapter, categories: [adapter_contract, security]}

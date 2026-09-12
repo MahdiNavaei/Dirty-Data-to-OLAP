@@ -1,8 +1,12 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from dirty_data_to_olap.adapters.validation import DuckDBValidationTargetReader, ValidationTargetError
+from dirty_data_to_olap.application.validation import ValidationService
+from dirty_data_to_olap.domain.contracts.validation import ValidationStatus
+from tools.step22_reference_support import build_reference_context
 
 
 def test_validation_application_has_no_database_driver_or_caller_sql_boundary():
@@ -28,3 +32,16 @@ def test_validation_reader_requires_exact_target_hash():
             expected_sha256="0" * 64,
             allowed_table_names=("fact_order_line",),
         )
+
+
+def test_validation_rejects_stale_analytical_input_binding():
+    root = Path(__file__).parents[2]
+    context = build_reference_context("generic")
+    inputs = replace(
+        context.inputs,
+        analytical_input_binding=context.inputs.analytical_input_binding.model_copy(
+            update={"binding_id": "stale-input-binding"}
+        ),
+    )
+    outcome = ValidationService().validate(inputs, DuckDBValidationTargetReader(root))
+    assert next(item for item in outcome.report.checks if item.check_id == "artifact_binding").status is ValidationStatus.FAIL
