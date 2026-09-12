@@ -1398,3 +1398,18 @@ handoff_to:
 - content_commit_sha: `6f108e924444fe72b6d93c7d297b8aa51988aae9` (`fix: close Step26 visualization integrity boundaries`)
 - receipt: `docs/execution/STEP26_VISUALIZATION_INTEGRITY_REPAIR.md`
 - state: `last_completed_step=26`; `current_step=27`; `current_role=senior_backend_engineer`; `step27_started=false`; Step27 `NOT_STARTED`; `G7B=PASS`; `G7=PENDING`; `blocked=false`
+
+## CRITICAL POST-STEP26 REPAIR 2 - Visualization Integrity Closure
+
+- execution_step: `26` surgical repair only; Step27 was not started; baseline `HEAD=origin/main=c0d8369edb5aced23c6221833016e4724d8221ff`; prior Repair 1 receipt and content commit were preserved; protected `tests/quality_unit_artifacts/` remained untouched
+- findings_closed: authoritative analytical measure visualization now requires actual Step20 `FactSpec` plus a compatible analytical `ReviewDecision`; review identity/content/checkpoint/status/applicability and plan/fact/measure/grain/provenance bindings are preserved; arbitrary validation strings and structured values are privacy-gated for `UI_PREVIEW`; safe aggregate/status values remain useful; complete-graph false truncation is rejected
+- review_evidence: actual Step20 reference plan -> `ReviewPolicyService.analytical_plan_context` -> `ACCEPTED ReviewDecision` -> `quantity`, `unit_price`, and `discount_rate` projections; missing/rejected/deferred/invalidated/superseded/stale/wrong-context decisions and same-ID MeasureSpec/FactSpec mutations were rejected
+- privacy_evidence: email, phone, password/secret, long identifier, unknown free-text, and structured canaries were absent from serialized authoritative validation output and the generated Step26 artifact; display states distinguish `SHOWN`, `MASKED`, `UNAVAILABLE`, and `PRIVACY_BLOCKED`; `display_context=UI_PREVIEW`
+- disclosure_evidence: hidden/aggregated content must exactly determine `truncated` and `show_more_available`; complete graph plus `truncated=true` was rejected; Repair 1 graph/accessibility closures remained passing
+- tests: focused Repair 2 `27 passed`; cross-step focused `90 passed`; full protected-boundary regression `375 passed, 2 skipped, 41 warnings`; known optional Splink/Valentine skips and non-fatal dlt/SQLite cursor-cleanup traceback remain documented
+- validators: Step26 validator `66 checks PASS`, `25 scenarios`, `32 negative controls`; compileall, YAML parse (`27` files), artifact canary scan, and `git diff --check` PASS; all repository validators were rerun after metadata recording and PASS
+- g7b_evaluation: `PASS` from executed review-binding, privacy-boundary, disclosure, accessibility, and prior Step26 evidence; `G7_END_TO_END_PRODUCT` remains `PENDING`
+- limitations: no browser/renderer/API/network/physical/live-provider/production-capacity claim; optional Splink/Valentine remain unavailable; Step27 remains explicitly not started
+- content_commit_sha: `e4d578a42bc888b4ff35a7c21d8b1424d67f1719` (`fix: close Step26 visualization integrity repair 2`)
+- metadata_commit_sha: recorded in the final metadata-only commit
+- state: `last_completed_step=26`; `current_step=27`; `current_role=senior_backend_engineer`; `step27_started=false`; Step27 `NOT_STARTED`; `G7B=PASS`; `G7=PENDING`; `blocked=false`
