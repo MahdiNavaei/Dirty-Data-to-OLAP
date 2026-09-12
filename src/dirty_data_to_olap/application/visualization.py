@@ -8,11 +8,21 @@ decision about evidence, identity, canonicalization, or analytical truth.
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from decimal import Decimal
+import math
 from typing import Any, Iterable, Mapping
 
 from pydantic import ValidationError
 
 from dirty_data_to_olap.domain.contracts.analytical import AnalyticalPlan, FactSpec, MeasureSpec
+from dirty_data_to_olap.application.privacy_policy import PrivacyOperationError, PrivacyPolicyService
+from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
+from dirty_data_to_olap.domain.contracts.canonical import ReviewDecision, ReviewDecisionStatus
+from dirty_data_to_olap.domain.contracts.privacy import (
+    ExposureContext,
+    ExposureRequest,
+    SensitiveDataCategory,
+)
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.visualization import (
     AccessibleGraphRow,
@@ -29,6 +39,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     ValidationView,
     ValidationReportVisualization,
     ValidationReportVisualizationBinding,
+    ValidationDisplayState,
     ValidationVisualCheckInput,
     VisualAggregationClass,
     VisualChartKind,
@@ -111,13 +122,59 @@ def _effective_active_filters(request: VisualizationRequest) -> tuple[str, ...]:
     return tuple(sorted(set((*canonical.values(), *free_form))))
 
 
-def _safe_validation_value(value: Any) -> str | None:
+_SAFE_VALIDATION_STATUS_VALUES = frozenset({
+    "PASS",
+    "FAIL",
+    "REVIEW_REQUIRED",
+    "NOT_EVALUATED",
+    "NOT_APPLICABLE",
+})
+
+
+def _safe_validation_value(
+    value: Any,
+    *,
+    privacy_policy: PrivacyPolicyService,
+) -> tuple[str | None, ValidationDisplayState]:
+    """Return a privacy-gated display value and its explicit outcome."""
+
     if value is None:
-        return None
-    if isinstance(value, (str, int, float, bool)):
-        text = str(value)
-        return text if len(text) <= 160 else "[SCALAR_VALUE_REDACTED]"
-    return "[STRUCTURED_VALUE_REDACTED]"
+        return None, ValidationDisplayState.UNAVAILABLE
+    try:
+        classification = privacy_policy.classify_field(value, column_id="validation.visualization.value")
+        decision = privacy_policy.decide_exposure(
+            classification,
+            ExposureRequest(
+                context=ExposureContext.UI_PREVIEW,
+                purpose="Step26 authoritative validation visualization",
+                requested_mode="masked",
+            ),
+        )
+    except Exception:
+        return "[PRIVACY_BLOCKED]", ValidationDisplayState.PRIVACY_BLOCKED
+    if not decision.allowed:
+        return "[PRIVACY_BLOCKED]", ValidationDisplayState.PRIVACY_BLOCKED
+
+    # Numeric and boolean validation metrics are aggregate-safe primitives. The
+    # policy gate above still runs; arbitrary strings never use this branch.
+    if isinstance(value, (int, float, Decimal, bool)):
+        if isinstance(value, float) and not math.isfinite(value):
+            return "[PRIVACY_BLOCKED]", ValidationDisplayState.PRIVACY_BLOCKED
+        return str(value), ValidationDisplayState.SHOWN
+    if isinstance(value, str) and value in _SAFE_VALIDATION_STATUS_VALUES and classification.category is None:
+        return value, ValidationDisplayState.SHOWN
+    if not isinstance(value, str):
+        return "[STRUCTURED_VALUE_REDACTED]", ValidationDisplayState.MASKED
+    try:
+        masked = privacy_policy.mask(
+            value,
+            category=classification.category or SensitiveDataCategory.FREE_TEXT_POTENTIALLY_SENSITIVE,
+        )
+    except PrivacyOperationError:
+        return "[PRIVACY_BLOCKED]", ValidationDisplayState.PRIVACY_BLOCKED
+    if value == masked:
+        return "[PRIVACY_BLOCKED]", ValidationDisplayState.PRIVACY_BLOCKED
+    return masked, ValidationDisplayState.MASKED
 
 
 def _node_shape(node_type: VisualNodeType) -> VisualNodeShape:
@@ -642,6 +699,14 @@ class VisualizationService:
         if len(report_check_ids) != len(report.checks):
             raise VisualizationInputError("validation report contains duplicate check IDs")
 
+        privacy_policy = PrivacyPolicyService()
+        safe_values = {
+            check.check_id: (
+                _safe_validation_value(check.expected, privacy_policy=privacy_policy),
+                _safe_validation_value(check.observed, privacy_policy=privacy_policy),
+            )
+            for check in report.checks
+        }
         checks = tuple(
             ValidationVisualCheckInput(
                 check_id=check.check_id,
@@ -650,8 +715,10 @@ class VisualizationService:
                 severity=check.severity.value,
                 scope=check.scope.value,
                 required=check.check_id in set(report.policy.required_check_ids),
-                expected=_safe_validation_value(check.expected),
-                observed=_safe_validation_value(check.observed),
+                expected=safe_values[check.check_id][0][0],
+                observed=safe_values[check.check_id][1][0],
+                expected_display_state=safe_values[check.check_id][0][1],
+                observed_display_state=safe_values[check.check_id][1][1],
                 discrepancy_refs=tuple(sorted(check.discrepancy_ids)),
                 evidence_refs=tuple(sorted(check.evidence_refs)),
                 provenance_refs=tuple(sorted(report.provenance_refs)),
@@ -677,6 +744,7 @@ class VisualizationService:
             "g6_status": report.g6_status.value,
             "g6_eligible": report.g6_eligible,
             "provenance_refs": tuple(sorted(report.provenance_refs)),
+            "display_context": "UI_PREVIEW",
             "authoritative": True,
         }
         return ValidationReportVisualization(
@@ -693,6 +761,7 @@ class VisualizationService:
             g6_status=report.g6_status.value,
             g6_eligible=report.g6_eligible,
             provenance_refs=tuple(sorted(report.provenance_refs)),
+            display_context="UI_PREVIEW",
             accessible_summary=summary,
             content_hash=visualization_content_hash(payload),
         )
@@ -711,7 +780,8 @@ class VisualizationService:
         visualization_id: str,
         measure_spec: MeasureSpec,
         analytical_plan: AnalyticalPlan,
-        fact_spec: FactSpec | None = None,
+        fact_spec: FactSpec,
+        analytical_review: ReviewDecision,
         expected_plan_content_hash: str | None = None,
         expected_package_hash: str | None = None,
     ) -> AnalyticalMeasureVisualization:
@@ -721,32 +791,49 @@ class VisualizationService:
             raise VisualizationInputError("analytical plan content hash is stale or mismatched")
         if expected_package_hash is not None and analytical_plan.analytical_spec_package_hash != expected_package_hash:
             raise VisualizationInputError("analytical specification package hash is stale or mismatched")
+        if not isinstance(analytical_review, ReviewDecision):
+            raise VisualizationInputError("authoritative measure projection requires an actual analytical ReviewDecision")
+        if not isinstance(fact_spec, FactSpec):
+            raise VisualizationInputError("authoritative measure projection requires an actual FactSpec")
+        review_policy = ReviewPolicyService()
+        review_context = review_policy.analytical_plan_context(analytical_plan)
+        if analytical_review.decision is ReviewDecisionStatus.SKIPPED:
+            review_context = review_context.model_copy(update={"skip_authorization": analytical_review.skip_authorization})
+        try:
+            review_policy.require_compatible(analytical_review, review_context)
+        except ReviewCompatibilityError as exc:
+            raise VisualizationInputError("analytical review decision is stale, incompatible, or non-authorizing") from exc
         if measure_spec.measure_id not in analytical_plan.measure_spec_ids:
             raise VisualizationInputError("measure is not part of the analytical plan")
         if analytical_plan.measure_spec_content_hashes.get(measure_spec.measure_id) != measure_spec.semantic_content_hash:
             raise VisualizationInputError("measure semantic content hash does not match the analytical plan")
         if measure_spec.fact_id not in analytical_plan.materialized_fact_ids:
             raise VisualizationInputError("measure fact is not materialized by the analytical plan")
-        if fact_spec is not None:
-            if fact_spec.fact_id != measure_spec.fact_id:
-                raise VisualizationInputError("measure and fact references do not match")
-            if measure_spec.measure_id not in fact_spec.measure_ids:
-                raise VisualizationInputError("measure is not owned by the supplied fact specification")
-            if analytical_plan.fact_spec_content_hashes.get(fact_spec.fact_id) != fact_spec.semantic_content_hash:
-                raise VisualizationInputError("fact semantic content hash does not match the analytical plan")
+        if fact_spec.fact_id != measure_spec.fact_id:
+            raise VisualizationInputError("measure and fact references do not match")
+        if measure_spec.measure_id not in fact_spec.measure_ids:
+            raise VisualizationInputError("measure is not owned by the supplied fact specification")
+        if analytical_plan.fact_spec_content_hashes.get(fact_spec.fact_id) != fact_spec.semantic_content_hash:
+            raise VisualizationInputError("fact semantic content hash does not match the analytical plan")
 
         package_hash = analytical_plan.analytical_spec_package_hash
         output = {
             "visualization_id": visualization_id,
             "measure_id": measure_spec.measure_id,
             "fact_id": measure_spec.fact_id,
-            "grain_spec_id": fact_spec.grain_spec_id if fact_spec is not None else None,
+            "grain_spec_id": fact_spec.grain_spec_id,
             "label": VisualLabel(value=measure_spec.semantic_name, accessible_text=measure_spec.semantic_name).model_dump(mode="json"),
             "measure_semantic_content_hash": measure_spec.semantic_content_hash,
             "analytical_plan_id": analytical_plan.plan_id,
             "analytical_plan_version": analytical_plan.plan_version,
             "analytical_plan_content_hash": analytical_plan.content_hash,
             "analytical_spec_package_hash": package_hash,
+            "fact_semantic_content_hash": fact_spec.semantic_content_hash,
+            "review_decision_id": analytical_review.review_decision_id,
+            "review_decision_content_hash": analytical_review.content_hash,
+            "review_checkpoint_id": analytical_review.review_checkpoint_id.value,
+            "review_decision_status": analytical_review.decision.value,
+            "review_applicability_fingerprint": analytical_review.applicability_fingerprint,
             "aggregation_class": VisualAggregationClass(measure_spec.aggregation_class.value),
             "aggregation_rule": measure_spec.aggregation_rule,
             "unit_semantics": measure_spec.unit_semantics,
@@ -756,7 +843,7 @@ class VisualizationService:
             "provenance_refs": tuple(sorted(set(measure_spec.provenance_refs) | set(analytical_plan.provenance_refs))),
             "measure_review_state": measure_spec.review_state.value,
             "plan_review_state": analytical_plan.review_state.value,
-            "fact_review_state": fact_spec.review_state.value if fact_spec is not None else None,
+            "fact_review_state": fact_spec.review_state.value,
             "authoritative": True,
         }
         return AnalyticalMeasureVisualization(

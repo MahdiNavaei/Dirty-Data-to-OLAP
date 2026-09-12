@@ -182,6 +182,15 @@ class VisualChartKind(str, Enum):
     NONE = "NONE"
 
 
+class ValidationDisplayState(str, Enum):
+    """Privacy outcome for an expected or observed validation value."""
+
+    SHOWN = "SHOWN"
+    MASKED = "MASKED"
+    UNAVAILABLE = "UNAVAILABLE"
+    PRIVACY_BLOCKED = "PRIVACY_BLOCKED"
+
+
 class VisualNodeShape(str, Enum):
     CIRCLE = "CIRCLE"
     RECTANGLE = "RECTANGLE"
@@ -331,11 +340,11 @@ class DisclosureMetadata(_SourceModel):
         has_hidden_content = bool(
             self.hidden_node_count or self.hidden_edge_count or self.aggregated_node_count or self.aggregated_edge_count
         )
-        if has_hidden_content and not self.truncated:
-            raise ValueError("hidden or aggregated graph content requires truncated=True")
-        if self.truncated and not self.truncation_reason:
+        if self.truncated != has_hidden_content:
+            raise ValueError("truncated must exactly reflect hidden or aggregated graph content")
+        if has_hidden_content and not self.truncation_reason:
             raise ValueError("truncated views require a reason")
-        if not self.truncated and self.truncation_reason:
+        if not has_hidden_content and self.truncation_reason:
             raise ValueError("a non-truncated view cannot carry a truncation reason")
         if self.show_more_available != has_hidden_content:
             raise ValueError("show_more_available must reflect hidden graph content")
@@ -600,9 +609,46 @@ class ValidationVisualCheckInput(_SourceModel):
     required: bool = True
     expected: str | None = None
     observed: str | None = None
+    expected_display_state: ValidationDisplayState = ValidationDisplayState.UNAVAILABLE
+    observed_display_state: ValidationDisplayState = ValidationDisplayState.UNAVAILABLE
     discrepancy_refs: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = Field(min_length=1)
     provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def display_value_state_is_explicit(self) -> "ValidationVisualCheckInput":
+        shown_values = {
+            "PASS",
+            "FAIL",
+            "REVIEW_REQUIRED",
+            "NOT_EVALUATED",
+            "NOT_APPLICABLE",
+            "True",
+            "False",
+        }
+        masked_values = {
+            "<REDACTED>",
+            "<REDACTED_EMAIL>",
+            "<REDACTED_PHONE>",
+            "<REDACTED_SECRET>",
+            "[STRUCTURED_VALUE_REDACTED]",
+            "[SCALAR_VALUE_REDACTED]",
+            "[PRIVACY_BLOCKED]",
+        }
+        numeric_pattern = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+        for label, value, state in (
+            ("expected", self.expected, self.expected_display_state),
+            ("observed", self.observed, self.observed_display_state),
+        ):
+            if state is ValidationDisplayState.UNAVAILABLE:
+                if value is not None:
+                    raise ValueError(f"{label} must be absent when its display state is UNAVAILABLE")
+            elif state is ValidationDisplayState.SHOWN:
+                if value is None or (value not in shown_values and numeric_pattern.fullmatch(value) is None):
+                    raise ValueError(f"{label} SHOWN state is limited to safe status or numeric primitives")
+            elif value not in masked_values:
+                raise ValueError(f"{label} {state.value} state requires an explicit redaction placeholder")
+        return self
 
 
 class ValidationReportVisualizationBinding(_SourceModel):
@@ -678,6 +724,7 @@ class ValidationReportVisualization(_SourceModel):
     g6_status: Literal["PASS", "FAIL", "PENDING"]
     g6_eligible: bool
     provenance_refs: tuple[str, ...] = Field(min_length=1)
+    display_context: Literal["UI_PREVIEW"] = "UI_PREVIEW"
     authoritative: Literal[True] = True
     accessible_summary: str = Field(min_length=1)
     content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -737,6 +784,12 @@ class AnalyticalMeasureVisualization(_SourceModel):
     analytical_plan_version: str = Field(min_length=1)
     analytical_plan_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     analytical_spec_package_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    fact_semantic_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    review_decision_id: str = Field(min_length=1)
+    review_decision_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    review_checkpoint_id: str = Field(min_length=1)
+    review_decision_status: str = Field(min_length=1)
+    review_applicability_fingerprint: str = Field(min_length=1)
     aggregation_class: VisualAggregationClass
     aggregation_rule: str = Field(min_length=1)
     unit_semantics: str = Field(min_length=1)

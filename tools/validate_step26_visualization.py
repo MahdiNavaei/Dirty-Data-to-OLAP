@@ -14,9 +14,10 @@ from pydantic import ValidationError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.application.visualization import VisualizationService
 from dirty_data_to_olap.domain.contracts.analytical import AnalyticalInputBinding, AggregationClass
-from dirty_data_to_olap.domain.contracts.canonical import RecordDisposition
+from dirty_data_to_olap.domain.contracts.canonical import RecordDisposition, ReviewDecisionStatus
 from dirty_data_to_olap.domain.contracts.source import stable_id
 from dirty_data_to_olap.domain.contracts.validation import (
     GateStatus,
@@ -39,6 +40,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     QualityHeatmapCellInput,
     ValidationView,
     ValidationReportVisualizationBinding,
+    ValidationDisplayState,
     ValidationVisualCheckInput,
     VisualAggregationClass,
     VisualChartKind,
@@ -202,7 +204,7 @@ def _validation_report(required_status: ValidationStatus, extras: tuple[Validati
     )
 
 
-def _reviewed_measure_context():
+def _step20_measure_context():
     model = build_canonical_model()
     fixture = build_fixture(model)
     binding = AnalyticalInputBinding(
@@ -329,13 +331,22 @@ def main() -> int:
     lineage = service.build_lineage(LineageViewInput(graph=core, direction=VisualDirection.UPSTREAM, focus_ref="table:orders", max_depth=2))
     _check("scenario-07-lineage", lineage.kind is VisualizationKind.LINEAGE and all("not causality" in edge.accessible_description for edge in lineage.edges) and any("bounded lineage exploration" in item for item in lineage.legend), "direction, bounded exploration, and non-causality semantics are explicit", results)
 
-    plan, fact, measures = _reviewed_measure_context()
+    plan, fact, measures = _step20_measure_context()
+    review_policy = ReviewPolicyService()
+    analytical_context = review_policy.analytical_plan_context(plan)
+    analytical_review = review_policy.create_decision(
+        analytical_context,
+        decision=ReviewDecisionStatus.ACCEPTED,
+        actor="step26-validator-reviewer",
+        rationale="accepted actual Step20 analytical plan for visualization projection",
+    )
     measure_views = {
         measure.measure_id: service.build_measure_from_spec(
             visualization_id=f"viz-{measure.measure_id}",
             measure_spec=measure,
             analytical_plan=plan,
             fact_spec=fact,
+            analytical_review=analytical_review,
             expected_plan_content_hash=plan.content_hash,
             expected_package_hash=plan.analytical_spec_package_hash,
         )
@@ -349,6 +360,21 @@ def main() -> int:
         and measure_views["measure_discount_rate"].aggregation_class is VisualAggregationClass.NON_ADDITIVE
         and measure_views["measure_unit_price"].currency_semantics == "UNSPECIFIED_NOT_REVENUE",
         "actual Step20 quantity, unit_price, and discount_rate semantics remain hash-bound",
+        results,
+    )
+    _check(
+        "scenario-09-analytical-review-binding",
+        all(
+            view.review_decision_id == analytical_review.review_decision_id
+            and view.review_decision_content_hash == analytical_review.content_hash
+            and view.review_checkpoint_id == analytical_context.review_checkpoint_id.value
+            and view.review_decision_status == ReviewDecisionStatus.ACCEPTED.value
+            and view.review_applicability_fingerprint == analytical_context.applicability_fingerprint
+            and view.fact_semantic_content_hash == fact.semantic_content_hash
+            and view.grain_spec_id == fact.grain_spec_id
+            for view in measure_views.values()
+        ),
+        "actual Step20 plan context and accepted ReviewDecision are preserved in every measure projection",
         results,
     )
 
@@ -381,12 +407,99 @@ def main() -> int:
         binding=ValidationReportVisualizationBinding.from_report(validation_report),
     )
     _check(
-        "scenario-10-validation",
+        "scenario-11-validation",
         authoritative_validation.overall_status == validation_report.overall_status.value
         and authoritative_validation.g6_status == validation_report.g6_status.value
         and authoritative_validation.g6_eligible is True
         and any(check.check_id == "check-optional-warning" and check.status == "FAIL" for check in authoritative_validation.checks),
         "authoritative report status is preserved and optional warning remains visible",
+        results,
+    )
+
+    privacy_canaries = (
+        "step26.synthetic.person@example.test",
+        "+989121234567",
+        "password=STEP26_FAKE_SECRET",
+        "STEP26_LONG_IDENTIFIER_12345678901234567890",
+        "STEP26_FREE_TEXT_CANARY",
+        {"nested": ["STEP26_STRUCTURED_CANARY"]},
+    )
+    privacy_checks = tuple(
+        ValidationCheck(
+            check_id=f"check-privacy-{index}",
+            name="privacy display boundary",
+            status=ValidationStatus.PASS,
+            severity=ValidationSeverity.INFORMATIONAL,
+            scope=ValidationScope.FACT,
+            required=False,
+            details="privacy fixture is projected through the UI preview boundary",
+            expected=value,
+            observed=value,
+            evidence_refs=(f"evidence:privacy-{index}",),
+        )
+        for index, value in enumerate(privacy_canaries, start=1)
+    ) + (
+        ValidationCheck(
+            check_id="check-privacy-aggregate",
+            name="aggregate display boundary",
+            status=ValidationStatus.PASS,
+            severity=ValidationSeverity.INFORMATIONAL,
+            scope=ValidationScope.FACT,
+            required=False,
+            details="aggregate fixture remains a safe primitive",
+            expected=42,
+            observed=41,
+            evidence_refs=("evidence:privacy-aggregate",),
+        ),
+        ValidationCheck(
+            check_id="check-privacy-unavailable",
+            name="unavailable display boundary",
+            status=ValidationStatus.PASS,
+            severity=ValidationSeverity.INFORMATIONAL,
+            scope=ValidationScope.FACT,
+            required=False,
+            details="unavailable fixture remains unavailable",
+            expected=None,
+            observed=None,
+            evidence_refs=("evidence:privacy-unavailable",),
+        ),
+    )
+    privacy_report = _validation_report(ValidationStatus.PASS, privacy_checks)
+    privacy_view = service.build_validation_from_report(
+        visualization_id="viz-validation-privacy",
+        scope=_scope("viz-validation-privacy"),
+        report=privacy_report,
+        binding=ValidationReportVisualizationBinding.from_report(privacy_report),
+    )
+    privacy_serialized = privacy_view.model_dump_json()
+    privacy_canary_tokens = (
+        "step26.synthetic.person@example.test",
+        "+989121234567",
+        "STEP26_FAKE_SECRET",
+        "STEP26_LONG_IDENTIFIER_12345678901234567890",
+        "STEP26_FREE_TEXT_CANARY",
+        "STEP26_STRUCTURED_CANARY",
+    )
+    _check(
+        "scenario-12-validation-privacy-boundary",
+        all(token not in privacy_serialized for token in privacy_canary_tokens)
+        and privacy_view.display_context == "UI_PREVIEW"
+        and all(
+            item.expected_display_state is ValidationDisplayState.MASKED
+            and item.observed_display_state is ValidationDisplayState.MASKED
+            for item in privacy_view.checks[: len(privacy_canaries)]
+        ),
+        "sensitive, identifier, free-text and structured values are masked in the authoritative UI preview",
+        results,
+    )
+    privacy_by_id = {item.check_id: item for item in privacy_view.checks}
+    _check(
+        "scenario-13-validation-safe-primitives",
+        privacy_by_id["check-privacy-aggregate"].expected == "42"
+        and privacy_by_id["check-privacy-aggregate"].observed == "41"
+        and privacy_by_id["check-privacy-aggregate"].expected_display_state is ValidationDisplayState.SHOWN
+        and privacy_by_id["check-privacy-unavailable"].expected_display_state is ValidationDisplayState.UNAVAILABLE,
+        "aggregate primitives remain useful while unavailable values stay distinct",
         results,
     )
 
@@ -478,8 +591,24 @@ def main() -> int:
     _negative("negative-disclosure-accounting", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=2, total_edge_count=0, rendered_node_count=1, rendered_edge_count=0, hidden_node_count=0, hidden_edge_count=0, aggregated_node_count=0, aggregated_edge_count=0, truncated=False, show_more_available=False, accessible_summary="bad"), results)
     _negative("negative-hidden-nodes-not-truncated", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=1, total_edge_count=0, rendered_node_count=0, rendered_edge_count=0, hidden_node_count=1, hidden_edge_count=0, aggregated_node_count=0, aggregated_edge_count=0, truncated=False, show_more_available=False, accessible_summary="bad"), results)
     _negative("negative-hidden-edges-no-reason", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=0, total_edge_count=1, rendered_node_count=0, rendered_edge_count=0, hidden_node_count=0, hidden_edge_count=1, aggregated_node_count=0, aggregated_edge_count=0, truncated=True, show_more_available=True, accessible_summary="bad"), results)
+    _negative("negative-false-truncation-without-hidden-content", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=1, total_edge_count=0, rendered_node_count=1, rendered_edge_count=0, hidden_node_count=0, hidden_edge_count=0, aggregated_node_count=0, aggregated_edge_count=0, truncated=True, truncation_reason="incorrectly claimed truncation", show_more_available=True, accessible_summary="bad"), results)
     _negative("negative-invented-revenue", lambda: service.build_measure(AnalyticalMeasureVisualInput(measure_ref="measure:revenue", fact_ref="fact:orders", label=_label("Revenue"), aggregation_class=VisualAggregationClass.ADDITIVE, aggregation_rule="SUM", unit_semantics="currency", currency_semantics="USD", provenance_refs=("prov-invented",))), results)
-    _negative("negative-same-id-measure-mutation", lambda: service.build_measure_from_spec(visualization_id="viz-mutated", measure_spec=measures[0].model_copy(update={"aggregation_class": AggregationClass.NON_ADDITIVE}), analytical_plan=plan, fact_spec=fact, expected_plan_content_hash=plan.content_hash, expected_package_hash=plan.analytical_spec_package_hash), results)
+    _negative("negative-same-id-measure-mutation", lambda: service.build_measure_from_spec(visualization_id="viz-mutated", measure_spec=measures[0].model_copy(update={"aggregation_class": AggregationClass.NON_ADDITIVE}), analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review, expected_plan_content_hash=plan.content_hash, expected_package_hash=plan.analytical_spec_package_hash), results)
+    _negative("negative-same-id-fact-mutation", lambda: service.build_measure_from_spec(visualization_id="viz-mutated-fact", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact.model_copy(update={"table_name": "mutated_fact"}), analytical_review=analytical_review), results)
+    _negative("negative-missing-fact-spec", lambda: service.build_measure_from_spec(visualization_id="viz-missing-fact", measure_spec=measures[0], analytical_plan=plan, fact_spec=None, analytical_review=analytical_review), results)
+    _negative("negative-missing-analytical-review", lambda: service.build_measure_from_spec(visualization_id="viz-missing-review", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=None), results)
+    _negative("negative-skipped-review-without-authorization", lambda: review_policy.create_decision(analytical_context, decision=ReviewDecisionStatus.SKIPPED, actor="step26-validator-reviewer", rationale="missing skip authorization"), results)
+    _negative("negative-rejected-analytical-review", lambda: service.build_measure_from_spec(visualization_id="viz-rejected-review", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=review_policy.create_decision(analytical_context, decision=ReviewDecisionStatus.REJECTED, actor="step26-validator-reviewer", rationale="negative status")), results)
+    _negative("negative-deferred-analytical-review", lambda: service.build_measure_from_spec(visualization_id="viz-deferred-review", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=review_policy.create_decision(analytical_context, decision=ReviewDecisionStatus.DEFERRED, actor="step26-validator-reviewer", rationale="negative status")), results)
+    _negative("negative-invalidated-analytical-review", lambda: service.build_measure_from_spec(visualization_id="viz-invalidated-review", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=review_policy.invalidate(analytical_review, "negative invalidation")), results)
+    _negative("negative-superseded-analytical-review", lambda: service.build_measure_from_spec(visualization_id="viz-superseded-review", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"superseded": True, "superseded_by": "rdec-new"})), results)
+    _negative("negative-stale-analytical-review", lambda: service.build_measure_from_spec(visualization_id="viz-stale-review", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"subject_content_hash": "0" * 64})), results)
+    _negative("negative-wrong-checkpoint-review", lambda: service.build_measure_from_spec(visualization_id="viz-wrong-checkpoint", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"review_checkpoint_id": "REVIEW_EVIDENCE_DECISIONS"})), results)
+    _negative("negative-wrong-plan-review", lambda: service.build_measure_from_spec(visualization_id="viz-wrong-plan", measure_spec=measures[0], analytical_plan=plan.model_copy(update={"plan_version": "mutated-plan-version"}), fact_spec=fact, analytical_review=analytical_review), results)
+    _negative("negative-wrong-package-review", lambda: service.build_measure_from_spec(visualization_id="viz-wrong-package", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"source_schema_fingerprints": {**dict(analytical_review.source_schema_fingerprints), "analytical_spec_package_hash": "0" * 64}})), results)
+    _negative("negative-wrong-source-fingerprint-review", lambda: service.build_measure_from_spec(visualization_id="viz-wrong-source", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"source_schema_fingerprints": {"wrong": "fingerprint"}})), results)
+    _negative("negative-wrong-domain-review", lambda: service.build_measure_from_spec(visualization_id="viz-wrong-domain", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"domain_assertion_refs": ("wrong-domain",)})), results)
+    _negative("negative-wrong-applicability-review", lambda: service.build_measure_from_spec(visualization_id="viz-wrong-applicability", measure_spec=measures[0], analytical_plan=plan, fact_spec=fact, analytical_review=analytical_review.model_copy(update={"applicability_fingerprint": "wrong-applicability"})), results)
     report_for_binding = _validation_report(ValidationStatus.PASS)
     report_binding = ValidationReportVisualizationBinding.from_report(report_for_binding)
     _negative("negative-validation-partial-universe", lambda: service.build_validation_from_report(visualization_id="viz-validation", scope=_scope("viz-validation"), report=report_for_binding, binding=report_binding.model_copy(update={"complete_check_ids": ()})), results)
@@ -500,6 +629,7 @@ def main() -> int:
         "negative_control_count": negative_control_count,
         "executed_check_count": len(results),
         "checks": results,
+        "authoritative_validation_preview": privacy_view.model_dump(mode="json"),
         "large_graph": {
             "nodes": len(large.nodes),
             "edges": len(large.edges),

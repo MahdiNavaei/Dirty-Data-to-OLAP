@@ -6,9 +6,10 @@ import inspect
 import pytest
 from pydantic import ValidationError
 
+from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.application.visualization import VisualizationInputError, VisualizationService
 from dirty_data_to_olap.domain.contracts.analytical import AggregationClass
-from dirty_data_to_olap.domain.contracts.canonical import RecordDisposition
+from dirty_data_to_olap.domain.contracts.canonical import RecordDisposition, ReviewCheckpoint, ReviewDecisionStatus
 from dirty_data_to_olap.domain.contracts.validation import (
     ValidationArtifactBindings,
     ValidationCheck,
@@ -39,6 +40,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     VisualizationRequest,
     VisualizationScope,
     ValidationReportVisualizationBinding,
+    ValidationDisplayState,
     ValidationVisualCheckInput,
     ValidationView,
 )
@@ -207,6 +209,72 @@ def test_authoritative_validation_projection_preserves_report_gate_and_optional_
     assert next(check for check in view.checks if check.check_id == "check-optional-warning").status == "FAIL"
 
 
+def test_authoritative_validation_projection_masks_unknown_and_structured_values() -> None:
+    canaries = (
+        "step26.synthetic.person@example.test",
+        "+989121234567",
+        "password=STEP26_FAKE_SECRET",
+        "STEP26_LONG_IDENTIFIER_12345678901234567890",
+        "STEP26_FREE_TEXT_CANARY",
+        {"nested": ["STEP26_STRUCTURED_CANARY"]},
+    )
+    checks = tuple(
+        ValidationCheck(
+            check_id=f"check-privacy-{index}",
+            name="privacy display boundary",
+            status=ValidationStatus.PASS,
+            severity=ValidationSeverity.INFORMATIONAL,
+            scope=ValidationScope.FACT,
+            required=False,
+            details="privacy fixture",
+            expected=value,
+            observed=value,
+            evidence_refs=(f"evidence:privacy-{index}",),
+        )
+        for index, value in enumerate(canaries, start=1)
+    ) + (
+        ValidationCheck(
+            check_id="check-aggregate",
+            name="aggregate display boundary",
+            status=ValidationStatus.PASS,
+            severity=ValidationSeverity.INFORMATIONAL,
+            scope=ValidationScope.FACT,
+            required=False,
+            details="safe aggregate fixture",
+            expected=42,
+            observed=41,
+            evidence_refs=("evidence:aggregate",),
+        ),
+    )
+    report = _report(ValidationStatus.PASS, checks)
+    view = VisualizationService().build_validation_from_report(
+        visualization_id="viz-validation-privacy",
+        scope=_scope("viz-validation-privacy"),
+        report=report,
+        binding=ValidationReportVisualizationBinding.from_report(report),
+    )
+    serialized = view.model_dump_json()
+    for token in (
+        "step26.synthetic.person@example.test",
+        "+989121234567",
+        "STEP26_FAKE_SECRET",
+        "STEP26_LONG_IDENTIFIER_12345678901234567890",
+        "STEP26_FREE_TEXT_CANARY",
+        "STEP26_STRUCTURED_CANARY",
+    ):
+        assert token not in serialized
+    assert view.display_context == "UI_PREVIEW"
+    privacy_items = {item.check_id: item for item in view.checks if item.check_id.startswith("check-privacy-")}
+    assert all(
+        item.expected_display_state is ValidationDisplayState.MASKED
+        and item.observed_display_state is ValidationDisplayState.MASKED
+        for item in privacy_items.values()
+    )
+    aggregate = next(item for item in view.checks if item.check_id == "check-aggregate")
+    assert aggregate.expected == "42"
+    assert aggregate.expected_display_state is ValidationDisplayState.SHOWN
+
+
 @pytest.mark.parametrize(
     ("status", "expected_gate", "expected_overall"),
     ((ValidationStatus.FAIL, "FAIL", "FAIL"), (ValidationStatus.NOT_EVALUATED, "PENDING", "REVIEW_REQUIRED")),
@@ -292,12 +360,19 @@ def test_exploratory_validation_view_cannot_claim_global_pass() -> None:
 def test_measure_projection_uses_actual_step20_semantics_and_rejects_mutation() -> None:
     _, _, _, plan, _, fact, _, measures = planned_flow()
     service = VisualizationService()
+    review = ReviewPolicyService().create_decision(
+        ReviewPolicyService().analytical_plan_context(plan),
+        decision=ReviewDecisionStatus.ACCEPTED,
+        actor="step26-test-reviewer",
+        rationale="accepted Step20 analytical plan for visualization projection",
+    )
     views = {
         measure.measure_id: service.build_measure_from_spec(
             visualization_id=f"viz-{measure.measure_id}",
             measure_spec=measure,
             analytical_plan=plan,
             fact_spec=fact,
+            analytical_review=review,
             expected_plan_content_hash=plan.content_hash,
             expected_package_hash=plan.analytical_spec_package_hash,
         )
@@ -315,8 +390,166 @@ def test_measure_projection_uses_actual_step20_semantics_and_rejects_mutation() 
             measure_spec=mutated,
             analytical_plan=plan,
             fact_spec=fact,
+            analytical_review=review,
             expected_plan_content_hash=plan.content_hash,
             expected_package_hash=plan.analytical_spec_package_hash,
+        )
+    with pytest.raises(VisualizationInputError, match="fact semantic content hash"):
+        service.build_measure_from_spec(
+            visualization_id="viz-mutated-fact",
+            measure_spec=measures[0],
+            analytical_plan=plan,
+            fact_spec=fact.model_copy(update={"table_name": "mutated_fact"}),
+            analytical_review=review,
+        )
+
+
+def test_measure_projection_requires_current_review_and_preserves_exact_review_binding() -> None:
+    _, _, _, plan, _, fact, _, measures = planned_flow()
+    review_service = ReviewPolicyService()
+    context = review_service.analytical_plan_context(plan)
+    accepted = review_service.create_decision(
+        context,
+        decision=ReviewDecisionStatus.ACCEPTED,
+        actor="step26-test-reviewer",
+        rationale="accepted Step20 analytical plan for visualization projection",
+    )
+    service = VisualizationService()
+    view = service.build_measure_from_spec(
+        visualization_id="viz-reviewed-measure",
+        measure_spec=measures[0],
+        analytical_plan=plan,
+        fact_spec=fact,
+        analytical_review=accepted,
+    )
+    assert view.review_decision_id == accepted.review_decision_id
+    assert view.review_decision_content_hash == accepted.content_hash
+    assert view.review_checkpoint_id == ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN.value
+    assert view.review_decision_status == ReviewDecisionStatus.ACCEPTED.value
+    assert view.review_applicability_fingerprint == context.applicability_fingerprint
+    assert view.fact_semantic_content_hash == fact.semantic_content_hash
+    assert view.grain_spec_id == fact.grain_spec_id
+
+    with pytest.raises(VisualizationInputError, match="actual analytical ReviewDecision"):
+        service.build_measure_from_spec(
+            visualization_id="viz-missing-review",
+            measure_spec=measures[0],
+            analytical_plan=plan,
+            fact_spec=fact,
+            analytical_review=None,
+        )
+    with pytest.raises(VisualizationInputError, match="actual FactSpec"):
+        service.build_measure_from_spec(
+            visualization_id="viz-missing-fact",
+            measure_spec=measures[0],
+            analytical_plan=plan,
+            fact_spec=None,
+            analytical_review=accepted,
+        )
+
+
+def test_measure_projection_allows_only_a_policy_authorized_skip() -> None:
+    from dirty_data_to_olap.domain.contracts.canonical import ReviewSkipAuthorization
+
+    _, _, _, plan, _, fact, _, measures = planned_flow()
+    review_service = ReviewPolicyService()
+    context = review_service.analytical_plan_context(plan)
+    authorization = ReviewSkipAuthorization(
+        policy_id="step26-test-policy",
+        policy_version=context.policy_version,
+        checkpoint=context.review_checkpoint_id,
+        scope="step26-test-scope",
+        applicability_fingerprint=context.applicability_fingerprint,
+        reason="bounded test-only skip authorization",
+    )
+    skip_context = context.model_copy(update={"skip_authorization": authorization})
+    skipped = review_service.create_decision(
+        skip_context,
+        decision=ReviewDecisionStatus.SKIPPED,
+        actor="step26-test-reviewer",
+        rationale="authorized test skip",
+        skip_authorization=authorization,
+    )
+    view = VisualizationService().build_measure_from_spec(
+        visualization_id="viz-skipped-review",
+        measure_spec=measures[0],
+        analytical_plan=plan,
+        fact_spec=fact,
+        analytical_review=skipped,
+    )
+    assert view.review_decision_status == ReviewDecisionStatus.SKIPPED.value
+
+
+@pytest.mark.parametrize("status", (ReviewDecisionStatus.REJECTED, ReviewDecisionStatus.DEFERRED))
+def test_measure_projection_rejects_non_authorizing_review_status(status: ReviewDecisionStatus) -> None:
+    _, _, _, plan, _, fact, _, measures = planned_flow()
+    review_service = ReviewPolicyService()
+    review = review_service.create_decision(
+        review_service.analytical_plan_context(plan),
+        decision=status,
+        actor="step26-test-reviewer",
+        rationale="negative review status control",
+    )
+    with pytest.raises(VisualizationInputError, match="stale, incompatible, or non-authorizing"):
+        VisualizationService().build_measure_from_spec(
+            visualization_id="viz-invalid-review",
+            measure_spec=measures[0],
+            analytical_plan=plan,
+            fact_spec=fact,
+            analytical_review=review,
+        )
+
+
+def test_measure_projection_rejects_invalidated_superseded_and_stale_review() -> None:
+    _, _, _, plan, _, fact, _, measures = planned_flow()
+    review_service = ReviewPolicyService()
+    accepted = review_service.create_decision(
+        review_service.analytical_plan_context(plan),
+        decision=ReviewDecisionStatus.ACCEPTED,
+        actor="step26-test-reviewer",
+        rationale="negative lifecycle control base",
+    )
+    invalidated = review_service.invalidate(accepted, "Step26 test invalidation")
+    superseded = accepted.model_copy(update={"superseded": True, "superseded_by": "rdec-new"})
+    stale = accepted.model_copy(update={"subject_content_hash": "0" * 64})
+    for review in (invalidated, superseded, stale):
+        with pytest.raises(VisualizationInputError, match="stale, incompatible, or non-authorizing"):
+            VisualizationService().build_measure_from_spec(
+                visualization_id="viz-invalid-lifecycle-review",
+                measure_spec=measures[0],
+                analytical_plan=plan,
+                fact_spec=fact,
+                analytical_review=review,
+            )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        {"review_checkpoint_id": ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS},
+        {"subject_content_hash": "0" * 64},
+        {"policy_version": "wrong-policy"},
+        {"source_schema_fingerprints": {"wrong": "fingerprint"}},
+        {"domain_assertion_refs": ("wrong-domain-ref",)},
+        {"applicability_fingerprint": "wrong-applicability"},
+    ),
+)
+def test_measure_projection_delegates_exact_review_compatibility_to_policy(mutation: dict[str, object]) -> None:
+    _, _, _, plan, _, fact, _, measures = planned_flow()
+    review_service = ReviewPolicyService()
+    accepted = review_service.create_decision(
+        review_service.analytical_plan_context(plan),
+        decision=ReviewDecisionStatus.ACCEPTED,
+        actor="step26-test-reviewer",
+        rationale="negative compatibility control base",
+    )
+    with pytest.raises(VisualizationInputError, match="stale, incompatible, or non-authorizing"):
+        VisualizationService().build_measure_from_spec(
+            visualization_id="viz-incompatible-review",
+            measure_spec=measures[0],
+            analytical_plan=plan,
+            fact_spec=fact,
+            analytical_review=accepted.model_copy(update=mutation),
         )
 
 
@@ -376,7 +609,7 @@ def test_filter_disclosure_rejects_contradictory_free_form_selector() -> None:
 
 
 def test_disclosure_contract_and_accessible_graph_fail_closed() -> None:
-    with pytest.raises(ValidationError, match="truncated=True"):
+    with pytest.raises(ValidationError, match="truncated"):
         DisclosureMetadata(
             mode=VisualizationDisclosureMode.OVERVIEW,
             total_node_count=1,
@@ -403,6 +636,22 @@ def test_disclosure_contract_and_accessible_graph_fail_closed() -> None:
             aggregated_node_count=0,
             aggregated_edge_count=0,
             truncated=True,
+            show_more_available=True,
+            accessible_summary="invalid",
+        )
+    with pytest.raises(ValidationError, match="truncated"):
+        DisclosureMetadata(
+            mode=VisualizationDisclosureMode.OVERVIEW,
+            total_node_count=1,
+            total_edge_count=0,
+            rendered_node_count=1,
+            rendered_edge_count=0,
+            hidden_node_count=0,
+            hidden_edge_count=0,
+            aggregated_node_count=0,
+            aggregated_edge_count=0,
+            truncated=True,
+            truncation_reason="incorrectly claimed truncation",
             show_more_available=True,
             accessible_summary="invalid",
         )
