@@ -2,14 +2,14 @@ schema_version: "1.0"
 scope: "v1 implementation plan after the frozen product, domain, data and software architecture"
 provenance:
   authority: "05_MASTER_BUILD_SEQUENCE.md, product/domain/data/solution contracts, Step 05 cross-artifact audit"
-  status: "G2 PASS; Step22 G6 closure is complete; G5 PASS and G6 PASS; Step23 local platform foundation is implemented; Step24 remains not started"
+  status: "G2 PASS; Step22 G6 closure is complete; G5 PASS and G6 PASS; Step23 local platform foundation and Step24 bounded scale semantics are implemented; Step25 remains not started"
 
 sequence_authority:
   master_sequence_path: docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base/05_MASTER_BUILD_SEQUENCE.md
   sequence_order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41]
   first_implementation_step: 6
   first_implementation_role: "Step06 Database Engineer / DBA"
-  current_handoff: "Step24 Distributed Data Engineer"
+  current_handoff: "Step25 UX / Product Designer"
 
 component_ownership_policy:
   source: docs/engineering/specs/ownership_map.yml
@@ -40,7 +40,7 @@ specialist_sequence:
   - {step: 21, role: Semantic Layer Engineer, phase: implementation}
   - {step: 22, role: Data QA Engineer, phase: validation, implementation_status: IMPLEMENTED, gate_status: G6_PASS, completion_status: COMPLETED_G6_PASS}
   - {step: 23, role: Data Platform Engineer, phase: platform, implementation_status: IMPLEMENTED, completion_status: COMPLETED_LOCAL_PLATFORM}
-  - {step: 24, role: Distributed Systems Engineer, phase: platform}
+  - {step: 24, role: Distributed Systems Engineer, phase: platform, implementation_status: IMPLEMENTED, completion_status: COMPLETED_DISTRIBUTED_SCALE_G7A_PASS}
   - {step: 25, role: UX Engineer, phase: product_surface}
   - {step: 26, role: Visualization Engineer, phase: product_surface}
   - {step: 27, role: Backend Engineer, phase: product_surface}
@@ -96,3 +96,11 @@ step23_platform_slice:
   required_outputs: ["project-owned artifact/run/stage/dependency/cache/retention contracts", "SQLite V1 control store with forward migration and restart recovery", "content-addressed local artifact store with managed/external references", "versioned staged-dataset layout and resource budget binding", "capability registry with explicit future-provider states", "reference run and behavioral validator"]
   forbidden_outputs: ["distributed processing", "queue/job orchestration", "Backend RunManager", "Kubernetes/Redis/Kafka", "unverified PostgreSQL or S3 runtime", "source-system writes", "G6 regeneration or promotion"]
   handoff_to_step24: ["ArtifactStorePort semantics", "ControlStorePort semantics", "staged dataset layout", "resource budgets", "dependency and cache key semantics", "durable run/stage metadata", "local-only and future object-store/Postgres boundaries"]
+
+step24_distributed_scale_slice:
+  step: 24
+  status: IMPLEMENTED
+  allowed_paths: [src/dirty_data_to_olap/domain/contracts/distributed.py, src/dirty_data_to_olap/application/distributed.py, src/dirty_data_to_olap/adapters/platform/capabilities.py, tests/unit/, tests/contract/, tests/integration/, tests/architecture/, tests/security/, tools/run_step24_scale_benchmark.py, tools/validate_step24_distributed_data.py, tools/validate_step23_data_platform.py, docs/scale/, docs/architecture/specs/, docs/engineering/specs/, docs/execution/STEP24_DISTRIBUTED_DATA_REVIEW.md]
+  required_outputs: ["typed scale decision", "deterministic partition plan and result contracts", "bounded partitioned-local executor", "global reduction and comparison routing semantics", "skew/shuffle/resource evidence", "G6-bound local equivalence and G7A report", "isolated Step23 validator negative-state harness"]
+  forbidden_outputs: ["Spark/Ray/Dask runtime", "multi-node capacity claim", "job queue", "scheduler", "cancellation API", "Step28 StageExecutorPort implementation", "Step25 UX implementation", "source-system writes"]
+  handoff_to_step25: ["G7A scale-preserving equivalence report", "bounded execution limitations", "Step25 UX/Product Designer remains not started"]

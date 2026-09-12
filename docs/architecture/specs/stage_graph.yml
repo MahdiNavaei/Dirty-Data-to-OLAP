@@ -310,3 +310,12 @@ cross_cutting_boundaries:
     supports: [run_metadata, stage_attempts, artifact_publication, staged_dataset_manifests, cache_metadata, gate_evidence, integrity_scans, retention_cleanup]
     not_a_business_stage: true
     notes: "Cross-cutting SQLite/filesystem infrastructure; it does not alter transformation DAG semantics and does not execute Step24 distributed work."
+  - boundary_id: DATA_PARALLEL_SCALE_EXECUTION
+    owner: Step24 Distributed Data Engineer
+    status: IMPLEMENTED
+    ports: [PartitionExecutorPort, ArtifactStorePort, ControlStorePort]
+    supports: [scale_decision, hash_partition, block_key_routing, bounded_local_workers, deterministic_reduction, equivalence_evidence]
+    not_a_business_stage: true
+    execution_modes: [LOCAL_REFERENCE, PARTITIONED_LOCAL]
+    external_engines: [SPARK_FUTURE_NOT_EXECUTED, RAY_FUTURE_NOT_EXECUTED, MULTI_NODE_FUTURE_NOT_EXECUTED]
+    notes: "Execution-strategy overlay over existing stages; it does not reorder or add a semantic DAG stage and does not implement Step28 job control."

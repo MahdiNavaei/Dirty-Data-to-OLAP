@@ -7,6 +7,15 @@ from .canonical import CanonicalFinalizationService, CanonicalHypothesisService,
 from .review_policy import ReviewCompatibilityError, ReviewPolicyService
 from .validation import ValidationInputs, ValidationOutcome, ValidationService
 from .platform import GateEvidenceService
+from .distributed import (
+    LargeJoinFanoutError,
+    LocalPartitionExecutor,
+    PartitionExecutorPort,
+    PartitionMergeError,
+    ScaleAuthorizationError,
+    ScaleError,
+    ScaleService,
+)
 
 __all__ = [
     "DependencyDiscoveryService",
@@ -22,4 +31,11 @@ __all__ = [
     "ValidationOutcome",
     "ValidationService",
     "GateEvidenceService",
+    "LargeJoinFanoutError",
+    "LocalPartitionExecutor",
+    "PartitionExecutorPort",
+    "PartitionMergeError",
+    "ScaleAuthorizationError",
+    "ScaleError",
+    "ScaleService",
 ]

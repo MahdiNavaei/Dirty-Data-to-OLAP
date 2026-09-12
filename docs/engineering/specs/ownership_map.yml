@@ -2,7 +2,7 @@ schema_version: "1.0"
 scope: "v1 implementation ownership for the frozen software architecture"
 provenance:
   authority: "05_MASTER_BUILD_SEQUENCE.md, architecture/specs/components.yml, architecture/specs/engine_interfaces.yml"
-  status: "Step23 local platform ownership; Step24 distributed execution remains future"
+  status: "Step23 local platform and Step24 bounded distributed-data ownership are implemented; Step28 job control remains future"
 
 implementation_ownership_schema:
   owner_field: primary_specialist
@@ -68,6 +68,8 @@ components:
   - {component_id: entrypoints.cli, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "CLI contract and smoke tests"}
   - {component_id: entrypoints.api, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "API contract and authorization tests"}
   - {component_id: composition.root, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, ongoing_owners: "Step23 Data Platform / Step27 Backend / Step28 Distributed Systems according to wired concern", test_strategy: "composition and import-boundary tests"}
+  - {component_id: application.distributed_scale, primary_specialist: "Step24 Distributed Data Engineer", implementation_step: 24, implementation_status: IMPLEMENTED, test_strategy: "partition identity, bounded execution, merge barrier, routing, skew, failure and local-equivalence tests"}
+  - {component_id: runtime.partition_executor, primary_specialist: "Step24 Distributed Data Engineer", implementation_step: 24, implementation_status: IMPLEMENTED, test_strategy: "typed synchronous local partition executor and resource-bound observation"}
 
 interfaces:
   - {interface_id: SourceAdapter, owner_component: adapters.source, implementation_step: 7, test_strategy: "adapter contract and read-only negative tests"}

@@ -1,0 +1,31 @@
+schema_version: "1.0"
+scope: "Step24 execution-strategy overlay; not a business-stage DAG"
+provenance:
+  owner: "Step24 Distributed Data Engineer"
+  implementation: "src/dirty_data_to_olap/application/distributed.py"
+  status: IMPLEMENTED_REFERENCE_ONLY
+execution_modes:
+  - mode: LOCAL_REFERENCE
+    status: REFERENCE_TESTED
+    meaning: "authoritative single-node semantic reduction"
+  - mode: PARTITIONED_LOCAL
+    status: REFERENCE_TESTED
+    meaning: "bounded local workers prove partition/merge meaning preservation"
+  - mode: EXTERNAL_DISTRIBUTED
+    status: FUTURE_NOT_EXECUTED
+    meaning: "provider-neutral extension point; no Spark, Ray or multi-node runtime claimed"
+stages:
+  - {stage_id: PROFILING, classification: PARTITION_SAFE, partition_key: stable_record_or_group_key, merge_strategy: exact_count_null_min_max_decimal_sum, global_barrier: false, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: tests/contract/test_step24_scale_contracts.py}
+  - {stage_id: DEPENDENCY_DISCOVERY, classification: GLOBAL_BARRIER, partition_key: candidate_block, merge_strategy: exact_global_validation_required, global_barrier: true, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: tests/unit/test_step24_distributed_contracts.py}
+  - {stage_id: SCHEMA_MATCHING, classification: SHUFFLE_REQUIRED, partition_key: source_table_column_block, merge_strategy: deterministic_global_score_order, global_barrier: true, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: docs/scale/distributed-processing.md}
+  - {stage_id: ENTITY_RESOLUTION, classification: GLOBAL_CANDIDATE_GENERATION, partition_key: blocking_key, merge_strategy: stable_pair_union_and_deduplication, global_barrier: true, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: tests/unit/test_step24_distributed_contracts.py}
+  - {stage_id: ANALYTICAL_PLANNING, classification: GLOBAL_BARRIER, partition_key: fact_grain, merge_strategy: reviewed_plan_only, global_barrier: true, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: docs/scale/distributed-processing.md}
+  - {stage_id: MATERIALIZATION, classification: LOCAL_ONLY, partition_key: fact_grain, merge_strategy: Step20_atomic_target_publish, global_barrier: true, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: docs/scale/distributed-processing.md}
+  - {stage_id: VALIDATION_RECONCILIATION, classification: GLOBAL_REDUCTION, partition_key: record_identity, merge_strategy: exact_accounting_and_reconciliation, global_barrier: true, sampling: global_stable_hash, fallback: LOCAL_REFERENCE, evidence: docs/scale/distributed-processing.md}
+policies:
+  partition_identity: [run_id, source_id, snapshot_id, table_id, dataset_id, dataset_version, schema_fingerprint, operation, strategy, index, seed, policy_version]
+  forbidden_partition_identity_inputs: [wall_clock, worker_number, completion_order, temporary_path]
+  coordinator_state: [partition_manifests, hashes, counts, bounded_aggregate_states, bounded_rankings]
+  forbidden_coordinator_state: [unbounded_raw_rows, unbounded_candidate_pairs, unbounded_edges]
+  external_engines: {spark: FUTURE_NOT_EXECUTED, ray: FUTURE_NOT_EXECUTED, dask: FUTURE_NOT_EXECUTED, multi_node: FUTURE_NOT_EXECUTED}
+  job_control_owner: "Step28; Step24 does not implement scheduling, queues, cancellation or retry orchestration"

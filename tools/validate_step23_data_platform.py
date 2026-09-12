@@ -148,7 +148,11 @@ def main() -> int:
     checks: list[dict[str, object]] = []
     workspace_root = ROOT / "workspace"
     workspace_root.mkdir(parents=True, exist_ok=True)
-    platform = LocalPlatform.from_project_root(ROOT, resource_budget=ResourceBudget(disk_budget_bytes=50_000_000, max_staged_bytes=20_000_000))
+    # The validator intentionally mutates disposable blobs, cache rows and
+    # tombstones.  Keep that negative testing inside an isolated project root
+    # so a second invocation cannot inherit the first invocation's corruption.
+    platform_root = TemporaryDirectory(dir=str(workspace_root))
+    platform = LocalPlatform.from_project_root(Path(platform_root.name), resource_budget=ResourceBudget(disk_budget_bytes=50_000_000, max_staged_bytes=20_000_000))
     control = platform.control_store
     store = platform.artifact_store
     try:
@@ -269,13 +273,18 @@ def main() -> int:
         _check(checks, "staged schema closure is exact", schema_rejected, "part schema fingerprint must equal the manifest schema fingerprint")
         _check(checks, "staged row-count closure is exact", row_count_rejected, "known part row counts must reconcile to the manifest row count")
 
-        report_path = ROOT / "workspace" / "runs" / "step22-reference-run" / "validation" / "validation_report.json"
-        target_path = ROOT / "workspace" / "runs" / "step20-reference-run" / "olap" / "target.duckdb"
+        source_report_path = ROOT / "workspace" / "runs" / "step22-reference-run" / "validation" / "validation_report.json"
+        source_target_path = ROOT / "workspace" / "runs" / "step20-reference-run" / "olap" / "target.duckdb"
+        report_path = Path(platform.config.project_root) / "accepted" / "validation_report.json"
+        target_path = Path(platform.config.project_root) / "accepted" / "target.duckdb"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_bytes(source_report_path.read_bytes())
+        target_path.write_bytes(source_target_path.read_bytes())
         report_payload = json.loads(report_path.read_text(encoding="utf-8"))
         report_hash = hashlib.sha256(report_path.read_bytes()).hexdigest()
-        report_manifest = _manifest(REFERENCE_RUN_ID, "step22-validation-report", kind="ValidationReport", retention=RetentionClass.PINNED_GATE_EVIDENCE, storage_mode=ArtifactStorageMode.EXTERNAL, locator=report_path.relative_to(ROOT).as_posix())
+        report_manifest = _manifest(REFERENCE_RUN_ID, "step22-validation-report", kind="ValidationReport", retention=RetentionClass.PINNED_GATE_EVIDENCE, storage_mode=ArtifactStorageMode.EXTERNAL, locator=report_path.relative_to(Path(platform.config.project_root)).as_posix())
         report_ref = store.register_external(report_manifest, report_manifest.external_locator or "")
-        target_manifest = _manifest(REFERENCE_RUN_ID, "step22-controlled-duckdb", kind="MaterializationArtifact", storage_mode=ArtifactStorageMode.EXTERNAL, locator=target_path.relative_to(ROOT).as_posix())
+        target_manifest = _manifest(REFERENCE_RUN_ID, "step22-controlled-duckdb", kind="MaterializationArtifact", storage_mode=ArtifactStorageMode.EXTERNAL, locator=target_path.relative_to(Path(platform.config.project_root)).as_posix())
         target_ref = store.register_external(target_manifest, target_manifest.external_locator or "")
         control.register_artifact(report_ref)
         control.register_artifact(target_ref)
@@ -368,7 +377,7 @@ def main() -> int:
         store._blob_path(corrupt.content_hash).write_bytes(b"tampered")
         _check(checks, "corrupt cached output is not returned", PlatformCacheService().resolve(corrupt_key, control_store=control, artifact_store=store) is None and control.get_cache_entry(corrupt_key).status.value == "INVALIDATED", "hash mismatch invalidates the cache entry before returning any output")
 
-        reopened = SQLiteControlStore(control.path, project_root=ROOT)
+        reopened = SQLiteControlStore(control.path, project_root=Path(platform.config.project_root))
         recovered_run = reopened.get_run(REFERENCE_RUN_ID)
         recovered_attempt = reopened.get_stage_attempt(REFERENCE_ATTEMPT_ID)
         recovered_gate = reopened.get_gate_evidence("G6_DATA_CORRECTNESS", run_id=REFERENCE_RUN_ID)
@@ -471,7 +480,7 @@ def main() -> int:
 
         capabilities = platform.capabilities
         _check(checks, "future S3/Postgres are not falsely implemented", capabilities.get(CapabilityQuery(capability_id="persistence.s3")).status == "FUTURE_NOT_EXECUTED" and capabilities.get(CapabilityQuery(capability_id="persistence.postgres")).status == "FUTURE_NOT_EXECUTED", "future adapter boundaries are explicit and unexecuted")
-        _check(checks, "Step24 is not started", not (ROOT / "src/dirty_data_to_olap/application/distributed_data.py").exists(), "Step23 leaves distributed data execution absent")
+        _check(checks, "Step28 job control is not started", not (ROOT / "src/dirty_data_to_olap/application/stage_orchestrator.py").exists() and not (ROOT / "src/dirty_data_to_olap/application/job_control.py").exists(), "Step23 does not implement the future Step28 scheduling/control plane")
 
         scan = PlatformIntegrityService().scan(REFERENCE_RUN_ID, control_store=reopened, artifact_store=store, artifact_stores=(platform.staging_artifact_store,))
         _check(checks, "integrity scan detects missing disposable artifact", any(item.artifact_id == missing.artifact_id and item.state.value == "MISSING" for item in scan.results), "scan is bounded to registered run artifacts and reports the missing blob")
@@ -505,6 +514,7 @@ def main() -> int:
         return 1
     finally:
         platform.close()
+        platform_root.cleanup()
 
 
 if __name__ == "__main__":

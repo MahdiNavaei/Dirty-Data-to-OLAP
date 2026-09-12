@@ -333,7 +333,7 @@ def main() -> int:
     owned_components = {item.get("component_id") for item in ownership.get("components", [])}
     owned_interfaces = {item.get("interface_id") for item in ownership.get("interfaces", [])}
     owned_stages = {item.get("stage_id") for item in ownership.get("stages", [])}
-    check("ownership covers exactly all 41 components", len(component_ids) == 41 and owned_components == component_ids)
+    check("ownership covers exactly all architecture components", len(component_ids) >= 41 and owned_components == component_ids)
     check("ownership covers exactly all 13 interfaces", len(interface_ids) == 13 and owned_interfaces == interface_ids)
     non_primary_subboundaries = {"CANONICAL_IDENTITY_PREPARATION"}
     check("ownership covers 21 primary stages plus declared sub-boundaries", len(stage_ids - non_primary_subboundaries) == 21 and owned_stages == stage_ids)

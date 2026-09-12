@@ -697,3 +697,35 @@ components:
     persistence_access: none
     optional: false
     failure_behavior: invalid wiring fails before run creation
+  - component_id: application.distributed_scale
+    name: Bounded Distributed Data Scale
+    layer: application
+    ownership: Dirty Data to OLAP
+    responsibilities: [scale decision, deterministic partition planning, data routing, bounded local execution, merge/reduction, scale-equivalence evidence]
+    input_contracts: [ScaleInputDataset, ScalePolicy, GateEvidence]
+    output_contracts: [ScaleDecision, PartitionPlan, PartitionResult, PartitionMergeManifest, ScaleExecutionResult, ScaleEquivalenceReport]
+    depends_on: [domain.contracts, persistence.artifact_store, persistence.control_store]
+    ports_used: [PartitionExecutorPort, ArtifactStorePort, ControlStorePort]
+    implementation_owner: Step24 Distributed Data Engineer
+    implementation_step: 24
+    implementation_status: IMPLEMENTED
+    side_effect_class: bounded_data_execution_and_artifact_write
+    persistence_access: ArtifactStorePort and ControlStorePort through ports
+    optional: false
+    failure_behavior: incomplete or failed merge remains non-consumable; G7A requires exact semantic equivalence
+  - component_id: runtime.partition_executor
+    name: Local Partition Executor
+    layer: runtime
+    ownership: Dirty Data to OLAP
+    responsibilities: [bounded synchronous partition data work, typed partition result production]
+    input_contracts: [PartitionPlan, PartitionDescriptor, ScaleInputDataset, ScalePolicy]
+    output_contracts: [PartitionResult, ScaleExecutionResult]
+    depends_on: [application.distributed_scale, domain.contracts]
+    ports_used: [PartitionExecutorPort, ArtifactStorePort, ControlStorePort]
+    implementation_owner: Step24 Distributed Data Engineer
+    implementation_step: 24
+    implementation_status: IMPLEMENTED
+    side_effect_class: bounded_data_execution
+    persistence_access: ArtifactStorePort and ControlStorePort through ports
+    optional: false
+    failure_behavior: failed partition result; no partial semantic completion

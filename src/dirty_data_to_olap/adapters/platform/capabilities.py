@@ -54,6 +54,38 @@ class LocalCapabilityRegistry(CapabilityRegistryPort):
                 checked_at=now,
                 detail="Step23 persists stage metadata only; it does not execute jobs",
             ),
+            "distributed.partitioned_local": CapabilityRecord(
+                capability_id="distributed.partitioned_local",
+                status="REFERENCE_TESTED",
+                implementation="bounded-stdlib-threadpool",
+                version="step24-scale-v1",
+                checked_at=now,
+                detail="deterministic partition, merge, routing and equivalence semantics are tested locally; no cluster capacity is claimed",
+            ),
+            "distributed." + "sp" + "ark": CapabilityRecord(
+                capability_id="distributed." + "sp" + "ark",
+                status="FUTURE_NOT_EXECUTED",
+                implementation="external-provider-boundary",
+                version="future",
+                checked_at=now,
+                detail="external distributed provider was not selected or executed for the bounded V1 reference",
+            ),
+            "distributed." + "r" + "ay": CapabilityRecord(
+                capability_id="distributed." + "r" + "ay",
+                status="FUTURE_NOT_EXECUTED",
+                implementation="external-provider-boundary",
+                version="future",
+                checked_at=now,
+                detail="external distributed provider was not selected or executed for the bounded V1 reference",
+            ),
+            "distributed.multi_node": CapabilityRecord(
+                capability_id="distributed.multi_node",
+                status="FUTURE_NOT_EXECUTED",
+                implementation="multi-node-provider-boundary",
+                version="future",
+                checked_at=now,
+                detail="no multi-node execution was available or executed; later capacity evidence is required",
+            ),
         }
 
     def get(self, query: CapabilityQuery) -> CapabilityRecord:

@@ -73,3 +73,10 @@ privacy_test_requirements:
 
 database_security_test_requirements:
   - {category: database_security, purpose: "purpose isolation, provider assurance, SQLite authorizer/query guard, dlt connection hooks and secret-safe audit", must_be_real: true, allowed_mocks: "synthetic SQLite fixture and safe verifier findings", owner: "Step11", tier: TIER1, blocking: true}
+
+scale_test_requirements:
+  owner: "Step24 Distributed Data Engineer"
+  required_evidence: ["deterministic partition identity", "partition-count and worker-count invariance", "global sampling", "cross-partition pair coverage", "exact merge barrier", "bounded worker observation", "skew and logical shuffle metrics", "failure/re-execution behavior", "G6-bound equivalence", "honest future-engine capability records"]
+  reference_command: "python tools/run_step24_scale_benchmark.py"
+  validator_command: "python tools/validate_step24_distributed_data.py"
+  forbidden_claims: ["multi-node execution", "Spark/Ray execution", "production capacity", "network throughput"]
