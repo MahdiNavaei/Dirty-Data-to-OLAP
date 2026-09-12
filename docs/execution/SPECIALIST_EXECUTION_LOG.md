@@ -1347,3 +1347,19 @@ handoff_to:
 - known_limitations: local reference semantics only; no Spark/Ray/Dask/Kafka/Redis/Kubernetes, cluster/HA/physical distributed execution, network throughput or production capacity claim; Step20 physical partitioned materialization and Step28 job control remain future scope
 - handoff_to: `Step25 - UX / Product Designer`; Step25 remains `NOT_STARTED`; G7 remains `PENDING`
 - verified_content_commit: `b66bb5cc23764ae45838aeaf2d4791e4d6ea228f`
+
+## Specialist Step25 - UX / Product Designer
+
+- execution_step: `25`
+- role_id: `ux_designer`
+- specialist_file: `21_UX_PRODUCT_DESIGNER.md`
+- status: `PASS` for the bounded UX/product-design contract scope; this does not claim frontend usability or G7B
+- starting_baseline: `HEAD=origin/main=4fbabf90fd1015c00c39a7df136e97a5d62cc0b7`; branch `main`; protected `tests/quality_unit_artifacts/` preserved, not read, modified, staged or committed
+- inputs_reviewed: full Step25 prompt and required bootstrap continuation; governance and all eight base reports; UX playbook; Step24 report/history; actual review, evidence, quality, canonical, analytical, materialization, validation and privacy source contracts; checkpoint architecture spec
+- implementation: source-grounded `docs/ux/` information architecture, V1 journey, exact review checkpoint workflow, reusable review object, evidence/uncertainty terminology, explicit error/empty/partial/stale states, bounded bulk/high-impact safety, accessibility requirements, and ten cognitive walkthroughs
+- machine_contracts: `docs/ux/specs/review_experience.yml` and `docs/ux/specs/interaction_states.yml`; executable `tools/validate_step25_ux.py`; negative contract fixtures in `tests/architecture/test_step25_ux_contracts.py`
+- tests: focused Step25 `6 passed`; protected-boundary repository regression `338 passed, 2 skipped, 41 warnings` excluding only the two tests that write the protected path; known non-fatal dlt/SQLite cursor-cleanup traceback remains documented
+- validators: Step25 validator `62 checks PASS`; all `25/25` repository validators PASS; YAML parse, compileall, secret scan and `git diff --check` PASS; optional Splink and Valentine tests remain SKIP because runtimes are not installed
+- scope_boundary: no frontend, backend/API, visualization, graph, scheduler, job control, authentication, provider, source write, score calibration, domain truth, canonical semantics or analytical semantics implementation
+- content_commit_sha: `1e52bc435eb869113edc35decd54c222503da4ac` (`docs: define Step25 UX review contracts`)
+- handoff_to: `Step26 - Data Visualization Engineer`; Step26 remains `NOT_STARTED`; `G7B_REVIEWABLE_DECISIONS` and `G7_END_TO_END_PRODUCT` remain `PENDING`
