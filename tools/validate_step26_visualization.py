@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
@@ -14,8 +15,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from dirty_data_to_olap.application.visualization import VisualizationService
+from dirty_data_to_olap.domain.contracts.analytical import AnalyticalInputBinding, AggregationClass
+from dirty_data_to_olap.domain.contracts.canonical import RecordDisposition
+from dirty_data_to_olap.domain.contracts.source import stable_id
+from dirty_data_to_olap.domain.contracts.validation import (
+    GateStatus,
+    ValidationArtifactBindings,
+    ValidationCheck,
+    ValidationPolicy,
+    ValidationReport,
+    ValidationScope,
+    ValidationSeverity,
+    ValidationStatus,
+)
 from dirty_data_to_olap.domain.contracts.visualization import (
     AnalyticalMeasureVisualInput,
+    AnalyticalMeasureVisualization,
     DisclosureMetadata,
     EvidenceVisualItem,
     LineageViewInput,
@@ -23,6 +38,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     ProfilePoint,
     QualityHeatmapCellInput,
     ValidationView,
+    ValidationReportVisualizationBinding,
     ValidationVisualCheckInput,
     VisualAggregationClass,
     VisualChartKind,
@@ -38,6 +54,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     VisualState,
     VisualNodeType,
     VisualizationDisclosureMode,
+    VisualizationGraph,
     VisualizationGraphInput,
     VisualizationGraphInputEdge,
     VisualizationGraphInputNode,
@@ -45,6 +62,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     VisualizationRequest,
     VisualizationScope,
 )
+from run_step20_reference import build_canonical_model, build_fixture, build_reference_plan
 
 
 class ValidationFailure(RuntimeError):
@@ -91,6 +109,7 @@ def _edge(
     *,
     declared: bool = False,
     inferred: bool = False,
+    state: VisualState = VisualState.OBSERVED,
     conflict_state: str | None = None,
 ) -> VisualizationGraphInputEdge:
     kwargs = {}
@@ -102,6 +121,7 @@ def _edge(
         source_ref=source,
         target_ref=target,
         edge_type=edge_type,
+        state=state,
         declared=declared,
         inferred=inferred,
         reliability=VisualReliabilityState.FULL,
@@ -109,6 +129,99 @@ def _edge(
         provenance_refs=("provenance-step26-synthetic",),
         **kwargs,
     )
+
+
+def _validation_bindings(policy: ValidationPolicy) -> ValidationArtifactBindings:
+    return ValidationArtifactBindings(
+        source_snapshot_id="snapshot-step26-validation",
+        source_snapshot_hash="a" * 64,
+        source_truth_id="truth-step26-validation",
+        source_truth_content_hash="b" * 64,
+        canonical_model_id="canonical-step26-validation",
+        canonical_model_content_hash="c" * 64,
+        record_accounting_id="accounting-step26-validation",
+        record_accounting_content_hash="d" * 64,
+        analytical_plan_id="aplan_" + "e" * 32,
+        analytical_plan_content_hash="f" * 64,
+        analytical_spec_package_hash="1" * 64,
+        analytical_dataset_id="dataset-step26-validation",
+        analytical_dataset_content_hash="2" * 64,
+        analytical_input_binding_id="binding-step26-validation",
+        analytical_input_binding_content_hash="3" * 64,
+        analytical_input_source_snapshot_fingerprints={"source": "step26-fingerprint"},
+        compiled_plan_id="compiled-step26-validation",
+        compiled_plan_content_hash="4" * 64,
+        materialization_artifact_id="materialization-step26-validation",
+        materialization_artifact_content_hash="5" * 64,
+        target_relative_path="target.duckdb",
+        target_config_fingerprint="6" * 64,
+        target_file_sha256="7" * 64,
+        semantic_model_id="semantic-step26-validation",
+        semantic_model_content_hash="8" * 64,
+        semantic_validation_id="semantic-check-step26-validation",
+        semantic_validation_content_hash="9" * 64,
+        validation_policy_id=policy.policy_id,
+        validation_policy_version=policy.policy_version,
+    )
+
+
+def _validation_report(required_status: ValidationStatus, extras: tuple[ValidationCheck, ...] = ()) -> ValidationReport:
+    policy = ValidationPolicy(
+        policy_id="policy-step26-validation",
+        policy_version="step26-v1",
+        required_check_ids=("check-required",),
+        allowed_terminal_dispositions=tuple(RecordDisposition),
+        orphan_policy={"required_fk": "FAIL"},
+        monetary_reason="not applicable to the visualization contract fixture",
+        provenance_refs=("prov:validation-policy",),
+    )
+    required = ValidationCheck(
+        check_id="check-required",
+        name="required blocking check",
+        status=required_status,
+        severity=ValidationSeverity.G6_BLOCKING,
+        scope=ValidationScope.FACT,
+        required=True,
+        details="required check fixture",
+        expected="PASS",
+        observed=required_status.value,
+        evidence_refs=("evidence:required",),
+    )
+    is_pending = required_status in {ValidationStatus.REVIEW_REQUIRED, ValidationStatus.NOT_EVALUATED}
+    return ValidationReport(
+        report_id="report-step26-validation",
+        run_id="run-step26-synthetic",
+        bindings=_validation_bindings(policy),
+        policy=policy,
+        checks=(required, *extras),
+        overall_status=ValidationStatus.FAIL if required_status is ValidationStatus.FAIL else ValidationStatus.REVIEW_REQUIRED if is_pending else ValidationStatus.PASS,
+        g6_status=GateStatus.FAIL if required_status is ValidationStatus.FAIL else GateStatus.PENDING if is_pending else GateStatus.PASS,
+        g6_eligible=required_status is ValidationStatus.PASS,
+        generated_at=datetime(2026, 9, 13, tzinfo=timezone.utc).isoformat(),
+        provenance_refs=("prov:validation-report",),
+    )
+
+
+def _reviewed_measure_context():
+    model = build_canonical_model()
+    fixture = build_fixture(model)
+    binding = AnalyticalInputBinding(
+        binding_id=stable_id("abind", {"fixture_id": fixture.fixture_id, "fixture_hash": fixture.content_hash, "model": model.content_hash}),
+        canonical_model_id=model.model_id,
+        canonical_model_content_hash=model.content_hash,
+        fixture_id=fixture.fixture_id,
+        fixture_content_hash=fixture.content_hash,
+        source_schema_fingerprints={"crm": "schema-crm-step20", "erp": "schema-erp-step20", "sales": "schema-sales-step20"},
+        row_counts=fixture.row_counts,
+        provenance_refs=("step26:step20-reviewed-binding",),
+    )
+    plan, _dimensions, fact, _grain, measures = build_reference_plan(
+        model,
+        binding,
+        fixture,
+        created_at=datetime(2026, 9, 11, tzinfo=timezone.utc),
+    )
+    return plan, fact, measures
 
 
 def _core_graph() -> VisualizationGraphInput:
@@ -131,6 +244,7 @@ def _core_graph() -> VisualizationGraphInput:
         _edge("declared:orders-customer", "table:orders", "column:orders.customer_id", VisualEdgeType.DECLARED_CONSTRAINT, declared=True),
         _edge("candidate:schema", "column:orders.customer_id", "schema-candidate:orders-customer", VisualEdgeType.SCHEMA_MAPPING_CANDIDATE, inferred=True),
         _edge("candidate:er", "record:crm-001", "cluster:customer-001", VisualEdgeType.ER_CANDIDATE_LINK, inferred=True),
+        _edge("authorized:er", "record:crm-001", "cluster:customer-001", VisualEdgeType.ER_AUTHORIZED_LINKAGE, state=VisualState.ACCEPTED),
         _edge("canonical:map", "record:crm-001", "canonical:customer-001", VisualEdgeType.CANONICAL_SOURCE_MAPPING),
         _edge("analytical:fact-dim", "fact:orders", "dim:customer", VisualEdgeType.ANALYTICAL_FACT_DIMENSION),
         _edge("analytical:grain", "fact:orders", "grain:order", VisualEdgeType.ANALYTICAL_FACT_DIMENSION),
@@ -213,11 +327,30 @@ def main() -> int:
     _check("scenario-06-canonical-boundary", any(edge.edge_type is VisualEdgeType.CANONICAL_SOURCE_MAPPING for edge in core.edges), "canonical source mapping is distinct", results)
 
     lineage = service.build_lineage(LineageViewInput(graph=core, direction=VisualDirection.UPSTREAM, focus_ref="table:orders", max_depth=2))
-    _check("scenario-07-lineage", lineage.kind is VisualizationKind.LINEAGE and all("not causality" in edge.accessible_description for edge in lineage.edges), "direction and non-causality semantics are explicit", results)
+    _check("scenario-07-lineage", lineage.kind is VisualizationKind.LINEAGE and all("not causality" in edge.accessible_description for edge in lineage.edges) and any("bounded lineage exploration" in item for item in lineage.legend), "direction, bounded exploration, and non-causality semantics are explicit", results)
 
-    additive = service.build_measure(AnalyticalMeasureVisualInput(measure_ref="measure:revenue", fact_ref="fact:orders", label=_label("Revenue"), aggregation_class=VisualAggregationClass.ADDITIVE, aggregation_rule="SUM", unit_semantics="currency", currency_semantics="USD", provenance_refs=("prov-olap",)))
-    non_additive = service.build_measure(AnalyticalMeasureVisualInput(measure_ref="measure:margin", fact_ref="fact:orders", label=_label("Margin"), aggregation_class=VisualAggregationClass.NON_ADDITIVE, aggregation_rule="AT_GRAIN", unit_semantics="ratio", currency_semantics="USD", provenance_refs=("prov-olap",)))
-    _check("scenario-08-olap-measures", additive.aggregation_class is VisualAggregationClass.ADDITIVE and non_additive.aggregation_rule == "AT_GRAIN", "additivity class and non-additive rule remain explicit", results)
+    plan, fact, measures = _reviewed_measure_context()
+    measure_views = {
+        measure.measure_id: service.build_measure_from_spec(
+            visualization_id=f"viz-{measure.measure_id}",
+            measure_spec=measure,
+            analytical_plan=plan,
+            fact_spec=fact,
+            expected_plan_content_hash=plan.content_hash,
+            expected_package_hash=plan.analytical_spec_package_hash,
+        )
+        for measure in measures
+    }
+    _check(
+        "scenario-08-olap-measures",
+        measure_views["measure_quantity"].aggregation_class is VisualAggregationClass.ADDITIVE
+        and measure_views["measure_quantity"].aggregation_rule == "SUM(quantity) at validated OrderLine grain"
+        and measure_views["measure_unit_price"].aggregation_class is VisualAggregationClass.NON_ADDITIVE
+        and measure_views["measure_discount_rate"].aggregation_class is VisualAggregationClass.NON_ADDITIVE
+        and measure_views["measure_unit_price"].currency_semantics == "UNSPECIFIED_NOT_REVENUE",
+        "actual Step20 quantity, unit_price, and discount_rate semantics remain hash-bound",
+        results,
+    )
 
     quality = service.build_quality_heatmap(
         visualization_id="viz-quality",
@@ -226,8 +359,36 @@ def main() -> int:
     )
     _check("scenario-09-quality-heatmap", "NOT_EVALUATED=1" in quality.accessible_summary and "denominator" in quality.accessible_summary, "measured and unavailable states retain scope and denominator semantics", results)
 
-    validation = service.build_validation(visualization_id="viz-validation", scope=_scope("viz-validation"), checks=(ValidationVisualCheckInput(check_id="check:pass", subject_ref="table:orders", status="PASS", severity="blocking", scope="full", evidence_refs=("evidence:pass",), provenance_refs=("prov-validation",)), ValidationVisualCheckInput(check_id="check:pending", subject_ref="table:orders", status="NOT_EVALUATED", severity="blocking", scope="unobserved", evidence_refs=("evidence:pending",), provenance_refs=("prov-validation",))))
-    _check("scenario-10-validation", validation.overall_status == "NOT_EVALUATED" and validation.g6_eligible is False, "NOT_EVALUATED cannot become a green G6 view", results)
+    validation_report = _validation_report(
+        ValidationStatus.PASS,
+        (
+            ValidationCheck(
+                check_id="check-optional-warning",
+                name="optional warning",
+                status=ValidationStatus.FAIL,
+                severity=ValidationSeverity.WARNING,
+                scope=ValidationScope.FACT,
+                required=False,
+                details="optional warning remains visible",
+                evidence_refs=("evidence:optional-warning",),
+            ),
+        ),
+    )
+    authoritative_validation = service.build_validation_from_report(
+        visualization_id="viz-validation",
+        scope=_scope("viz-validation"),
+        report=validation_report,
+        binding=ValidationReportVisualizationBinding.from_report(validation_report),
+    )
+    _check(
+        "scenario-10-validation",
+        authoritative_validation.overall_status == validation_report.overall_status.value
+        and authoritative_validation.g6_status == validation_report.g6_status.value
+        and authoritative_validation.g6_eligible is True
+        and any(check.check_id == "check-optional-warning" and check.status == "FAIL" for check in authoritative_validation.checks),
+        "authoritative report status is preserved and optional warning remains visible",
+        results,
+    )
 
     stale = service.build_graph(VisualizationRequest(visualization_id="viz-core", kind=VisualizationKind.SOURCE_SCHEMA, mode=VisualizationDisclosureMode.FULL_BOUNDED), core.model_copy(update={"nodes": (core.nodes[0].model_copy(update={"state": VisualState.STALE}),) + core.nodes[1:]}))
     _check("scenario-11-stale-invalidation", any(node.domain_ref == "source:crm" and node.state is VisualState.STALE for node in stale.nodes), "stale state is preserved rather than silently refreshed", results)
@@ -242,6 +403,72 @@ def main() -> int:
     elapsed = perf_counter() - started
     _check("scenario-13-large-progressive-disclosure", len(large.nodes) >= 3000 and len(large.edges) >= 3000 and large_view.disclosure.hidden_node_count > 0 and large_neighborhood.disclosure.hidden_node_count > 0, f"nodes={len(large.nodes)}, edges={len(large.edges)}, elapsed_seconds={elapsed:.4f}", results)
 
+    filter_cases = (
+        ("node_types", VisualizationRequest(visualization_id="viz-core", kind=VisualizationKind.SOURCE_SCHEMA, mode=VisualizationDisclosureMode.FULL_BOUNDED, node_types=(VisualNodeType.TABLE,))),
+        ("edge_types", VisualizationRequest(visualization_id="viz-core", kind=VisualizationKind.SOURCE_SCHEMA, mode=VisualizationDisclosureMode.FULL_BOUNDED, edge_types=(VisualEdgeType.CONTAINS,))),
+        ("evidence_states", VisualizationRequest(visualization_id="viz-core", kind=VisualizationKind.SOURCE_SCHEMA, mode=VisualizationDisclosureMode.FULL_BOUNDED, evidence_states=(VisualEvidenceState.OBSERVED,))),
+        ("review_states", VisualizationRequest(visualization_id="viz-core", kind=VisualizationKind.SOURCE_SCHEMA, mode=VisualizationDisclosureMode.FULL_BOUNDED, review_states=(VisualReviewState.ACCEPTED,))),
+        ("combined", VisualizationRequest(visualization_id="viz-core", kind=VisualizationKind.SOURCE_SCHEMA, mode=VisualizationDisclosureMode.FULL_BOUNDED, node_types=(VisualNodeType.TABLE,), edge_types=(VisualEdgeType.CONTAINS,), evidence_states=(VisualEvidenceState.OBSERVED,), review_states=(VisualReviewState.ACCEPTED,))),
+    )
+    for label, filter_request in filter_cases:
+        filtered = service.build_graph(filter_request, core)
+        expected_key = {"combined": {"node_types", "edge_types", "evidence_states", "review_states"}}.get(label, {label})
+        actual_keys = {item.split("=", 1)[0] for item in filtered.disclosure.active_filters}
+        _check(f"scenario-14-filter-disclosure-{label}", actual_keys == expected_key, f"active_filters={filtered.disclosure.active_filters}", results)
+
+    authorized_edges = [edge for edge in overview.edges if edge.edge_type is VisualEdgeType.ER_AUTHORIZED_LINKAGE]
+    candidate_edges = [edge for edge in overview.edges if edge.edge_type is VisualEdgeType.ER_CANDIDATE_LINK]
+    _check(
+        "scenario-15-er-linkage-distinction",
+        len(authorized_edges) == 1 and len(candidate_edges) == 1
+        and authorized_edges[0].line_style is not candidate_edges[0].line_style
+        and "not canonical identity" in authorized_edges[0].accessible_description
+        and "not canonical identity" in candidate_edges[0].accessible_description,
+        "candidate and authorized linkage remain distinct non-identity evidence",
+        results,
+    )
+
+    optional_not_evaluated = _validation_report(
+        ValidationStatus.PASS,
+        (
+            ValidationCheck(
+                check_id="check-optional-not-evaluated",
+                name="optional not evaluated",
+                status=ValidationStatus.NOT_EVALUATED,
+                severity=ValidationSeverity.INFORMATIONAL,
+                scope=ValidationScope.FACT,
+                required=False,
+                details="optional state remains visible",
+                evidence_refs=("evidence:optional-not-evaluated",),
+            ),
+        ),
+    )
+    optional_view = service.build_validation_from_report(
+        visualization_id="viz-validation-optional",
+        scope=_scope("viz-validation-optional"),
+        report=optional_not_evaluated,
+        binding=ValidationReportVisualizationBinding.from_report(optional_not_evaluated),
+    )
+    _check("scenario-16-optional-not-evaluated", optional_view.g6_status == "PASS" and any(check.status == "NOT_EVALUATED" for check in optional_view.checks), "optional NOT_EVALUATED remains visible without changing authoritative G6", results)
+
+    blocking_failure = _validation_report(ValidationStatus.FAIL)
+    blocking_view = service.build_validation_from_report(
+        visualization_id="viz-validation-blocking",
+        scope=_scope("viz-validation-blocking"),
+        report=blocking_failure,
+        binding=ValidationReportVisualizationBinding.from_report(blocking_failure),
+    )
+    _check("scenario-17-blocking-failure-visible", blocking_view.g6_status == "FAIL" and any(check.status == "FAIL" for check in blocking_view.checks), "required blocking failure is visible and remains G6 FAIL", results)
+
+    pending_report = _validation_report(ValidationStatus.NOT_EVALUATED)
+    pending_view = service.build_validation_from_report(
+        visualization_id="viz-validation-pending",
+        scope=_scope("viz-validation-pending"),
+        report=pending_report,
+        binding=ValidationReportVisualizationBinding.from_report(pending_report),
+    )
+    _check("scenario-18-required-not-evaluated", pending_view.g6_status == "PENDING" and pending_view.g6_eligible is False, "required NOT_EVALUATED remains pending", results)
+
     _negative("negative-uncalibrated-probability", lambda: EvidenceVisualItem(evidence_ref="bad", family="ML", role="SIGNAL", direction="FOR", state=VisualEvidenceState.OBSERVED, reliability=VisualReliabilityState.FULL, observation_scope=VisualObservationScope.FULL_SNAPSHOT, metric_value=0.9, metric_semantics="uncalibrated probability", provenance_refs=("prov",), accessible_description="bad"), results)
     _negative("negative-nonadditive-sum", lambda: AnalyticalMeasureVisualInput(measure_ref="bad", fact_ref="fact", label=_label("Bad"), aggregation_class=VisualAggregationClass.NON_ADDITIVE, aggregation_rule="SUM", unit_semantics="ratio", currency_semantics="none", provenance_refs=("prov",)), results)
     _negative("negative-quality-denominator", lambda: QualityHeatmapCellInput(cell_id="bad", subject_ref="table", dimension="completeness", severity="error", numerator=1, state=VisualState.FAIL, observation_scope=VisualObservationScope.OBSERVED_SUBSET, reliability=VisualReliabilityState.BOUNDED, evidence_state=VisualEvidenceState.OBSERVED, provenance_refs=("prov",), accessible_description="bad"), results)
@@ -249,13 +476,29 @@ def main() -> int:
     _negative("negative-unordered-histogram", lambda: ProfileDistributionInput(metric_id="bad", column_ref="column", metric_kind="numeric", points=(ProfilePoint(bucket="1", count=1),), chart_kind=VisualChartKind.HISTOGRAM, observation_scope=VisualObservationScope.FULL_SNAPSHOT, reliability=VisualReliabilityState.FULL, evidence_state=VisualEvidenceState.OBSERVED, sensitivity_state=VisualSensitivityState.INTERNAL, provenance_refs=("prov",), accessible_description="bad"), results)
     _negative("negative-status-laundering", lambda: ValidationView(visualization_id="viz-validation", scope=_scope("viz-validation"), checks=(ValidationVisualCheckInput(check_id="check:fail", subject_ref="table", status="FAIL", severity="blocking", scope="full", evidence_refs=("evidence",), provenance_refs=("prov",)),), overall_status="PASS", g6_eligible=True, accessible_summary="bad", content_hash="bad"), results)
     _negative("negative-disclosure-accounting", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=2, total_edge_count=0, rendered_node_count=1, rendered_edge_count=0, hidden_node_count=0, hidden_edge_count=0, aggregated_node_count=0, aggregated_edge_count=0, truncated=False, show_more_available=False, accessible_summary="bad"), results)
+    _negative("negative-hidden-nodes-not-truncated", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=1, total_edge_count=0, rendered_node_count=0, rendered_edge_count=0, hidden_node_count=1, hidden_edge_count=0, aggregated_node_count=0, aggregated_edge_count=0, truncated=False, show_more_available=False, accessible_summary="bad"), results)
+    _negative("negative-hidden-edges-no-reason", lambda: DisclosureMetadata(mode=VisualizationDisclosureMode.OVERVIEW, total_node_count=0, total_edge_count=1, rendered_node_count=0, rendered_edge_count=0, hidden_node_count=0, hidden_edge_count=1, aggregated_node_count=0, aggregated_edge_count=0, truncated=True, show_more_available=True, accessible_summary="bad"), results)
+    _negative("negative-invented-revenue", lambda: service.build_measure(AnalyticalMeasureVisualInput(measure_ref="measure:revenue", fact_ref="fact:orders", label=_label("Revenue"), aggregation_class=VisualAggregationClass.ADDITIVE, aggregation_rule="SUM", unit_semantics="currency", currency_semantics="USD", provenance_refs=("prov-invented",))), results)
+    _negative("negative-same-id-measure-mutation", lambda: service.build_measure_from_spec(visualization_id="viz-mutated", measure_spec=measures[0].model_copy(update={"aggregation_class": AggregationClass.NON_ADDITIVE}), analytical_plan=plan, fact_spec=fact, expected_plan_content_hash=plan.content_hash, expected_package_hash=plan.analytical_spec_package_hash), results)
+    report_for_binding = _validation_report(ValidationStatus.PASS)
+    report_binding = ValidationReportVisualizationBinding.from_report(report_for_binding)
+    _negative("negative-validation-partial-universe", lambda: service.build_validation_from_report(visualization_id="viz-validation", scope=_scope("viz-validation"), report=report_for_binding, binding=report_binding.model_copy(update={"complete_check_ids": ()})), results)
+    _negative("negative-validation-tampered-binding", lambda: service.build_validation_from_report(visualization_id="viz-validation", scope=_scope("viz-validation"), report=report_for_binding, binding=report_binding.model_copy(update={"validation_report_content_hash": "0" * 64})), results)
+    tampered_report = report_for_binding.model_copy(update={"checks": (report_for_binding.checks[0].model_copy(update={"details": "tampered"}),)})
+    _negative("negative-validation-tampered-report", lambda: service.build_validation_from_report(visualization_id="viz-validation", scope=_scope("viz-validation"), report=tampered_report, binding=report_binding), results)
+    _negative("negative-accessible-duplicate-row", lambda: VisualizationGraph.model_validate({**overview.model_dump(mode="python"), "accessible_rows": overview.accessible_rows + (overview.accessible_rows[0],)}), results)
+    invalid_related = overview.accessible_rows[0].model_copy(update={"related_visual_ids": ("vnode_missing",)})
+    _negative("negative-accessible-invalid-related-id", lambda: VisualizationGraph.model_validate({**overview.model_dump(mode="python"), "accessible_rows": (invalid_related, *overview.accessible_rows[1:])}), results)
 
     artifact_dir = ROOT / "workspace" / "runs" / "step26-visualization"
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    scenario_count = sum(item["name"].startswith("scenario-") for item in results)
+    negative_control_count = sum(item["name"].startswith("negative-") for item in results)
     artifact = {
         "validator": "validate_step26_visualization.py",
-        "scenario_count": 13,
-        "negative_control_count": 7,
+        "scenario_count": scenario_count,
+        "negative_control_count": negative_control_count,
+        "executed_check_count": len(results),
         "checks": results,
         "large_graph": {
             "nodes": len(large.nodes),
@@ -275,7 +518,7 @@ def main() -> int:
     for item in results:
         print(f"{item['status']} {item['name']}: {item['details']}")
     print(f"ARTIFACT {output_path.relative_to(ROOT)}")
-    print(f"SUMMARY PASS checks={len(results)} scenarios=13 negative_controls=7 elapsed_seconds={elapsed:.4f}")
+    print(f"SUMMARY PASS checks={len(results)} scenarios={scenario_count} negative_controls={negative_control_count} elapsed_seconds={elapsed:.4f}")
     return 0
 
 

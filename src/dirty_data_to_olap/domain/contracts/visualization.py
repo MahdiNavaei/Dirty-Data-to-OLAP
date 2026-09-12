@@ -14,6 +14,7 @@ from typing import Any, Literal, Mapping
 from pydantic import Field, field_validator, model_validator
 
 from .source import _SourceModel, stable_digest, stable_id
+from .validation import GateStatus, ValidationReport
 
 
 class VisualizationKind(str, Enum):
@@ -327,11 +328,16 @@ class DisclosureMetadata(_SourceModel):
             raise ValueError("disclosure metadata must account for every node")
         if self.rendered_edge_count + self.hidden_edge_count + self.aggregated_edge_count != self.total_edge_count:
             raise ValueError("disclosure metadata must account for every edge")
+        has_hidden_content = bool(
+            self.hidden_node_count or self.hidden_edge_count or self.aggregated_node_count or self.aggregated_edge_count
+        )
+        if has_hidden_content and not self.truncated:
+            raise ValueError("hidden or aggregated graph content requires truncated=True")
         if self.truncated and not self.truncation_reason:
             raise ValueError("truncated views require a reason")
-        if self.show_more_available != bool(
-            self.hidden_node_count or self.hidden_edge_count or self.aggregated_node_count or self.aggregated_edge_count
-        ):
+        if not self.truncated and self.truncation_reason:
+            raise ValueError("a non-truncated view cannot carry a truncation reason")
+        if self.show_more_available != has_hidden_content:
             raise ValueError("show_more_available must reflect hidden graph content")
         return self
 
@@ -359,6 +365,13 @@ class VisualizationGraph(_SourceModel):
             raise ValueError("visual edges must reference rendered nodes")
         if len(self.accessible_rows) != len(self.nodes):
             raise ValueError("every rendered node requires an accessible representation")
+        accessible_ids = [row.subject_visual_id for row in self.accessible_rows]
+        if len(accessible_ids) != len(set(accessible_ids)):
+            raise ValueError("accessible subject IDs must be unique")
+        if set(accessible_ids) != node_ids:
+            raise ValueError("accessible rows must cover exactly the rendered visual nodes")
+        if any(related_id not in node_ids for row in self.accessible_rows for related_id in row.related_visual_ids):
+            raise ValueError("accessible related visual IDs must reference rendered nodes")
         return self
 
 
@@ -592,32 +605,109 @@ class ValidationVisualCheckInput(_SourceModel):
     provenance_refs: tuple[str, ...] = Field(min_length=1)
 
 
+class ValidationReportVisualizationBinding(_SourceModel):
+    """Exact binding manifest for an authoritative validation projection."""
+
+    validation_report_id: str = Field(min_length=1)
+    validation_report_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    validation_policy_id: str = Field(min_length=1)
+    validation_policy_version: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    complete_check_ids: tuple[str, ...] = Field(min_length=1)
+    required_check_ids: tuple[str, ...] = Field(min_length=1)
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def binding_is_closed(self) -> "ValidationReportVisualizationBinding":
+        if len(set(self.complete_check_ids)) != len(self.complete_check_ids):
+            raise ValueError("validation visualization complete check IDs must be unique")
+        if len(set(self.required_check_ids)) != len(self.required_check_ids):
+            raise ValueError("validation visualization required check IDs must be unique")
+        if not set(self.required_check_ids).issubset(self.complete_check_ids):
+            raise ValueError("validation visualization required checks must be in the complete check universe")
+        return self
+
+    @classmethod
+    def from_report(cls, report: ValidationReport) -> "ValidationReportVisualizationBinding":
+        return cls(
+            validation_report_id=report.report_id,
+            validation_report_content_hash=report.content_hash,
+            validation_policy_id=report.policy.policy_id,
+            validation_policy_version=report.policy.policy_version,
+            run_id=report.run_id,
+            complete_check_ids=tuple(sorted(item.check_id for item in report.checks)),
+            required_check_ids=tuple(sorted(report.policy.required_check_ids)),
+            provenance_refs=tuple(sorted(report.provenance_refs)),
+        )
+
+
 class ValidationView(_SourceModel):
+    """Exploratory validation subset; never an authoritative G6 result."""
+
     visualization_id: str = Field(min_length=1)
     scope: VisualizationScope
     checks: tuple[ValidationVisualCheckInput, ...] = Field(min_length=1)
     overall_status: Literal["PASS", "FAIL", "REVIEW_REQUIRED", "NOT_EVALUATED"]
     g6_eligible: bool
+    authoritative: Literal[False] = False
     accessible_summary: str = Field(min_length=1)
     content_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def status_is_derived(self) -> "ValidationView":
-        required = [check for check in self.checks if check.required]
-        if any(check.status == "FAIL" for check in self.checks):
-            expected = "FAIL"
-        elif any(check.status == "NOT_EVALUATED" for check in required):
-            expected = "NOT_EVALUATED"
-        elif any(check.status == "REVIEW_REQUIRED" for check in required):
-            expected = "REVIEW_REQUIRED"
-        else:
-            expected = "PASS"
-        if self.overall_status != expected or self.g6_eligible != (expected == "PASS"):
-            raise ValueError("validation visualization status must be derived from required checks")
+    def exploratory_status_is_safe(self) -> "ValidationView":
+        if self.authoritative is not False:
+            raise ValueError("subset validation views cannot be authoritative")
+        if self.overall_status == "PASS" or self.g6_eligible:
+            raise ValueError("exploratory validation subsets cannot claim global PASS or G6 eligibility")
+        return self
+
+
+class ValidationReportVisualization(_SourceModel):
+    """Trusted, complete projection of a validated ValidationReport."""
+
+    visualization_id: str = Field(min_length=1)
+    scope: VisualizationScope
+    validation_report_id: str = Field(min_length=1)
+    validation_report_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    validation_policy_id: str = Field(min_length=1)
+    validation_policy_version: str = Field(min_length=1)
+    complete_check_ids: tuple[str, ...] = Field(min_length=1)
+    required_check_ids: tuple[str, ...] = Field(min_length=1)
+    checks: tuple[ValidationVisualCheckInput, ...] = Field(min_length=1)
+    overall_status: Literal["PASS", "FAIL", "REVIEW_REQUIRED", "NOT_EVALUATED"]
+    g6_status: Literal["PASS", "FAIL", "PENDING"]
+    g6_eligible: bool
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+    authoritative: Literal[True] = True
+    accessible_summary: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def projection_is_complete_and_consistent(self) -> "ValidationReportVisualization":
+        check_ids = [item.check_id for item in self.checks]
+        if len(check_ids) != len(set(check_ids)):
+            raise ValueError("authoritative validation visualization check IDs must be unique")
+        if len(self.complete_check_ids) != len(set(self.complete_check_ids)):
+            raise ValueError("authoritative validation visualization complete check IDs must be unique")
+        if len(self.required_check_ids) != len(set(self.required_check_ids)):
+            raise ValueError("authoritative validation visualization required check IDs must be unique")
+        if set(check_ids) != set(self.complete_check_ids):
+            raise ValueError("authoritative validation visualization must include the complete check universe")
+        if not set(self.required_check_ids).issubset(self.complete_check_ids):
+            raise ValueError("authoritative required check IDs must be in the complete check universe")
+        if any(item.check_id in self.required_check_ids and not item.required for item in self.checks):
+            raise ValueError("authoritative required checks must remain marked required")
+        expected_overall = {"PASS": "PASS", "FAIL": "FAIL", "PENDING": "REVIEW_REQUIRED"}[self.g6_status]
+        if self.overall_status != expected_overall:
+            raise ValueError("authoritative validation status must preserve the report gate status")
+        if self.g6_eligible != (self.g6_status == "PASS"):
+            raise ValueError("authoritative G6 eligibility must preserve the report gate")
         return self
 
 
 class AnalyticalMeasureVisualInput(_SourceModel):
+    """Untrusted legacy input retained only for negative/exploratory controls."""
+
     measure_ref: str = Field(min_length=1)
     fact_ref: str = Field(min_length=1)
     label: VisualLabel
@@ -632,6 +722,34 @@ class AnalyticalMeasureVisualInput(_SourceModel):
         if self.aggregation_class is VisualAggregationClass.NON_ADDITIVE and self.aggregation_rule.upper() in {"SUM", "DEFAULT_SUM"}:
             raise ValueError("non-additive measure cannot be visualized with additive SUM semantics")
         return self
+
+
+class AnalyticalMeasureVisualization(_SourceModel):
+    """Trusted projection of a reviewed MeasureSpec and AnalyticalPlan."""
+
+    visualization_id: str = Field(min_length=1)
+    measure_id: str = Field(min_length=1)
+    fact_id: str = Field(min_length=1)
+    grain_spec_id: str | None = None
+    label: VisualLabel
+    measure_semantic_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    analytical_plan_id: str = Field(pattern=r"^aplan_[a-f0-9]{32}$")
+    analytical_plan_version: str = Field(min_length=1)
+    analytical_plan_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    analytical_spec_package_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    aggregation_class: VisualAggregationClass
+    aggregation_rule: str = Field(min_length=1)
+    unit_semantics: str = Field(min_length=1)
+    currency_semantics: str = Field(min_length=1)
+    logical_type: str = Field(min_length=1)
+    domain_assertion_refs: tuple[str, ...] = Field(min_length=1)
+    provenance_refs: tuple[str, ...] = Field(min_length=1)
+    measure_review_state: str = Field(min_length=1)
+    plan_review_state: str = Field(min_length=1)
+    fact_review_state: str | None = None
+    authoritative: Literal[True] = True
+    accessible_summary: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 def visual_node_id(visualization_id: str, domain_ref: str) -> str:

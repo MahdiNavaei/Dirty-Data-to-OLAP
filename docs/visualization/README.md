@@ -7,12 +7,12 @@ The service emits bounded, deterministic, project-owned view models. It never pa
 ## Supported views
 
 - source/schema and table-column relationship graphs, preserving declared versus inferred relationships;
-- bounded neighborhood and focused lineage paths with explicit direction;
+- bounded neighborhood and focused bounded lineage exploration with explicit direction;
 - evidence-family breakdowns with separate supporting, contradicting, human-assertion, and conflict fields;
 - schema-mapping, entity-resolution, canonical, and OLAP graphs through the same typed graph projection;
 - quality heatmaps with numerator, denominator, scope, reliability, state, and provenance;
 - profile distributions only when the profile contract justifies the chart type and transfer;
-- validation views that derive overall status and G6 eligibility from visible checks.
+- exploratory validation subsets plus an authoritative, hash-bound `ValidationReport` projection.
 
 ## Boundaries and handoff
 

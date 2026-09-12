@@ -8,11 +8,16 @@ decision about evidence, identity, canonicalization, or analytical truth.
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
+from pydantic import ValidationError
+
+from dirty_data_to_olap.domain.contracts.analytical import AnalyticalPlan, FactSpec, MeasureSpec
+from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.visualization import (
     AccessibleGraphRow,
     AnalyticalMeasureVisualInput,
+    AnalyticalMeasureVisualization,
     DisclosureMetadata,
     EvidenceBreakdownView,
     EvidenceVisualItem,
@@ -22,7 +27,10 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     QualityHeatmapCellInput,
     QualityHeatmapView,
     ValidationView,
+    ValidationReportVisualization,
+    ValidationReportVisualizationBinding,
     ValidationVisualCheckInput,
+    VisualAggregationClass,
     VisualChartKind,
     VisualDirection,
     VisualEdgeType,
@@ -69,6 +77,49 @@ def _sorted_unique(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted(set(values)))
 
 
+_FILTER_PREFIXES = {
+    "node_types=": "node_types",
+    "edge_types=": "edge_types",
+    "evidence_states=": "evidence_states",
+    "review_states=": "review_states",
+}
+
+
+def _effective_active_filters(request: VisualizationRequest) -> tuple[str, ...]:
+    selectors = {
+        "node_types": tuple(sorted({item.value for item in request.node_types})),
+        "edge_types": tuple(sorted({item.value for item in request.edge_types})),
+        "evidence_states": tuple(sorted({item.value for item in request.evidence_states})),
+        "review_states": tuple(sorted({item.value for item in request.review_states})),
+    }
+    canonical = {
+        key: f"{key}={','.join(values)}"
+        for key, values in selectors.items()
+        if values
+    }
+    free_form: list[str] = []
+    for raw_filter in request.active_filters:
+        value = raw_filter.strip()
+        if not value:
+            raise VisualizationInputError("active filter labels cannot be empty")
+        matching_prefix = next((prefix for prefix in _FILTER_PREFIXES if value.startswith(prefix)), None)
+        if matching_prefix is not None:
+            key = _FILTER_PREFIXES[matching_prefix]
+            if key not in canonical or value != canonical[key]:
+                raise VisualizationInputError(f"active filter {value!r} contradicts the effective {key} selector")
+        free_form.append(value)
+    return tuple(sorted(set((*canonical.values(), *free_form))))
+
+
+def _safe_validation_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        text = str(value)
+        return text if len(text) <= 160 else "[SCALAR_VALUE_REDACTED]"
+    return "[STRUCTURED_VALUE_REDACTED]"
+
+
 def _node_shape(node_type: VisualNodeType) -> VisualNodeShape:
     if node_type in {VisualNodeType.SOURCE, VisualNodeType.SNAPSHOT}:
         return VisualNodeShape.HEXAGON
@@ -82,6 +133,10 @@ def _node_shape(node_type: VisualNodeType) -> VisualNodeShape:
 
 
 def _line_style(edge: VisualizationGraphInputEdge) -> VisualLineStyle:
+    if edge.edge_type is VisualEdgeType.ER_AUTHORIZED_LINKAGE:
+        return VisualLineStyle.SOLID
+    if edge.edge_type is VisualEdgeType.ER_CANDIDATE_LINK:
+        return VisualLineStyle.DOTTED
     if edge.declared or edge.edge_type in {
         VisualEdgeType.DECLARED_CONSTRAINT,
         VisualEdgeType.ACCEPTED_RELATIONSHIP,
@@ -108,7 +163,12 @@ def _node_description(node: VisualizationGraphInputNode) -> str:
 
 
 def _edge_description(edge: VisualizationGraphInputEdge, *, lineage_context: bool = False) -> str:
-    qualifier = "declared" if edge.declared else "inferred" if edge.inferred else "candidate-or-reviewed"
+    if edge.edge_type is VisualEdgeType.ER_CANDIDATE_LINK:
+        qualifier = "candidate linkage evidence; not canonical identity"
+    elif edge.edge_type is VisualEdgeType.ER_AUTHORIZED_LINKAGE:
+        qualifier = "authorized linkage evidence; not canonical identity"
+    else:
+        qualifier = "declared" if edge.declared else "inferred" if edge.inferred else "candidate-or-reviewed"
     lineage_note = " Direction is source to target; this is lineage, not causality." if lineage_context or edge.edge_type is VisualEdgeType.LINEAGE else ""
     return (
         f"{edge.edge_type.value} ({qualifier}); state={edge.state.value}; "
@@ -231,7 +291,7 @@ class VisualizationService:
             truncated=truncated,
             truncation_reason=reason,
             show_more_available=truncated,
-            active_filters=tuple(sorted(request.active_filters)),
+            active_filters=_effective_active_filters(request),
             focus_ref=focus,
             hop_depth=request.max_hops if request.mode in {VisualizationDisclosureMode.NEIGHBORHOOD, VisualizationDisclosureMode.FOCUSED_PATH} else None,
             accessible_summary=(
@@ -243,9 +303,10 @@ class VisualizationService:
         )
         legend = (
             "Node shape identifies the project-owned node type; text and accessible descriptions carry the same meaning.",
-            "Solid edges are declared or accepted; dashed edges are inferred or lineage; dotted edges are candidates or other provisional links.",
-            "State, evidence, reliability, observation scope, review state, conflicts, and hidden counts are explicit fields; color is never the sole signal.",
-        )
+                "Solid edges are declared, accepted, or authorized linkage evidence; dashed edges are inferred or lineage; dotted edges are candidates. ER linkage is evidence, not canonical identity.",
+                "State, evidence, reliability, observation scope, review state, conflicts, and hidden counts are explicit fields; color is never the sole signal.",
+                "FOCUSED_PATH is focused bounded lineage exploration from a focus reference, not a unique source-to-target path.",
+            )
         payload = {
             "visualization_id": request.visualization_id,
             "kind": request.kind.value,
@@ -517,18 +578,15 @@ class VisualizationService:
         not_evaluated = sum(check.status == "NOT_EVALUATED" for check in ordered)
         if failures:
             overall = "FAIL"
-        elif not_evaluated:
-            overall = "NOT_EVALUATED"
         elif review_required:
             overall = "REVIEW_REQUIRED"
         else:
-            overall = "PASS"
-        required = tuple(check for check in ordered if check.required)
-        g6_eligible = overall == "PASS" and all(check.status == "PASS" for check in required)
+            overall = "NOT_EVALUATED"
+        g6_eligible = False
         summary = (
             f"overall={overall}; checks={len(ordered)}; failures={failures}; "
             f"review_required={review_required}; not_evaluated={not_evaluated}; "
-            f"g6_eligible={g6_eligible}. Individual statuses remain visible."
+            "exploratory subset only; authoritative G6 remains in ValidationReport."
         )
         payload = {
             "visualization_id": visualization_id,
@@ -547,11 +605,170 @@ class VisualizationService:
             content_hash=visualization_content_hash(payload),
         )
 
+    def build_validation_from_report(
+        self,
+        *,
+        visualization_id: str,
+        scope: VisualizationScope,
+        report: ValidationReport,
+        binding: ValidationReportVisualizationBinding,
+    ) -> ValidationReportVisualization:
+        """Project the complete authoritative report without re-deriving G6."""
+
+        _check_scope(visualization_id, scope)
+        try:
+            report = ValidationReport.model_validate(report.model_dump(mode="python"))
+        except ValidationError as exc:
+            raise VisualizationInputError("validation report failed canonical revalidation") from exc
+        if scope.run_id != report.run_id or binding.run_id != report.run_id:
+            raise VisualizationInputError("validation visualization scope and binding must use the report run")
+        if binding.validation_report_id != report.report_id:
+            raise VisualizationInputError("validation report ID does not match its visualization binding")
+        if binding.validation_report_content_hash != report.content_hash:
+            raise VisualizationInputError("validation report content hash is stale or mismatched")
+        if binding.validation_policy_id != report.policy.policy_id or binding.validation_policy_version != report.policy.policy_version:
+            raise VisualizationInputError("validation policy does not match its visualization binding")
+        if report.bindings.validation_policy_id != report.policy.policy_id or report.bindings.validation_policy_version != report.policy.policy_version:
+            raise VisualizationInputError("validation report artifact bindings do not match its policy")
+
+        report_check_ids = tuple(sorted(item.check_id for item in report.checks))
+        required_check_ids = tuple(sorted(report.policy.required_check_ids))
+        if binding.complete_check_ids != report_check_ids:
+            raise VisualizationInputError("validation visualization must include the complete check universe")
+        if binding.required_check_ids != required_check_ids:
+            raise VisualizationInputError("validation visualization required check IDs do not match the policy")
+        if tuple(sorted(binding.provenance_refs)) != tuple(sorted(report.provenance_refs)):
+            raise VisualizationInputError("validation visualization provenance does not match the report")
+        if len(report_check_ids) != len(report.checks):
+            raise VisualizationInputError("validation report contains duplicate check IDs")
+
+        checks = tuple(
+            ValidationVisualCheckInput(
+                check_id=check.check_id,
+                subject_ref=f"validation:{report.report_id}:{check.check_id}",
+                status=check.status.value,
+                severity=check.severity.value,
+                scope=check.scope.value,
+                required=check.check_id in set(report.policy.required_check_ids),
+                expected=_safe_validation_value(check.expected),
+                observed=_safe_validation_value(check.observed),
+                discrepancy_refs=tuple(sorted(check.discrepancy_ids)),
+                evidence_refs=tuple(sorted(check.evidence_refs)),
+                provenance_refs=tuple(sorted(report.provenance_refs)),
+            )
+            for check in sorted(report.checks, key=lambda item: item.check_id)
+        )
+        summary = (
+            f"authoritative report={report.report_id}; policy={report.policy.policy_id}@{report.policy.policy_version}; "
+            f"checks={len(checks)}; overall={report.overall_status.value}; g6={report.g6_status.value}; "
+            f"g6_eligible={report.g6_eligible}. Complete report universe and individual evidence remain visible."
+        )
+        payload = {
+            "visualization_id": visualization_id,
+            "scope": scope.model_dump(mode="json"),
+            "validation_report_id": report.report_id,
+            "validation_report_content_hash": report.content_hash,
+            "validation_policy_id": report.policy.policy_id,
+            "validation_policy_version": report.policy.policy_version,
+            "complete_check_ids": report_check_ids,
+            "required_check_ids": required_check_ids,
+            "checks": [check.model_dump(mode="json") for check in checks],
+            "overall_status": report.overall_status.value,
+            "g6_status": report.g6_status.value,
+            "g6_eligible": report.g6_eligible,
+            "provenance_refs": tuple(sorted(report.provenance_refs)),
+            "authoritative": True,
+        }
+        return ValidationReportVisualization(
+            visualization_id=visualization_id,
+            scope=scope,
+            validation_report_id=report.report_id,
+            validation_report_content_hash=report.content_hash,
+            validation_policy_id=report.policy.policy_id,
+            validation_policy_version=report.policy.policy_version,
+            complete_check_ids=report_check_ids,
+            required_check_ids=required_check_ids,
+            checks=checks,
+            overall_status=report.overall_status.value,
+            g6_status=report.g6_status.value,
+            g6_eligible=report.g6_eligible,
+            provenance_refs=tuple(sorted(report.provenance_refs)),
+            accessible_summary=summary,
+            content_hash=visualization_content_hash(payload),
+        )
+
     @staticmethod
     def build_measure(measure: AnalyticalMeasureVisualInput) -> AnalyticalMeasureVisualInput:
-        """Validate and return the already reviewed analytical measure view."""
+        """Reject the legacy unbound path; it cannot establish OLAP truth."""
 
-        return measure
+        raise VisualizationInputError(
+            "unbound analytical measure input cannot be authoritative; use build_measure_from_spec"
+        )
+
+    @staticmethod
+    def build_measure_from_spec(
+        *,
+        visualization_id: str,
+        measure_spec: MeasureSpec,
+        analytical_plan: AnalyticalPlan,
+        fact_spec: FactSpec | None = None,
+        expected_plan_content_hash: str | None = None,
+        expected_package_hash: str | None = None,
+    ) -> AnalyticalMeasureVisualization:
+        """Project exact reviewed measure semantics from the analytical plan."""
+
+        if expected_plan_content_hash is not None and analytical_plan.content_hash != expected_plan_content_hash:
+            raise VisualizationInputError("analytical plan content hash is stale or mismatched")
+        if expected_package_hash is not None and analytical_plan.analytical_spec_package_hash != expected_package_hash:
+            raise VisualizationInputError("analytical specification package hash is stale or mismatched")
+        if measure_spec.measure_id not in analytical_plan.measure_spec_ids:
+            raise VisualizationInputError("measure is not part of the analytical plan")
+        if analytical_plan.measure_spec_content_hashes.get(measure_spec.measure_id) != measure_spec.semantic_content_hash:
+            raise VisualizationInputError("measure semantic content hash does not match the analytical plan")
+        if measure_spec.fact_id not in analytical_plan.materialized_fact_ids:
+            raise VisualizationInputError("measure fact is not materialized by the analytical plan")
+        if fact_spec is not None:
+            if fact_spec.fact_id != measure_spec.fact_id:
+                raise VisualizationInputError("measure and fact references do not match")
+            if measure_spec.measure_id not in fact_spec.measure_ids:
+                raise VisualizationInputError("measure is not owned by the supplied fact specification")
+            if analytical_plan.fact_spec_content_hashes.get(fact_spec.fact_id) != fact_spec.semantic_content_hash:
+                raise VisualizationInputError("fact semantic content hash does not match the analytical plan")
+
+        package_hash = analytical_plan.analytical_spec_package_hash
+        output = {
+            "visualization_id": visualization_id,
+            "measure_id": measure_spec.measure_id,
+            "fact_id": measure_spec.fact_id,
+            "grain_spec_id": fact_spec.grain_spec_id if fact_spec is not None else None,
+            "label": VisualLabel(value=measure_spec.semantic_name, accessible_text=measure_spec.semantic_name).model_dump(mode="json"),
+            "measure_semantic_content_hash": measure_spec.semantic_content_hash,
+            "analytical_plan_id": analytical_plan.plan_id,
+            "analytical_plan_version": analytical_plan.plan_version,
+            "analytical_plan_content_hash": analytical_plan.content_hash,
+            "analytical_spec_package_hash": package_hash,
+            "aggregation_class": VisualAggregationClass(measure_spec.aggregation_class.value),
+            "aggregation_rule": measure_spec.aggregation_rule,
+            "unit_semantics": measure_spec.unit_semantics,
+            "currency_semantics": measure_spec.currency_semantics,
+            "logical_type": measure_spec.logical_type,
+            "domain_assertion_refs": tuple(sorted(measure_spec.domain_assertion_refs)),
+            "provenance_refs": tuple(sorted(set(measure_spec.provenance_refs) | set(analytical_plan.provenance_refs))),
+            "measure_review_state": measure_spec.review_state.value,
+            "plan_review_state": analytical_plan.review_state.value,
+            "fact_review_state": fact_spec.review_state.value if fact_spec is not None else None,
+            "authoritative": True,
+        }
+        return AnalyticalMeasureVisualization(
+            **output,
+            accessible_summary=(
+                f"reviewed measure={measure_spec.measure_id}; fact={measure_spec.fact_id}; "
+                f"aggregation={measure_spec.aggregation_class.value}; rule={measure_spec.aggregation_rule}; "
+                f"unit={measure_spec.unit_semantics}; currency={measure_spec.currency_semantics}; "
+                f"measure_review={measure_spec.review_state.value}; plan_review={analytical_plan.review_state.value}."
+            ),
+            content_hash=visualization_content_hash(output),
+        )
 
 
 __all__ = ["VisualizationInputError", "VisualizationService"]

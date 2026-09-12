@@ -4,4 +4,4 @@ Quality cells require numerator and denominator for measured states and always c
 
 Profile charts are only emitted for observed, transferable evidence. Unordered categorical values can use bars or a table. Histograms and box plots require ordered numeric observations. Privacy-blocked or restricted profiles produce `NONE` with no points. The view retains sample/full scope and reliability.
 
-Validation view status is computed from visible checks. Any failure yields `FAIL`; required review or not-evaluated checks prevent a green status. G6 eligibility is true only when the derived overall status is `PASS` and required checks pass. Expected, observed, discrepancy, evidence, and provenance references remain inspectable.
+Exploratory validation subsets retain visible check status and references but are explicitly non-authoritative and cannot claim global `PASS` or G6 eligibility. The authoritative view is a complete, content-hash-bound projection of `ValidationReport`; it preserves the report's policy, check universe, statuses, and G6 fields without re-deriving them. Expected, observed, discrepancy, evidence, and provenance references remain inspectable.

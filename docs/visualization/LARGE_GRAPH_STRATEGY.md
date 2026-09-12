@@ -1,6 +1,6 @@
 # Large graph strategy
 
-The default is a bounded overview. It may expose top-level source/table/fact/dimension/canonical nodes and reports the complete input totals plus hidden counts. A neighborhood or focused path requires a focus reference and uses deterministic breadth-first traversal with a declared hop limit. Node and edge caps are explicit request fields.
+The default is a bounded overview. It may expose top-level source/table/fact/dimension/canonical nodes and reports the complete input totals plus hidden counts. A neighborhood or focused bounded lineage exploration requires a focus reference and uses deterministic breadth-first traversal with a declared hop limit. `FOCUSED_PATH` is a bounded reachable subgraph, not a unique source-to-target path; no target/path claim is made. Node and edge caps are explicit request fields.
 
 Edges are emitted only when both endpoint nodes are rendered. This prevents dangling or misleading links. Hidden nodes and edges are counted, `show_more_available` is explicit, and truncation has a reason. No content is silently discarded and no synthetic aggregate edge is invented.
 

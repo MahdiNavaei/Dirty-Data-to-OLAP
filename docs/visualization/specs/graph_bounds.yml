@@ -16,6 +16,8 @@ disclosure:
   aggregate_counts_explicit: true
   show_more_required: true
   truncation_reason_required: true
+  hidden_content_requires_truncated_state: true
+  counts_must_reconcile_exactly: true
   silent_truncation: false
 benchmark:
   synthetic_only: true

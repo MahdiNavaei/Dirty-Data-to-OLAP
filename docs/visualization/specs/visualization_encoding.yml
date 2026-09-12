@@ -21,6 +21,8 @@ graph:
   sample_is_full: false
   human_assertion_is_model_evidence: false
   no_dangling_edges: true
+  er_candidate_vs_authorized_linkage_distinct: true
+  er_linkage_is_not_canonical_identity: true
 states:
   exact_step25_interaction_states_supported: [NO_EVIDENCE, NO_CANDIDATES, CAPABILITY_UNAVAILABLE, PROVIDER_FAILED, TIMEOUT, INCOMPLETE, PRIVACY_BLOCKED, REVIEW_REQUIRED, STALE, INVALIDATED, SUPERSEDED, TARGET_CHANGED, VALIDATION_FAILED, NOT_EVALUATED, NOT_APPLICABLE, PARTIAL_SUCCESS, LONG_RUNNING]
   failure_can_be_pass: false
@@ -36,3 +38,11 @@ profile:
 analytical:
   grain_explicit: true
   non_additive_default_sum: false
+  authoritative_measure_source: reviewed_measure_spec_and_analytical_plan
+validation:
+  authoritative_source: complete_hash_bound_validation_report
+  exploratory_subset_can_claim_global_pass: false
+filters:
+  active_filter_disclosure_derived_from_selectors: true
+accessibility:
+  exact_rendered_node_row_closure: true
