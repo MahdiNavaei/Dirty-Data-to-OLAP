@@ -504,6 +504,7 @@ from .platform import (
     CleanupAction,
     CleanupAuthorization,
     CleanupCandidate,
+    CleanupDeletionPermit,
     CleanupPlan,
     CleanupResult,
     DependencyResolution,
@@ -527,6 +528,8 @@ from .platform import (
     WorkspaceAllocation,
     artifact_payload_bytes,
     normalize_logical_key,
+    staged_part_artifact_id,
+    staged_part_logical_key,
 )
 
 __all__ = [
@@ -832,6 +835,7 @@ __all__ = [
     "CleanupAction",
     "CleanupAuthorization",
     "CleanupCandidate",
+    "CleanupDeletionPermit",
     "CleanupPlan",
     "CleanupResult",
     "DependencyResolution",
@@ -855,4 +859,6 @@ __all__ = [
     "WorkspaceAllocation",
     "artifact_payload_bytes",
     "normalize_logical_key",
+    "staged_part_artifact_id",
+    "staged_part_logical_key",
 ]

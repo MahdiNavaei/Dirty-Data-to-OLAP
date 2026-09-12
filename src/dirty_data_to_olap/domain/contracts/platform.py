@@ -16,11 +16,12 @@ from typing import Any, BinaryIO, Mapping
 
 from pydantic import Field, field_validator, model_validator
 
-from .source import _SourceModel, stable_digest, utc_now
+from .source import _SourceModel, stable_digest, stable_id, utc_now
 
 
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _HASH = re.compile(r"^[0-9a-f]{64}$")
+_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _LOGICAL_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$")
 
 
@@ -51,6 +52,43 @@ def normalize_logical_key(value: str) -> str:
     ):
         raise ValueError("storage key must be a normalized relative POSIX key")
     return value
+
+
+def staged_part_logical_key(*, run_id: str, source_id: str, snapshot_id: str, table_id: str, dataset_id: str, dataset_version: str, part_id: str) -> str:
+    """Build the canonical run/source/snapshot/table-scoped staged key."""
+
+    values = {
+        "run_id": run_id,
+        "source_id": source_id,
+        "snapshot_id": snapshot_id,
+        "table_id": table_id,
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "part_id": part_id,
+    }
+    for field_name, value in values.items():
+        if value in {".", ".."}:
+            raise ValueError(f"unsafe staged {field_name}")
+        _token(value, field_name=f"staged {field_name}")
+    return f"runs/{run_id}/source/{source_id}/snapshot/{snapshot_id}/table/{table_id}/dataset/{dataset_id}/version/{dataset_version}/part/{part_id}.parquet"
+
+
+def staged_part_artifact_id(*, run_id: str, source_id: str, snapshot_id: str, table_id: str, dataset_id: str, dataset_version: str, part_id: str, schema_fingerprint: str) -> str:
+    """Return the stable identity for one fully scoped staged part."""
+
+    return stable_id(
+        "staged",
+        {
+            "run_id": run_id,
+            "source_id": source_id,
+            "snapshot_id": snapshot_id,
+            "table_id": table_id,
+            "dataset_id": dataset_id,
+            "dataset_version": dataset_version,
+            "part_id": part_id,
+            "schema_fingerprint": schema_fingerprint,
+        },
+    )
 
 
 class ArtifactStorageMode(str, Enum):
@@ -314,6 +352,7 @@ class StagedDatasetPart(_PlatformModel):
 class StagedDatasetManifest(_PlatformModel):
     dataset_id: str = Field(min_length=1)
     dataset_version: str = Field(min_length=1)
+    identity_version: str = "run-scoped-v2"
     run_id: str = Field(min_length=1)
     source_id: str = Field(min_length=1)
     snapshot_id: str = Field(min_length=1)
@@ -336,6 +375,45 @@ class StagedDatasetManifest(_PlatformModel):
     def unique_parts(self) -> "StagedDatasetManifest":
         if len({part.part_id for part in self.parts}) != len(self.parts):
             raise ValueError("staged dataset part IDs must be unique")
+        expected_row_count = 0
+        for part in self.parts:
+            expected_key = staged_part_logical_key(
+                run_id=self.run_id,
+                source_id=self.source_id,
+                snapshot_id=self.snapshot_id,
+                table_id=self.table_id,
+                dataset_id=self.dataset_id,
+                dataset_version=self.dataset_version,
+                part_id=part.part_id,
+            )
+            expected_artifact_id = staged_part_artifact_id(
+                run_id=self.run_id,
+                source_id=self.source_id,
+                snapshot_id=self.snapshot_id,
+                table_id=self.table_id,
+                dataset_id=self.dataset_id,
+                dataset_version=self.dataset_version,
+                part_id=part.part_id,
+                schema_fingerprint=self.schema_fingerprint,
+            )
+            if part.logical_key != expected_key or part.artifact_ref.logical_key != expected_key:
+                raise ValueError("staged part logical key does not match the manifest scope")
+            if self.identity_version != "legacy-v1" and part.artifact_ref.artifact_id != expected_artifact_id:
+                raise ValueError("staged part artifact identity does not match the manifest scope")
+            if part.artifact_ref.run_id != self.run_id:
+                raise ValueError("staged part artifact belongs to a different run")
+            if part.artifact_ref.artifact_kind != "STAGED_DATASET_PART":
+                raise ValueError("staged part artifact kind is not STAGED_DATASET_PART")
+            if part.artifact_ref.publication_state is not ArtifactPublicationState.PUBLISHED:
+                raise ValueError("staged part artifact must be published")
+            if part.artifact_ref.storage_mode is not ArtifactStorageMode.MANAGED:
+                raise ValueError("staged part artifact must be managed")
+            if part.schema_fingerprint != self.schema_fingerprint:
+                raise ValueError("staged part schema fingerprint does not match the manifest")
+            if part.row_count is not None:
+                expected_row_count += part.row_count
+        if self.row_count is not None and all(part.row_count is not None for part in self.parts) and expected_row_count != self.row_count:
+            raise ValueError("staged part row counts do not match the manifest row count")
         return self
 
 
@@ -393,6 +471,7 @@ class RetentionPolicy(_PlatformModel):
 
 class CleanupCandidate(_PlatformModel):
     artifact_id: str = Field(min_length=1)
+    expected_content_hash: str
     reason: str = Field(min_length=1)
     retention_class: RetentionClass
     age_seconds: int = Field(ge=0)
@@ -400,6 +479,14 @@ class CleanupCandidate(_PlatformModel):
     pinned: bool = False
     byte_size: int = Field(ge=0)
     planned_action: CleanupAction
+
+    _validate_hash = field_validator("expected_content_hash")(_hash)
+
+    @model_validator(mode="after")
+    def dependent_ids_are_unique(self) -> "CleanupCandidate":
+        if len(set(self.dependent_artifact_ids)) != len(self.dependent_artifact_ids):
+            raise ValueError("cleanup dependent artifact IDs must be unique")
+        return self
 
 
 class CleanupPlan(_PlatformModel):
@@ -410,12 +497,61 @@ class CleanupPlan(_PlatformModel):
     dry_run: bool = True
     policy_ref: str = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def candidate_ids_are_unique(self) -> "CleanupPlan":
+        ids = [item.artifact_id for item in self.candidates]
+        if len(ids) != len(set(ids)):
+            raise ValueError("cleanup candidate artifact IDs must be unique")
+        return self
+
+    @property
+    def semantic_content(self) -> Mapping[str, Any]:
+        candidates = []
+        for candidate in sorted(self.candidates, key=lambda item: item.artifact_id):
+            value = candidate.model_dump(mode="json")
+            value["dependent_artifact_ids"] = sorted(candidate.dependent_artifact_ids)
+            candidates.append(value)
+        return {
+            "schema_version": self.schema_version,
+            "plan_id": self.plan_id,
+            "run_id": self.run_id,
+            "policy_ref": self.policy_ref,
+            "dry_run": self.dry_run,
+            "candidates": candidates,
+        }
+
+    @property
+    def content_hash(self) -> str:
+        """Deterministic identity of the executable cleanup scope."""
+
+        return stable_digest(self.semantic_content)
+
 
 class CleanupAuthorization(_PlatformModel):
     plan_id: str = Field(min_length=1)
+    plan_content_hash: str
     actor: str = Field(min_length=1)
     authorized: bool = False
     authorized_at: datetime = Field(default_factory=utc_now)
+
+    _validate_plan_hash = field_validator("plan_content_hash")(_hash)
+
+
+class CleanupDeletionPermit(_PlatformModel):
+    """Exact per-artifact deletion context minted from an authorized plan."""
+
+    plan_id: str = Field(min_length=1)
+    plan_content_hash: str
+    run_id: str | None = None
+    artifact_id: str = Field(min_length=1)
+    expected_content_hash: str
+    expected_byte_size: int = Field(ge=0)
+    retention_class: RetentionClass
+    planned_action: CleanupAction
+    dependent_artifact_ids: tuple[str, ...] = ()
+
+    _validate_plan_hash = field_validator("plan_content_hash")(_hash)
+    _validate_content_hash = field_validator("expected_content_hash")(_hash)
 
 
 class CleanupResult(_PlatformModel):
@@ -479,6 +615,8 @@ class GateEvidence(_PlatformModel):
     status: GateEvidenceStatus
     eligible: bool
     validation_report_artifact_id: str = Field(min_length=1)
+    validation_report_run_id: str = Field(min_length=1)
+    validation_report_id: str = Field(min_length=1)
     validation_report_content_hash: str
     policy_version: str = Field(min_length=1)
     verified_content_commit: str = Field(min_length=1)
@@ -487,6 +625,18 @@ class GateEvidence(_PlatformModel):
 
     _validate_report_hash = field_validator("validation_report_content_hash")(_hash)
 
+    @field_validator("verified_content_commit")
+    @classmethod
+    def validate_content_commit(cls, value: str) -> str:
+        if not _COMMIT.fullmatch(value.lower()):
+            raise ValueError("verified content commit must be a 40-character hexadecimal commit")
+        return value.lower()
+
+    @model_validator(mode="after")
+    def eligibility_matches_status(self) -> "GateEvidence":
+        if self.eligible != (self.status is GateEvidenceStatus.PASS):
+            raise ValueError("gate eligibility must match the derived gate status")
+        return self
 
 class CapabilityQuery(_PlatformModel):
     capability_id: str = Field(min_length=1)

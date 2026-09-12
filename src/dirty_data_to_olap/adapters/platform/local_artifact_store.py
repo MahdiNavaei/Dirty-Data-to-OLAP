@@ -25,8 +25,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
     ArtifactPublicationState,
     ArtifactRef,
     ArtifactStorageMode,
-    CleanupAuthorization,
-    normalize_logical_key,
+    CleanupDeletionPermit,
 )
 
 
@@ -308,6 +307,8 @@ class LocalArtifactStore(ArtifactStorePort):
         if manifest.storage_mode is not ArtifactStorageMode.EXTERNAL:
             raise ValueError("external registration requires EXTERNAL storage mode")
         path = self._resolve_external(locator)
+        if manifest.external_locator != locator:
+            raise ArtifactConflictError("external locator must exactly match the manifest locator")
         content_hash, size = _sha256_file(path)
         if manifest.content_hash is not None and manifest.content_hash != content_hash:
             raise ArtifactIntegrityError("claimed external artifact hash does not match the file")
@@ -444,14 +445,28 @@ class LocalArtifactStore(ArtifactStorePort):
         values = [item for item in self._all_refs() if (run_id is None or item.run_id == run_id) and (stage_id is None or item.stage_id == stage_id) and (artifact_kind is None or item.artifact_kind == artifact_kind)]
         return tuple(sorted(values, key=lambda item: item.artifact_id))
 
-    def delete(self, artifact: ArtifactRef | str, authorization: CleanupAuthorization) -> None:
-        if not isinstance(authorization, CleanupAuthorization) or not authorization.authorized or not authorization.plan_id:
-            raise CleanupAuthorizationError("artifact deletion requires an authorized cleanup plan")
+    def delete(self, artifact: ArtifactRef | str, permit: CleanupDeletionPermit) -> None:
+        if not isinstance(permit, CleanupDeletionPermit):
+            raise CleanupAuthorizationError("artifact deletion requires an exact cleanup deletion permit")
         with self._lock:
             ref = self._published_ref(artifact)
-            if ref.retention_class.value == "PINNED_GATE_EVIDENCE":
+            if (
+                permit.artifact_id != ref.artifact_id
+                or permit.expected_content_hash != ref.content_hash
+                or permit.expected_byte_size != ref.byte_size
+                or (permit.run_id is not None and permit.run_id != ref.run_id)
+                or permit.retention_class is not ref.retention_class
+                or permit.planned_action.value != "DELETE_BLOB_IF_UNREFERENCED"
+                or permit.dependent_artifact_ids
+                or ref.retention_class.value == "PINNED_GATE_EVIDENCE"
+            ):
+                raise CleanupAuthorizationError("deletion permit does not cover this exact artifact")
+            if ref.storage_mode is ArtifactStorageMode.EXTERNAL:
                 raise CleanupAuthorizationError("pinned gate evidence cannot be deleted")
-            self._write_record("tombstone", {"artifact": ref.model_dump(mode="json"), "plan_id": authorization.plan_id}, ref.artifact_id)
+            integrity = self.verify(ref)
+            if integrity.state is not ArtifactIntegrityState.VERIFIED:
+                raise CleanupAuthorizationError("artifact bytes must verify before deletion")
+            self._write_record("tombstone", {"artifact": ref.model_dump(mode="json"), "plan_id": permit.plan_id, "plan_content_hash": permit.plan_content_hash}, ref.artifact_id)
             shared = any(item.content_hash == ref.content_hash and item.artifact_id != ref.artifact_id for item in self._all_refs())
             if not shared and ref.storage_mode is ArtifactStorageMode.MANAGED:
                 self._blob_path(ref.content_hash).unlink(missing_ok=True)

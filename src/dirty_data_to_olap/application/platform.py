@@ -6,6 +6,7 @@ object-storage SDKs.  The local adapters live under ``adapters.platform``.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from io import BufferedIOBase
 from typing import BinaryIO, Iterable, Protocol, Sequence, runtime_checkable
@@ -23,9 +24,11 @@ from dirty_data_to_olap.domain.contracts.platform import (
     CapabilityQuery,
     CapabilityRecord,
     CleanupAuthorization,
+    CleanupDeletionPermit,
     CleanupPlan,
     CleanupResult,
     GateEvidence,
+    GateEvidenceStatus,
     IntegrityScanResult,
     ReproducibilityManifest,
     ResourceBudget,
@@ -33,6 +36,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StageAttemptRecord,
     StagedDatasetManifest,
 )
+from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
 class PlatformError(RuntimeError):
@@ -98,7 +102,7 @@ class ArtifactStorePort(Protocol):
     def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None) -> tuple[ArtifactRef, ...]:
         ...
 
-    def delete(self, artifact: ArtifactRef | str, authorization: CleanupAuthorization) -> None:
+    def delete(self, artifact: ArtifactRef | str, permit: CleanupDeletionPermit) -> None:
         ...
 
 
@@ -155,7 +159,7 @@ class ControlStorePort(Protocol):
     def invalidate_cache_entry(self, cache_key: CacheKey, *, reason: str) -> None:
         ...
 
-    def record_gate_evidence(self, evidence: GateEvidence) -> GateEvidence:
+    def record_gate_evidence(self, evidence: GateEvidence, *, validation_report: ValidationReport, artifact_store: ArtifactStorePort) -> GateEvidence:
         ...
 
     def get_gate_evidence(self, gate_id: str, *, run_id: str | None = None) -> GateEvidence | None:
@@ -164,7 +168,7 @@ class ControlStorePort(Protocol):
     def record_staged_dataset(self, manifest: StagedDatasetManifest) -> StagedDatasetManifest:
         ...
 
-    def get_staged_dataset(self, dataset_id: str, dataset_version: str) -> StagedDatasetManifest | None:
+    def get_staged_dataset(self, run_id: str, dataset_id: str, dataset_version: str) -> StagedDatasetManifest | None:
         ...
 
     def mark_artifact_tombstoned(self, artifact_id: str, *, plan_id: str, reason: str) -> None:
@@ -271,6 +275,78 @@ class PlatformCacheService:
         return artifact
 
 
+class GateEvidenceService:
+    """Persist G6 only from a verified, typed ValidationReport artifact."""
+
+    @staticmethod
+    def _decode_report(payload: bytes) -> ValidationReport:
+        try:
+            value = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ArtifactIntegrityError("registered ValidationReport bytes are not valid UTF-8 JSON") from exc
+        if not isinstance(value, dict):
+            raise ArtifactIntegrityError("registered ValidationReport payload must be a JSON object")
+        declared_hash = value.pop("content_hash", None)
+        try:
+            report = ValidationReport.model_validate(value)
+        except Exception as exc:
+            raise ArtifactIntegrityError("registered ValidationReport does not validate as the project contract") from exc
+        if declared_hash is not None and declared_hash != report.content_hash:
+            raise ArtifactIntegrityError("registered ValidationReport semantic hash does not match its payload")
+        return report
+
+    def record_from_validation_report(
+        self,
+        *,
+        gate_id: str,
+        platform_run_id: str,
+        report: ValidationReport,
+        report_artifact: ArtifactRef,
+        verified_content_commit: str,
+        control_store: ControlStorePort,
+        artifact_store: ArtifactStorePort,
+        provenance_refs: Sequence[str] = (),
+    ) -> GateEvidence:
+        if gate_id != "G6_DATA_CORRECTNESS":
+            raise PlatformError("the ValidationReport-backed platform receipt is scoped to G6_DATA_CORRECTNESS")
+        registered = control_store.get_artifact(report_artifact.artifact_id)
+        if registered is None:
+            raise PlatformError("gate evidence requires the exact registered ValidationReport artifact")
+        if registered != report_artifact:
+            raise ArtifactConflictError("gate evidence artifact reference is not the registered immutable reference")
+        if registered.artifact_kind != "ValidationReport":
+            raise PlatformError("gate evidence requires artifact_kind=ValidationReport")
+        if registered.publication_state is not ArtifactPublicationState.PUBLISHED:
+            raise PlatformError("gate evidence requires a published ValidationReport")
+        try:
+            stored = artifact_store.stat(registered)
+        except (KeyError, PlatformError) as exc:
+            raise ArtifactIntegrityError("gate evidence artifact is not present in the configured artifact store") from exc
+        if stored != registered:
+            raise ArtifactConflictError("gate evidence artifact metadata differs between control and artifact stores")
+        integrity = artifact_store.verify(registered)
+        if integrity.state is not ArtifactIntegrityState.VERIFIED:
+            raise ArtifactIntegrityError("gate evidence requires verified ValidationReport bytes")
+        parsed = self._decode_report(artifact_store.read(registered))
+        if parsed != report:
+            raise ArtifactIntegrityError("typed ValidationReport does not correspond to the registered artifact bytes")
+        refs = tuple(dict.fromkeys((*provenance_refs, f"validation-report:{report.report_id}", f"validation-run:{report.run_id}")))
+        evidence = GateEvidence(
+            gate_id=gate_id,
+            run_id=platform_run_id,
+            status=GateEvidenceStatus(report.g6_status.value),
+            eligible=report.g6_eligible,
+            validation_report_artifact_id=registered.artifact_id,
+            validation_report_run_id=report.run_id,
+            validation_report_id=report.report_id,
+            validation_report_content_hash=registered.content_hash,
+            policy_version=report.policy.policy_version,
+            verified_content_commit=verified_content_commit,
+            provenance_refs=refs,
+        )
+        return control_store.record_gate_evidence(evidence, validation_report=report, artifact_store=artifact_store)
+
+
 class PlatformLifecycleService:
     """Plan-first cleanup and durable tombstone coordination."""
 
@@ -311,6 +387,7 @@ class PlatformLifecycleService:
                 continue
             candidates.append(CleanupCandidate(
                 artifact_id=artifact.artifact_id,
+                expected_content_hash=artifact.content_hash,
                 reason=retention.reason,
                 retention_class=artifact.retention_class,
                 age_seconds=age,
@@ -332,14 +409,18 @@ class PlatformLifecycleService:
             record_event("cleanup_planned", run_id=run_id, status="DRY_RUN", detail=f"{plan.plan_id}; candidates={len(plan.candidates)}")
         return plan
 
-    def execute_cleanup(self, plan: CleanupPlan, authorization: CleanupAuthorization, *, control_store: ControlStorePort, artifact_store: ArtifactStorePort) -> CleanupResult:
+    def execute_cleanup(self, plan: CleanupPlan, authorization: CleanupAuthorization, *, control_store: ControlStorePort, artifact_store: ArtifactStorePort, artifact_stores: Sequence[ArtifactStorePort] = ()) -> CleanupResult:
         if plan.dry_run:
             result = CleanupResult(plan_id=plan.plan_id, executed=False, retained_artifact_ids=tuple(item.artifact_id for item in plan.candidates), detail="dry-run plan did not delete anything")
             record_event = getattr(control_store, "record_audit_event", None)
             if callable(record_event):
                 record_event("cleanup_executed", run_id=plan.run_id, status="DRY_RUN", detail=plan.plan_id)
             return result
-        if not authorization.authorized or authorization.plan_id != plan.plan_id:
+        if (
+            not authorization.authorized
+            or authorization.plan_id != plan.plan_id
+            or authorization.plan_content_hash != plan.content_hash
+        ):
             raise CleanupAuthorizationError("cleanup requires authorization for the exact plan")
         deleted: list[str] = []
         retained: list[str] = []
@@ -347,14 +428,56 @@ class PlatformLifecycleService:
         for candidate in plan.candidates:
             artifact = control_store.get_artifact(candidate.artifact_id)
             run = control_store.get_run(artifact.run_id) if artifact is not None else None
-            if artifact is None or artifact.retention_class.value == "PINNED_GATE_EVIDENCE" or (run is not None and run.status.value in self._ACTIVE_RUN_STATES) or control_store.get_dependents(candidate.artifact_id):
+            dependents = tuple(sorted(item.artifact_id for item in control_store.get_dependents(candidate.artifact_id))) if artifact is not None else ()
+            selected_store = None
+            if artifact is not None:
+                for candidate_store in (artifact_store, *artifact_stores):
+                    try:
+                        stored_reference = candidate_store.stat(artifact)
+                    except (KeyError, PlatformError):
+                        continue
+                    if stored_reference == artifact:
+                        selected_store = candidate_store
+                        break
+            if (
+                artifact is None
+                or selected_store is None
+                or (plan.run_id is not None and artifact.run_id != plan.run_id)
+                or artifact.content_hash != candidate.expected_content_hash
+                or artifact.byte_size != candidate.byte_size
+                or artifact.retention_class is not candidate.retention_class
+                or candidate.pinned
+                or tuple(sorted(candidate.dependent_artifact_ids)) != dependents
+                or artifact.retention_class.value == "PINNED_GATE_EVIDENCE"
+                or (run is not None and run.status.value in self._ACTIVE_RUN_STATES)
+                or dependents
+            ):
+                rejected.append(candidate.artifact_id)
+                continue
+            try:
+                integrity = selected_store.verify(artifact)
+            except (KeyError, PlatformError):
+                rejected.append(candidate.artifact_id)
+                continue
+            if integrity.state is not ArtifactIntegrityState.VERIFIED:
                 rejected.append(candidate.artifact_id)
                 continue
             if artifact.storage_mode.value == "EXTERNAL" or candidate.planned_action.value == "RETAIN_EXTERNAL_REFERENCE":
                 retained.append(candidate.artifact_id)
                 continue
             try:
-                artifact_store.delete(artifact, authorization)
+                permit = CleanupDeletionPermit(
+                    plan_id=plan.plan_id,
+                    plan_content_hash=plan.content_hash,
+                    run_id=plan.run_id,
+                    artifact_id=candidate.artifact_id,
+                    expected_content_hash=candidate.expected_content_hash,
+                    expected_byte_size=candidate.byte_size,
+                    retention_class=candidate.retention_class,
+                    planned_action=candidate.planned_action,
+                    dependent_artifact_ids=candidate.dependent_artifact_ids,
+                )
+                selected_store.delete(artifact, permit)
                 control_store.mark_artifact_tombstoned(candidate.artifact_id, plan_id=plan.plan_id, reason=candidate.reason)
             except PlatformError:
                 rejected.append(candidate.artifact_id)

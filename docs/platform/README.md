@@ -43,6 +43,8 @@ project-relative POSIX locators. Absolute paths, drive-qualified paths,
 traversal, symlink escapes and the protected
 `tests/quality_unit_artifacts/` subtree are rejected. Verification re-reads
 the external file and reports a hash or availability failure if it changes.
+The registration locator must also exactly equal the manifest locator; a safe
+alternate path cannot be substituted for the declared external artifact.
 
 Only JSON/text/Parquet-style project data crosses this boundary. Executable
 or pickle transport is not part of the platform contract.
@@ -54,12 +56,13 @@ stage attempts, artifact references, dependency edges, cache entries, gate
 evidence, staged-dataset manifests and safe audit events. Raw source rows,
 Parquet payloads and DuckDB files are never stored in SQLite.
 
-Schema version 1 is initialized transactionally and recorded in
-`schema_migrations`. A supported version 0 can be migrated forward; an
-unknown table layout or a newer schema fails closed without reset. Metadata
-registration with dependencies is one transaction. Run and attempt updates
-use compare-and-swap revisions, so stale writers receive an explicit
-concurrency error.
+Schema version 3 is initialized transactionally and recorded in
+`schema_migrations`. Supported V1 databases migrate forward without reset:
+staged-dataset identity becomes run-scoped and gate rows gain the separate
+ValidationReport run/report identity. An unknown table layout or newer schema
+fails closed. Metadata registration with dependencies is one transaction. Run
+and attempt updates use compare-and-swap revisions, so stale writers receive
+an explicit concurrency error.
 
 ## Staging layout
 
@@ -72,9 +75,13 @@ runs/<run>/source/<source>/snapshot/<snapshot>/table/<table>/dataset/<dataset>/v
 ```
 
 The manifest binds each part to its artifact hash and size, schema fingerprint,
-row count where known, source snapshot and table identity. The control store
-contains the manifest and references; staged bytes remain in the staging
-artifact store.
+row count where known, source snapshot and table identity. Part artifact IDs
+and logical keys include run, source, snapshot, table, dataset, version and
+part scope; the control store primary key is `(run_id, dataset_id,
+dataset_version)`. Registration revalidates exact part kind, publication,
+managed storage, logical key, run/schema and row-count closure. The control
+store contains the manifest and references; staged bytes remain in the
+staging artifact store.
 
 ## Cache, retention and cleanup
 
@@ -87,10 +94,15 @@ never returned.
 
 Cleanup is plan-first. Run-scoped artifacts are eligible only after the age
 policy, only for completed/non-active runs, only without retained dependents,
-and only with an explicit authorization for the exact plan. Pinned gate
-evidence is excluded and direct deletion is rejected. Managed deletion writes
-a tombstone and removes a blob only when no other local reference uses it;
-external bytes are never owned or deleted by the platform.
+and only with an explicit authorization bound to the deterministic semantic
+plan hash. A dry-run/executable-mode change, candidate injection, hash or
+run-scope change therefore requires new authorization. Each deletion receives
+an exact per-artifact permit containing the plan hash, expected hash/size,
+retention, action and dependent set; bytes are verified immediately before
+deletion. Pinned gate evidence is excluded and direct deletion is rejected.
+Managed deletion writes a tombstone and removes a blob only when no other
+local reference uses it; external bytes are never owned or deleted by the
+platform.
 
 ## Resource and recovery boundaries
 
@@ -100,6 +112,14 @@ its configured disk/staged-byte quota while writing. A process can close and
 reopen SQLite and rediscover run state, attempts, references, dependencies,
 cache metadata and gate evidence. Atomic temporary publication avoids exposing
 partial managed bytes as published artifacts.
+
+G6 gate evidence is accepted only from the exact registered, published,
+verified `ValidationReport` artifact. The typed report bytes must parse and
+equal the supplied report; status, eligibility and policy version are derived
+from the report, while the platform run and the report's own run/report IDs
+remain separate. A wrong artifact kind or status-laundered receipt fails
+closed. Reopening the control store recovers the accepted G6 receipt without
+recomputing it from reconciliation signals.
 
 These guarantees are for one local checkout and the tested adapter process
 model. They do not establish HA, multi-node locking, distributed safety,

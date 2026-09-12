@@ -6,6 +6,7 @@ from .evidence_fusion import EvidenceFusionService
 from .canonical import CanonicalFinalizationService, CanonicalHypothesisService, CanonicalIdentityProposalService, CanonicalizationError
 from .review_policy import ReviewCompatibilityError, ReviewPolicyService
 from .validation import ValidationInputs, ValidationOutcome, ValidationService
+from .platform import GateEvidenceService
 
 __all__ = [
     "DependencyDiscoveryService",
@@ -20,4 +21,5 @@ __all__ = [
     "ValidationInputs",
     "ValidationOutcome",
     "ValidationService",
+    "GateEvidenceService",
 ]

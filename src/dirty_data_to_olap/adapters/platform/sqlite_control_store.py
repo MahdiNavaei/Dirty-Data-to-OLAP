@@ -12,6 +12,8 @@ from typing import Any, Iterator, Sequence
 
 from dirty_data_to_olap.application.platform import (
     ArtifactConflictError,
+    ArtifactIntegrityError,
+    ArtifactStorePort,
     ConcurrencyConflictError,
     ControlStorePort,
     PlatformError,
@@ -34,9 +36,10 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StageStatus,
     StagedDatasetManifest,
 )
+from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 3
 
 
 def _dump(value: object) -> str:
@@ -117,19 +120,37 @@ class SQLiteControlStore(ControlStorePort):
                     raise UnsupportedSchemaVersionError(f"control database schema {version} is newer than supported {CURRENT_SCHEMA_VERSION}")
                 if version < 0:
                     raise UnsupportedSchemaVersionError(f"unsupported control database schema {version}")
-                if version == CURRENT_SCHEMA_VERSION:
-                    return version
                 if version == 0:
                     connection.execute("BEGIN IMMEDIATE")
                     self._create_schema_tables(connection)
-                    connection.execute("UPDATE schema_meta SET schema_version = ?", (CURRENT_SCHEMA_VERSION,))
+                    connection.execute("UPDATE schema_meta SET schema_version = 1")
                     connection.execute(
                         "INSERT INTO schema_migrations(version_from, version_to, applied_at, detail) VALUES (?, ?, ?, ?)",
-                        (version, CURRENT_SCHEMA_VERSION, datetime.now().astimezone().isoformat(), "forward migration"),
+                        (version, 1, datetime.now().astimezone().isoformat(), "forward migration"),
                     )
                     connection.commit()
-                    return CURRENT_SCHEMA_VERSION
-                raise UnsupportedSchemaVersionError(f"unsupported control database schema {version}")
+                    version = 1
+                while version < CURRENT_SCHEMA_VERSION:
+                    connection.execute("BEGIN IMMEDIATE")
+                    if version == 1:
+                        self._migrate_v1_to_v2(connection)
+                        next_version = 2
+                        detail = "run-scoped staged dataset identity"
+                    elif version == 2:
+                        self._migrate_v2_to_v3(connection)
+                        next_version = 3
+                        detail = "typed ValidationReport gate provenance"
+                    else:
+                        connection.rollback()
+                        raise UnsupportedSchemaVersionError(f"unsupported control database schema {version}")
+                    connection.execute("UPDATE schema_meta SET schema_version = ?", (next_version,))
+                    connection.execute(
+                        "INSERT INTO schema_migrations(version_from, version_to, applied_at, detail) VALUES (?, ?, ?, ?)",
+                        (version, next_version, datetime.now().astimezone().isoformat(), detail),
+                    )
+                    connection.commit()
+                    version = next_version
+                return version
             finally:
                 connection.close()
 
@@ -150,13 +171,54 @@ class SQLiteControlStore(ControlStorePort):
             "CREATE TABLE IF NOT EXISTS artifact_dependencies (artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), upstream_artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), expected_content_hash TEXT NOT NULL, relationship_kind TEXT NOT NULL, PRIMARY KEY(artifact_id, upstream_artifact_id, relationship_kind))",
             "CREATE INDEX IF NOT EXISTS idx_dependencies_upstream ON artifact_dependencies(upstream_artifact_id)",
             "CREATE TABLE IF NOT EXISTS cache_entries (cache_key_hash TEXT PRIMARY KEY, cache_key TEXT NOT NULL, output_artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), output_content_hash TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, invalidated_reason TEXT)",
-            "CREATE TABLE IF NOT EXISTS gate_evidence (gate_id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(run_id), status TEXT NOT NULL, eligible INTEGER NOT NULL, validation_report_artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), validation_report_content_hash TEXT NOT NULL, policy_version TEXT NOT NULL, verified_content_commit TEXT NOT NULL, recorded_at TEXT NOT NULL, provenance_refs TEXT NOT NULL, PRIMARY KEY(gate_id, run_id))",
-            "CREATE TABLE IF NOT EXISTS staged_datasets (dataset_id TEXT NOT NULL, dataset_version TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(run_id), manifest TEXT NOT NULL, PRIMARY KEY(dataset_id, dataset_version))",
+            "CREATE TABLE IF NOT EXISTS gate_evidence (gate_id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(run_id), status TEXT NOT NULL, eligible INTEGER NOT NULL, validation_report_artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), validation_report_run_id TEXT NOT NULL, validation_report_id TEXT NOT NULL, validation_report_content_hash TEXT NOT NULL, policy_version TEXT NOT NULL, verified_content_commit TEXT NOT NULL, recorded_at TEXT NOT NULL, provenance_refs TEXT NOT NULL, PRIMARY KEY(gate_id, run_id))",
+            "CREATE TABLE IF NOT EXISTS staged_datasets (run_id TEXT NOT NULL REFERENCES runs(run_id), dataset_id TEXT NOT NULL, dataset_version TEXT NOT NULL, manifest TEXT NOT NULL, PRIMARY KEY(run_id, dataset_id, dataset_version))",
+            "CREATE INDEX IF NOT EXISTS idx_staged_dataset_scope ON staged_datasets(run_id, dataset_id, dataset_version)",
             "CREATE TABLE IF NOT EXISTS audit_events (event_id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, run_id TEXT, artifact_id TEXT, status TEXT NOT NULL, content_hash TEXT, recorded_at TEXT NOT NULL, detail TEXT NOT NULL)",
             "CREATE INDEX IF NOT EXISTS idx_audit_run ON audit_events(run_id, recorded_at)",
         )
         for statement in statements:
             connection.execute(statement)
+
+    @staticmethod
+    def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
+        columns = {str(row[1]): int(row[5]) for row in connection.execute("PRAGMA table_info(staged_datasets)").fetchall()}
+        if not columns:
+            SQLiteControlStore._create_schema_tables(connection)
+            return
+        if columns.get("run_id") == 1:
+            return
+        connection.execute("ALTER TABLE staged_datasets RENAME TO staged_datasets_legacy")
+        connection.execute("CREATE TABLE staged_datasets (run_id TEXT NOT NULL REFERENCES runs(run_id), dataset_id TEXT NOT NULL, dataset_version TEXT NOT NULL, manifest TEXT NOT NULL, PRIMARY KEY(run_id, dataset_id, dataset_version))")
+        connection.execute("CREATE INDEX idx_staged_dataset_scope ON staged_datasets(run_id, dataset_id, dataset_version)")
+        rows = connection.execute("SELECT run_id, dataset_id, dataset_version, manifest FROM staged_datasets_legacy").fetchall()
+        for row in rows:
+            manifest = json.loads(str(row[3]))
+            manifest.setdefault("identity_version", "legacy-v1")
+            connection.execute(
+                "INSERT INTO staged_datasets(run_id, dataset_id, dataset_version, manifest) VALUES (?, ?, ?, ?)",
+                (row[0], row[1], row[2], _dump(manifest)),
+            )
+        connection.execute("DROP TABLE staged_datasets_legacy")
+
+    @staticmethod
+    def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(gate_evidence)").fetchall()}
+        if "validation_report_run_id" in columns and "validation_report_id" in columns:
+            return
+        connection.execute("ALTER TABLE gate_evidence ADD COLUMN validation_report_run_id TEXT NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE gate_evidence ADD COLUMN validation_report_id TEXT NOT NULL DEFAULT ''")
+        rows = connection.execute("SELECT gate_id, run_id, validation_report_artifact_id, provenance_refs FROM gate_evidence").fetchall()
+        for row in rows:
+            refs = _load_json(row[3], [])
+            if "legacy:gate-evidence-unverified" not in refs:
+                refs.append("legacy:gate-evidence-unverified")
+            artifact = connection.execute("SELECT run_id FROM artifacts WHERE artifact_id = ?", (row[2],)).fetchone()
+            report_run_id = "" if artifact is None else str(artifact[0])
+            connection.execute(
+                "UPDATE gate_evidence SET validation_report_run_id = ?, validation_report_id = ?, provenance_refs = ? WHERE gate_id = ? AND run_id = ?",
+                (report_run_id, f"legacy:{row[2]}", _dump(refs), row[0], row[1]),
+            )
 
     @staticmethod
     def _artifact_from_row(row: sqlite3.Row) -> ArtifactRef:
@@ -414,22 +476,92 @@ class SQLiteControlStore(ControlStorePort):
                 detail=reason,
             )
 
-    def record_gate_evidence(self, evidence: GateEvidence) -> GateEvidence:
+    @staticmethod
+    def _gate_from_row(row: sqlite3.Row) -> GateEvidence:
+        return GateEvidence(
+            gate_id=str(row["gate_id"]),
+            run_id=str(row["run_id"]),
+            status=str(row["status"]),
+            eligible=bool(row["eligible"]),
+            validation_report_artifact_id=str(row["validation_report_artifact_id"]),
+            validation_report_run_id=str(row["validation_report_run_id"]),
+            validation_report_id=str(row["validation_report_id"]),
+            validation_report_content_hash=str(row["validation_report_content_hash"]),
+            policy_version=str(row["policy_version"]),
+            verified_content_commit=str(row["verified_content_commit"]),
+            recorded_at=_parse_datetime(str(row["recorded_at"])),
+            provenance_refs=tuple(_load_json(row["provenance_refs"], [])),
+        )
+
+    @staticmethod
+    def _decode_registered_report(payload: bytes) -> ValidationReport:
+        try:
+            value = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ArtifactIntegrityError("registered ValidationReport bytes are not valid UTF-8 JSON") from exc
+        if not isinstance(value, dict):
+            raise ArtifactIntegrityError("registered ValidationReport payload must be a JSON object")
+        declared_hash = value.pop("content_hash", None)
+        try:
+            report = ValidationReport.model_validate(value)
+        except Exception as exc:
+            raise ArtifactIntegrityError("registered ValidationReport does not validate as the project contract") from exc
+        if declared_hash is not None and declared_hash != report.content_hash:
+            raise ArtifactIntegrityError("registered ValidationReport semantic hash does not match its payload")
+        return report
+
+    def _validate_gate_report(self, evidence: GateEvidence, validation_report: ValidationReport, artifact_store: ArtifactStorePort, connection: sqlite3.Connection) -> None:
+        if not isinstance(validation_report, ValidationReport):
+            raise PlatformError("gate evidence requires the typed ValidationReport contract")
+        row = connection.execute("SELECT * FROM artifacts WHERE artifact_id = ?", (evidence.validation_report_artifact_id,)).fetchone()
+        if row is None:
+            raise PlatformError("gate evidence requires a registered ValidationReport artifact")
+        artifact = self._artifact_from_row(row)
+        if artifact.artifact_kind != "ValidationReport":
+            raise PlatformError("gate evidence requires artifact_kind=ValidationReport")
+        if artifact.publication_state is not ArtifactPublicationState.PUBLISHED:
+            raise PlatformError("gate evidence requires a published ValidationReport")
+        if artifact.content_hash != evidence.validation_report_content_hash:
+            raise ArtifactConflictError("gate evidence hash does not match its ValidationReport artifact")
+        try:
+            stored = artifact_store.stat(artifact)
+        except (KeyError, PlatformError) as exc:
+            raise ArtifactIntegrityError("gate evidence artifact is not present in the configured artifact store") from exc
+        if stored != artifact:
+            raise ArtifactConflictError("gate evidence artifact metadata differs between control and artifact stores")
+        integrity = artifact_store.verify(artifact)
+        if integrity.state.value != "VERIFIED":
+            raise ArtifactIntegrityError("gate evidence requires verified ValidationReport bytes")
+        parsed = self._decode_registered_report(artifact_store.read(artifact))
+        if parsed != validation_report:
+            raise ArtifactIntegrityError("typed ValidationReport does not correspond to the registered artifact bytes")
+        if evidence.gate_id != "G6_DATA_CORRECTNESS":
+            raise PlatformError("ValidationReport-backed gate evidence is scoped to G6_DATA_CORRECTNESS")
+        if evidence.status.value != parsed.g6_status.value or evidence.eligible != parsed.g6_eligible:
+            raise ArtifactConflictError("gate evidence status and eligibility must derive from ValidationReport")
+        if evidence.policy_version != parsed.policy.policy_version:
+            raise ArtifactConflictError("gate evidence policy version must derive from ValidationReport")
+        if evidence.validation_report_run_id != parsed.run_id or evidence.validation_report_id != parsed.report_id:
+            raise ArtifactConflictError("gate evidence must bind the ValidationReport run and report identity")
+
+    def record_gate_evidence(self, evidence: GateEvidence, *, validation_report: ValidationReport, artifact_store: ArtifactStorePort) -> GateEvidence:
         with self._transaction() as connection:
-            artifact = connection.execute("SELECT content_hash, artifact_kind FROM artifacts WHERE artifact_id = ?", (evidence.validation_report_artifact_id,)).fetchone()
-            if artifact is None:
-                raise PlatformError("gate evidence requires a registered ValidationReport artifact")
-            if str(artifact["content_hash"]) != evidence.validation_report_content_hash:
-                raise ArtifactConflictError("gate evidence hash does not match its ValidationReport artifact")
+            self._validate_gate_report(evidence, validation_report, artifact_store, connection)
             existing = connection.execute("SELECT * FROM gate_evidence WHERE gate_id = ? AND run_id = ?", (evidence.gate_id, evidence.run_id)).fetchone()
             if existing:
-                stored = GateEvidence(gate_id=str(existing["gate_id"]), run_id=str(existing["run_id"]), status=str(existing["status"]), eligible=bool(existing["eligible"]), validation_report_artifact_id=str(existing["validation_report_artifact_id"]), validation_report_content_hash=str(existing["validation_report_content_hash"]), policy_version=str(existing["policy_version"]), verified_content_commit=str(existing["verified_content_commit"]), recorded_at=_parse_datetime(str(existing["recorded_at"])), provenance_refs=tuple(_load_json(existing["provenance_refs"], [])))
+                stored = self._gate_from_row(existing)
                 stable_stored = stored.model_dump(mode="json", exclude={"recorded_at"})
                 stable_requested = evidence.model_dump(mode="json", exclude={"recorded_at"})
+                if "legacy:gate-evidence-unverified" in stored.provenance_refs:
+                    connection.execute(
+                        "UPDATE gate_evidence SET status = ?, eligible = ?, validation_report_artifact_id = ?, validation_report_run_id = ?, validation_report_id = ?, validation_report_content_hash = ?, policy_version = ?, verified_content_commit = ?, recorded_at = ?, provenance_refs = ? WHERE gate_id = ? AND run_id = ?",
+                        (evidence.status.value, int(evidence.eligible), evidence.validation_report_artifact_id, evidence.validation_report_run_id, evidence.validation_report_id, evidence.validation_report_content_hash, evidence.policy_version, evidence.verified_content_commit, evidence.recorded_at.isoformat(), _dump(evidence.provenance_refs), evidence.gate_id, evidence.run_id),
+                    )
+                    return evidence
                 if stable_stored != stable_requested:
                     raise ArtifactConflictError("gate evidence identity is already bound to different evidence")
                 return stored
-            connection.execute("INSERT INTO gate_evidence(gate_id, run_id, status, eligible, validation_report_artifact_id, validation_report_content_hash, policy_version, verified_content_commit, recorded_at, provenance_refs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (evidence.gate_id, evidence.run_id, evidence.status.value, int(evidence.eligible), evidence.validation_report_artifact_id, evidence.validation_report_content_hash, evidence.policy_version, evidence.verified_content_commit, evidence.recorded_at.isoformat(), _dump(evidence.provenance_refs)))
+            connection.execute("INSERT INTO gate_evidence(gate_id, run_id, status, eligible, validation_report_artifact_id, validation_report_run_id, validation_report_id, validation_report_content_hash, policy_version, verified_content_commit, recorded_at, provenance_refs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (evidence.gate_id, evidence.run_id, evidence.status.value, int(evidence.eligible), evidence.validation_report_artifact_id, evidence.validation_report_run_id, evidence.validation_report_id, evidence.validation_report_content_hash, evidence.policy_version, evidence.verified_content_commit, evidence.recorded_at.isoformat(), _dump(evidence.provenance_refs)))
             self._audit(connection, "gate_evidence_recorded", run_id=evidence.run_id, artifact_id=evidence.validation_report_artifact_id, status=evidence.status.value, content_hash=evidence.validation_report_content_hash, detail=f"gate {evidence.gate_id} recorded")
             return evidence
 
@@ -441,25 +573,30 @@ class SQLiteControlStore(ControlStorePort):
                 row = connection.execute("SELECT * FROM gate_evidence WHERE gate_id = ? AND run_id = ?", (gate_id, run_id)).fetchone()
             if row is None:
                 return None
-            return GateEvidence(gate_id=str(row["gate_id"]), run_id=str(row["run_id"]), status=str(row["status"]), eligible=bool(row["eligible"]), validation_report_artifact_id=str(row["validation_report_artifact_id"]), validation_report_content_hash=str(row["validation_report_content_hash"]), policy_version=str(row["policy_version"]), verified_content_commit=str(row["verified_content_commit"]), recorded_at=_parse_datetime(str(row["recorded_at"])), provenance_refs=tuple(_load_json(row["provenance_refs"], [])))
+            return self._gate_from_row(row)
 
     def record_staged_dataset(self, manifest: StagedDatasetManifest) -> StagedDatasetManifest:
         with self._transaction() as connection:
+            manifest = StagedDatasetManifest.model_validate(manifest.model_dump(mode="json"))
             if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (manifest.run_id,)).fetchone() is None:
                 raise PlatformError("staged dataset requires an existing run")
-            existing = connection.execute("SELECT manifest FROM staged_datasets WHERE dataset_id = ? AND dataset_version = ?", (manifest.dataset_id, manifest.dataset_version)).fetchone()
+            for part in manifest.parts:
+                row = connection.execute("SELECT * FROM artifacts WHERE artifact_id = ?", (part.artifact_ref.artifact_id,)).fetchone()
+                if row is None or self._artifact_from_row(row) != part.artifact_ref:
+                    raise PlatformError("staged manifest part must match a registered artifact")
+            existing = connection.execute("SELECT manifest FROM staged_datasets WHERE run_id = ? AND dataset_id = ? AND dataset_version = ?", (manifest.run_id, manifest.dataset_id, manifest.dataset_version)).fetchone()
             if existing:
                 stored = StagedDatasetManifest.model_validate(_load_json(existing["manifest"], {}))
                 if stored != manifest:
                     raise ArtifactConflictError("staged dataset identity is already bound to a different manifest")
                 return stored
-            connection.execute("INSERT INTO staged_datasets(dataset_id, dataset_version, run_id, manifest) VALUES (?, ?, ?, ?)", (manifest.dataset_id, manifest.dataset_version, manifest.run_id, _dump(manifest)))
+            connection.execute("INSERT INTO staged_datasets(run_id, dataset_id, dataset_version, manifest) VALUES (?, ?, ?, ?)", (manifest.run_id, manifest.dataset_id, manifest.dataset_version, _dump(manifest)))
             self._audit(connection, "staged_dataset_registered", run_id=manifest.run_id, status="PUBLISHED", detail=f"dataset {manifest.dataset_id}/{manifest.dataset_version} persisted")
             return manifest
 
-    def get_staged_dataset(self, dataset_id: str, dataset_version: str) -> StagedDatasetManifest | None:
+    def get_staged_dataset(self, run_id: str, dataset_id: str, dataset_version: str) -> StagedDatasetManifest | None:
         with self._connect() as connection:
-            row = connection.execute("SELECT manifest FROM staged_datasets WHERE dataset_id = ? AND dataset_version = ?", (dataset_id, dataset_version)).fetchone()
+            row = connection.execute("SELECT manifest FROM staged_datasets WHERE run_id = ? AND dataset_id = ? AND dataset_version = ?", (run_id, dataset_id, dataset_version)).fetchone()
             return None if row is None else StagedDatasetManifest.model_validate(_load_json(row["manifest"], {}))
 
     def mark_artifact_tombstoned(self, artifact_id: str, *, plan_id: str, reason: str) -> None:

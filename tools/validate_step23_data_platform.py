@@ -23,6 +23,8 @@ from dirty_data_to_olap.adapters.platform import LocalArtifactStore, LocalStagin
 from dirty_data_to_olap.application.platform import (
     ArtifactConflictError,
     ArtifactIntegrityError,
+    GateEvidenceService,
+    CleanupAuthorizationError,
     PathConfinementError,
     PlatformCacheService,
     PlatformError,
@@ -39,8 +41,11 @@ from dirty_data_to_olap.domain.contracts.platform import (
     CacheKey,
     CapabilityQuery,
     CleanupAuthorization,
-    GateEvidence,
+    CleanupAction,
+    CleanupCandidate,
+    CleanupDeletionPermit,
     GateEvidenceStatus,
+    GateEvidence,
     LocalPlatformConfig,
     RetentionClass,
     RetentionPolicy,
@@ -51,8 +56,10 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StageStatus,
     StagedDatasetManifest,
     StagedDatasetPart,
+    staged_part_artifact_id,
+    staged_part_logical_key,
 )
-from dirty_data_to_olap.domain.contracts.source import stable_id
+from dirty_data_to_olap.domain.contracts.validation import GateStatus, ValidationStatus, ValidationReport
 from dirty_data_to_olap.platform import LocalPlatform
 
 
@@ -65,7 +72,7 @@ def _json_bytes(payload: object) -> bytes:
     return (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
-def _manifest(run_id: str, artifact_id: str, *, kind: str, created_at: datetime | None = None, retention: RetentionClass = RetentionClass.RUN_SCOPED, storage_mode: ArtifactStorageMode = ArtifactStorageMode.MANAGED, locator: str | None = None) -> ArtifactManifest:
+def _manifest(run_id: str, artifact_id: str, *, kind: str, created_at: datetime | None = None, retention: RetentionClass = RetentionClass.RUN_SCOPED, storage_mode: ArtifactStorageMode = ArtifactStorageMode.MANAGED, locator: str | None = None, logical_key: str | None = None) -> ArtifactManifest:
     return ArtifactManifest(
         artifact_id=artifact_id,
         run_id=run_id,
@@ -76,7 +83,7 @@ def _manifest(run_id: str, artifact_id: str, *, kind: str, created_at: datetime 
         producer="tools.validate_step23_data_platform",
         storage_mode=storage_mode,
         external_locator=locator,
-        logical_key=f"runs/{run_id}/{artifact_id}.json",
+        logical_key=logical_key or f"runs/{run_id}/{artifact_id}.json",
         retention_class=retention,
         created_at=created_at or datetime.now(timezone.utc),
         provenance_refs=("step23-reference-validator",),
@@ -146,7 +153,7 @@ def main() -> int:
     store = platform.artifact_store
     try:
         run = _ensure_run(control, platform.config)
-        _check(checks, "sqlite initializes and migrates", control.schema_version == 1 and platform.config.configuration_fingerprint, "schema version is the current local schema")
+        _check(checks, "sqlite initializes and migrates", control.schema_version == 3 and platform.config.configuration_fingerprint, "schema version is the current local schema")
 
         attempt = control.get_stage_attempt(REFERENCE_ATTEMPT_ID)
         if attempt is None:
@@ -170,7 +177,7 @@ def main() -> int:
         control.register_artifact(second_ref)
         first_ref = _publish_managed(store, control, artifact_id="same-bytes-first-run", kind="binary", payload=b"shared immutable content")
         _check(checks, "identical bytes remain independently referenced", first_ref.storage_key == second_ref.storage_key and first_ref.artifact_id != second_ref.artifact_id, "logical references remain distinct while the content-addressed blob is shared")
-        _check(checks, "concurrent run isolation", second_ref.run_id != first_ref.run_id and len(control.list_artifacts(run_id=second_ref.run_id)) == 1 and all(item.run_id == REFERENCE_RUN_ID for item in control.list_artifacts(run_id=REFERENCE_RUN_ID)), "run-scoped metadata and logical references do not collide across runs")
+        _check(checks, "concurrent run isolation", second_ref.run_id != first_ref.run_id and all(item.run_id == second_ref.run_id for item in control.list_artifacts(run_id=second_ref.run_id)) and all(item.run_id == REFERENCE_RUN_ID for item in control.list_artifacts(run_id=REFERENCE_RUN_ID)), "run-scoped metadata and logical references do not collide across runs")
 
         stale = _publish_managed(store, control, artifact_id="step23-stale-dependent", kind="metadata", payload=b"stale")
         _register_with_dependencies(control, stale, (ArtifactDependency(artifact_id=stale.artifact_id, upstream_artifact_id=canonical.artifact_id, expected_content_hash="f" * 64, relationship_kind="INPUT"),))
@@ -199,21 +206,68 @@ def main() -> int:
         except Exception as exc:
             raise RuntimeError(f"the existing Parquet capability is required for the tiny reference part: {exc}") from exc
         staging = LocalStagingStore(platform.staging_artifact_store, control_store=control)
-        seed = canonical
-        dataset_base = StagedDatasetManifest(dataset_id="step23-staged-dataset", dataset_version="v1", run_id=REFERENCE_RUN_ID, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", schema_fingerprint="schema-step23", format="parquet", parts=(StagedDatasetPart(part_id="seed", logical_key="runs/step23-platform-reference-run/seed", artifact_ref=seed, schema_fingerprint="schema-step23"),), row_count=1, sampling_scope="full-reference")
+        dataset_id = "step23-staged-dataset-v3"
+        seed_logical_key = staged_part_logical_key(run_id=REFERENCE_RUN_ID, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", dataset_id=dataset_id, dataset_version="v1", part_id="seed")
+        seed_artifact_id = staged_part_artifact_id(run_id=REFERENCE_RUN_ID, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", dataset_id=dataset_id, dataset_version="v1", part_id="seed", schema_fingerprint="schema-step23")
+        seed = store.publish(_manifest(REFERENCE_RUN_ID, seed_artifact_id, kind="STAGED_DATASET_PART", logical_key=seed_logical_key, retention=RetentionClass.PERSISTENT), b"seed")
+        dataset_base = StagedDatasetManifest(dataset_id=dataset_id, dataset_version="v1", run_id=REFERENCE_RUN_ID, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", schema_fingerprint="schema-step23", format="parquet", parts=(StagedDatasetPart(part_id="seed", logical_key=seed_logical_key, artifact_ref=seed, schema_fingerprint="schema-step23"),), row_count=None, sampling_scope="full-reference", retention_class=RetentionClass.PERSISTENT)
         part_id = "part-000"
-        part_artifact_id = stable_id("staged", {"dataset_id": dataset_base.dataset_id, "dataset_version": dataset_base.dataset_version, "part_id": part_id})
+        part_artifact_id = staged_part_artifact_id(run_id=dataset_base.run_id, source_id=dataset_base.source_id, snapshot_id=dataset_base.snapshot_id, table_id=dataset_base.table_id, dataset_id=dataset_base.dataset_id, dataset_version=dataset_base.dataset_version, part_id=part_id, schema_fingerprint=dataset_base.schema_fingerprint)
         existing_part = control.get_artifact(part_artifact_id)
         if existing_part is None:
             part = staging.publish_part(dataset_base, part_id, parquet_payload, attempt_id=REFERENCE_ATTEMPT_ID, producer="step23")
             part = part.model_copy(update={"row_count": 1})
             control.register_artifact(part.artifact_ref)
         else:
-            part = StagedDatasetPart(part_id=part_id, logical_key="runs/step23-platform-reference-run/source/step23-source/snapshot/step23-snapshot/table/step23-table/dataset/step23-staged-dataset/version/v1/part/part-000.parquet", artifact_ref=existing_part, row_count=1, schema_fingerprint="schema-step23", sampling_scope="full-reference")
+            part = StagedDatasetPart(part_id=part_id, logical_key=staged_part_logical_key(run_id=dataset_base.run_id, source_id=dataset_base.source_id, snapshot_id=dataset_base.snapshot_id, table_id=dataset_base.table_id, dataset_id=dataset_base.dataset_id, dataset_version=dataset_base.dataset_version, part_id=part_id), artifact_ref=existing_part, row_count=1, schema_fingerprint="schema-step23", sampling_scope="full-reference")
         dataset = dataset_base.model_copy(update={"parts": (part,)})
         staging.register_manifest(dataset)
-        recovered_dataset = control.get_staged_dataset(dataset.dataset_id, dataset.dataset_version)
+        recovered_dataset = control.get_staged_dataset(dataset.run_id, dataset.dataset_id, dataset.dataset_version)
         _check(checks, "staged dataset manifest resolves", recovered_dataset is not None and recovered_dataset.parts[0].artifact_ref.content_hash == part.artifact_ref.content_hash and recovered_dataset.parts[0].row_count == 1, "versioned Parquet part metadata retains run/source/snapshot/table/schema and hash bindings")
+
+        second_dataset_seed_key = staged_part_logical_key(run_id=second_run.run_id, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", dataset_id=dataset_id, dataset_version="v1", part_id="seed")
+        second_dataset_seed_id = staged_part_artifact_id(run_id=second_run.run_id, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", dataset_id=dataset_id, dataset_version="v1", part_id="seed", schema_fingerprint="schema-step23")
+        second_dataset_seed = store.publish(_manifest(second_run.run_id, second_dataset_seed_id, kind="STAGED_DATASET_PART", logical_key=second_dataset_seed_key, retention=RetentionClass.PERSISTENT), b"seed")
+        second_dataset_base = StagedDatasetManifest(dataset_id=dataset_id, dataset_version="v1", run_id=second_run.run_id, source_id="step23-source", snapshot_id="step23-snapshot", table_id="step23-table", schema_fingerprint="schema-step23", format="parquet", parts=(StagedDatasetPart(part_id="seed", logical_key=second_dataset_seed_key, artifact_ref=second_dataset_seed, schema_fingerprint="schema-step23"),), row_count=None, sampling_scope="full-reference", retention_class=RetentionClass.PERSISTENT)
+        second_part = staging.publish_part(second_dataset_base, "part-000", parquet_payload, attempt_id="attempt-second", producer="step23")
+        control.register_artifact(second_part.artifact_ref)
+        second_dataset = second_dataset_base.model_copy(update={"parts": (second_part.model_copy(update={"row_count": 1}),), "row_count": 1})
+        staging.register_manifest(second_dataset)
+        first_staged = control.get_staged_dataset(REFERENCE_RUN_ID, dataset_id, "v1")
+        second_staged = control.get_staged_dataset(second_run.run_id, dataset_id, "v1")
+        _check(checks, "same staged names coexist across runs", first_staged is not None and second_staged is not None and first_staged.parts[0].artifact_ref.artifact_id != second_staged.parts[0].artifact_ref.artifact_id and first_staged.parts[0].logical_key != second_staged.parts[0].logical_key, "run-scoped primary-key and part identity preserve same dataset/version/part names independently")
+
+        injection_rejected = False
+        try:
+            staging.register_manifest(dataset.model_copy(update={"run_id": second_run.run_id}))
+        except (PlatformError, ValueError):
+            injection_rejected = True
+        scope_rejected = False
+        try:
+            staging.register_manifest(dataset.model_copy(update={"source_id": "other-source"}))
+        except (PlatformError, ValueError):
+            scope_rejected = True
+        kind_rejected = False
+        try:
+            bad_ref = part.artifact_ref.model_copy(update={"artifact_kind": "metadata"})
+            staging.register_manifest(dataset.model_copy(update={"parts": (part.model_copy(update={"artifact_ref": bad_ref}),)}))
+        except (PlatformError, ValueError):
+            kind_rejected = True
+        schema_rejected = False
+        try:
+            staging.register_manifest(dataset.model_copy(update={"parts": (part.model_copy(update={"schema_fingerprint": "schema-other"}),)}))
+        except (PlatformError, ValueError):
+            schema_rejected = True
+        row_count_rejected = False
+        try:
+            staging.register_manifest(dataset.model_copy(update={"row_count": 2}))
+        except (PlatformError, ValueError):
+            row_count_rejected = True
+        _check(checks, "cross-run staged injection is rejected", injection_rejected, "a manifest cannot move a published part into another run")
+        _check(checks, "staged source/snapshot/table scope is exact", scope_rejected, "changing source scope without changing the part identity is rejected")
+        _check(checks, "staged part kind/publication closure is exact", kind_rejected, "a non-STAGED_DATASET_PART reference cannot enter the manifest")
+        _check(checks, "staged schema closure is exact", schema_rejected, "part schema fingerprint must equal the manifest schema fingerprint")
+        _check(checks, "staged row-count closure is exact", row_count_rejected, "known part row counts must reconcile to the manifest row count")
 
         report_path = ROOT / "workspace" / "runs" / "step22-reference-run" / "validation" / "validation_report.json"
         target_path = ROOT / "workspace" / "runs" / "step20-reference-run" / "olap" / "target.duckdb"
@@ -225,13 +279,52 @@ def main() -> int:
         target_ref = store.register_external(target_manifest, target_manifest.external_locator or "")
         control.register_artifact(report_ref)
         control.register_artifact(target_ref)
-        gate_status = GateEvidenceStatus.PASS if report_payload.get("g6_status") == "PASS" else GateEvidenceStatus.PENDING
-        gate = control.record_gate_evidence(GateEvidence(gate_id="G6_DATA_CORRECTNESS", run_id=REFERENCE_RUN_ID, status=gate_status, eligible=bool(report_payload.get("g6_eligible")), validation_report_artifact_id=report_ref.artifact_id, validation_report_content_hash=report_hash, policy_version=str(report_payload["policy"]["policy_version"]), verified_content_commit=STEP22_COMMIT, provenance_refs=("step22:exact-validation-report",)))
+        report = ValidationReport.model_validate({key: value for key, value in report_payload.items() if key != "content_hash"})
+        gate = GateEvidenceService().record_from_validation_report(gate_id="G6_DATA_CORRECTNESS", platform_run_id=REFERENCE_RUN_ID, report=report, report_artifact=report_ref, verified_content_commit=STEP22_COMMIT, control_store=control, artifact_store=store, provenance_refs=("step22:exact-validation-report",))
         _check(checks, "external DuckDB verifies", store.verify(target_ref).state.value == "VERIFIED", "accepted Step20 target is registered by controlled external reference without copying it")
         _check(checks, "G6 receipt persists from exact ValidationReport", gate.status is GateEvidenceStatus.PASS and gate.eligible and gate.validation_report_content_hash == report_hash, "G6 status and eligibility come from ValidationReport.g6_status/g6_eligible")
         _check(checks, "G6 is not promoted by no_blocking_discrepancy alone", report_payload.get("g6_status") == "PASS" and report_payload.get("g6_eligible") is True and {"g6_status", "g6_eligible"}.issubset(report_payload), "the persistence path requires the authoritative status and eligible fields")
         signal_only = {"no_blocking_discrepancy": True, "g6_status": "PENDING", "g6_eligible": False}
         _check(checks, "reconciliation signal alone cannot promote G6", signal_only["no_blocking_discrepancy"] and signal_only["g6_status"] != "PASS" and gate.status is GateEvidenceStatus.PASS, "a reconciliation-style signal is not used as a substitute for the exact ValidationReport authority")
+        wrong_kind_rejected = False
+        try:
+            GateEvidenceService().record_from_validation_report(gate_id="G6_DATA_CORRECTNESS", platform_run_id=REFERENCE_RUN_ID, report=report, report_artifact=target_ref, verified_content_commit=STEP22_COMMIT, control_store=control, artifact_store=store)
+        except (PlatformError, ArtifactIntegrityError):
+            wrong_kind_rejected = True
+        _check(checks, "wrong artifact kind cannot back G6", wrong_kind_rejected, "a MaterializationArtifact reference cannot be laundered as a ValidationReport")
+
+        laundering_rejected = False
+        try:
+            control.record_gate_evidence(gate.model_copy(update={"status": GateEvidenceStatus.FAIL, "eligible": False}), validation_report=report, artifact_store=store)
+        except (PlatformError, ArtifactConflictError, ArtifactIntegrityError):
+            laundering_rejected = True
+        _check(checks, "gate status laundering is rejected", laundering_rejected, "the low-level persistence boundary rejects evidence status or eligibility that differs from the typed report")
+
+        variant_results: dict[str, str] = {}
+        with TemporaryDirectory(dir=str(ROOT / "workspace")) as temporary:
+            variant_root = Path(temporary)
+            for label, check_status, overall_status, gate_status in (
+                ("fail", ValidationStatus.FAIL, ValidationStatus.FAIL, GateStatus.FAIL),
+                ("pending", ValidationStatus.REVIEW_REQUIRED, ValidationStatus.REVIEW_REQUIRED, GateStatus.PENDING),
+            ):
+                variant_project = variant_root / label
+                variant_store = LocalArtifactStore(variant_project / "artifacts", project_root=variant_project)
+                variant_control = SQLiteControlStore(variant_project / "control.sqlite", project_root=variant_project)
+                variant_run_id = f"step23-gate-{label}-run"
+                variant_control.create_run(RunRecord(run_id=variant_run_id, project_id="dirty-data-to-olap", configuration_fingerprint=platform.config.configuration_fingerprint))
+                changed_check = report.checks[0].model_copy(update={"status": check_status})
+                variant_report = ValidationReport.model_validate(report.model_copy(update={"checks": (changed_check, *report.checks[1:]), "overall_status": overall_status, "g6_status": gate_status, "g6_eligible": False}).model_dump(mode="json"))
+                variant_path = variant_project / "variant-report.json"
+                variant_path.parent.mkdir(parents=True, exist_ok=True)
+                variant_path.write_bytes(_json_bytes(variant_report.model_dump(mode="json")))
+                variant_locator = "variant-report.json"
+                variant_manifest = _manifest(variant_run_id, f"step23-{label}-validation-report", kind="ValidationReport", retention=RetentionClass.PINNED_GATE_EVIDENCE, storage_mode=ArtifactStorageMode.EXTERNAL, locator=variant_locator)
+                variant_ref = variant_store.register_external(variant_manifest, variant_locator)
+                variant_control.register_artifact(variant_ref)
+                variant_gate = GateEvidenceService().record_from_validation_report(gate_id="G6_DATA_CORRECTNESS", platform_run_id=variant_run_id, report=variant_report, report_artifact=variant_ref, verified_content_commit=STEP22_COMMIT, control_store=variant_control, artifact_store=variant_store)
+                variant_results[label] = variant_gate.status.value
+                variant_control.close()
+            _check(checks, "typed FAIL/PENDING reports cannot persist PASS", variant_results == {"fail": "FAIL", "pending": "PENDING"}, "gate status and eligibility are derived from the typed ValidationReport, including negative report states")
 
         with TemporaryDirectory(dir=str(ROOT / "workspace")) as temporary:
             external_project = Path(temporary)
@@ -240,9 +333,16 @@ def main() -> int:
             external_store = LocalArtifactStore(external_project / "artifacts", project_root=external_project)
             external_manifest = _manifest(REFERENCE_RUN_ID, "step23-disposable-external", kind="MaterializationArtifact", storage_mode=ArtifactStorageMode.EXTERNAL, locator="controlled-external.duckdb")
             external_ref = external_store.register_external(external_manifest, "controlled-external.duckdb")
+            (external_project / "other.duckdb").write_bytes(b"other")
+            locator_mismatch_rejected = False
+            try:
+                external_store.register_external(external_manifest, "other.duckdb")
+            except ArtifactConflictError:
+                locator_mismatch_rejected = True
             fixture.write_bytes(b"external-mutated")
             external_change = external_store.verify(external_ref)
         _check(checks, "external artifact mutation is detected", external_change.state.value == "HASH_MISMATCH", "a changed controlled external fixture is detected without mutating the accepted Step20 target")
+        _check(checks, "external locator is manifest-bound", locator_mismatch_rejected, "the registration argument must equal the manifest external locator after safe path resolution")
 
         cache_key = CacheKey(stage_id="STEP23_PLATFORM", component_id="platform", input_artifacts=(CacheInputRef(artifact_id=canonical.artifact_id, content_hash=canonical.content_hash),), contract_versions={"platform": "1.0"}, policy_version="step23-cache-v1", configuration_fingerprint=platform.config.configuration_fingerprint, engine_version="local", code_version=STEP22_COMMIT, domain_scope_fingerprint="step23-reference")
         control.record_cache_entry(CacheEntry(cache_key_hash=cache_key.key_hash, cache_key=cache_key, output_artifact_id=semantic.artifact_id, output_content_hash=semantic.content_hash))
@@ -281,17 +381,53 @@ def main() -> int:
             reopened.update_stage_attempt(recovered_attempt.model_copy(update={"status": StageStatus.SUCCEEDED, "finished_at": datetime.now(timezone.utc), "output_artifact_refs": (canonical.artifact_id, analytical.artifact_id, semantic.artifact_id, reconciliation.artifact_id)}), expected_revision=recovered_attempt.revision)
         _check(checks, "reference run is persisted with completed stage metadata", run.status is RunStatus.SUCCEEDED, "run lifecycle state is durable and does not imply Step24 execution")
         reproducibility = reopened.build_reproducibility_manifest(REFERENCE_RUN_ID, artifact_store=store)
-        _check(checks, "reproducibility manifest is durable in metadata", reproducibility.run_id == REFERENCE_RUN_ID and reproducibility.configuration_fingerprint == platform.config.configuration_fingerprint and reproducibility.git_content_commit == STEP22_COMMIT and reproducibility.control_schema_version == 1 and len(reproducibility.root_artifact_refs) >= 1, "run, config, content commit, artifact hashes, gate refs and control schema are recoverable provenance")
+        _check(checks, "reproducibility manifest is durable in metadata", reproducibility.run_id == REFERENCE_RUN_ID and reproducibility.configuration_fingerprint == platform.config.configuration_fingerprint and reproducibility.git_content_commit == STEP22_COMMIT and reproducibility.control_schema_version == 3 and len(reproducibility.root_artifact_refs) >= 1, "run, config, content commit, artifact hashes, gate refs and control schema are recoverable provenance")
 
-        cleanup_policy = (RetentionPolicy(retention_class=RetentionClass.RUN_SCOPED, max_age_seconds=1, reason="disposable reference evidence"),)
-        cleanup_old = _publish_managed(store, reopened, artifact_id="step23-cleanup-disposable", kind="DisposableCleanup", payload=b"cleanup", created_at=datetime.now(timezone.utc) - timedelta(days=2))
+        cleanup_policy = (RetentionPolicy(retention_class=RetentionClass.RUN_SCOPED, max_age_seconds=3600, reason="disposable reference evidence"),)
+        cleanup_old = _publish_managed(store, reopened, artifact_id=f"step23-cleanup-disposable-{int(datetime.now(timezone.utc).timestamp() * 1000000)}", kind="DisposableCleanup", payload=b"cleanup", created_at=datetime.now(timezone.utc) - timedelta(days=2))
         plan = PlatformLifecycleService().build_cleanup_plan(control_store=reopened, run_id=REFERENCE_RUN_ID, policy=cleanup_policy, now=datetime.now(timezone.utc))
         before = store.exists(cleanup_old)
-        dry = PlatformLifecycleService().execute_cleanup(plan, CleanupAuthorization(plan_id=plan.plan_id, actor="step23-validator", authorized=True), control_store=reopened, artifact_store=store)
+        rebuilt = PlatformLifecycleService().build_cleanup_plan(control_store=reopened, run_id=REFERENCE_RUN_ID, policy=cleanup_policy, now=plan.created_at)
+        reordered = plan.model_copy(update={"candidates": tuple(reversed(plan.candidates)), "created_at": plan.created_at + timedelta(seconds=30)})
+        _check(checks, "cleanup plan identity is deterministic", plan.content_hash == rebuilt.content_hash == reordered.content_hash, "candidate ordering and volatile creation time do not change semantic plan identity")
+        dry = PlatformLifecycleService().execute_cleanup(plan, CleanupAuthorization(plan_id=plan.plan_id, plan_content_hash=plan.content_hash, actor="step23-validator", authorized=True), control_store=reopened, artifact_store=store)
         _check(checks, "cleanup is plan-first and dry-run is non-destructive", dry.executed is False and before and store.exists(cleanup_old), "dry-run planning performs no deletion")
+        mutated_plan = plan.model_copy(update={"dry_run": False})
+        mutation_rejected = False
+        try:
+            PlatformLifecycleService().execute_cleanup(mutated_plan, CleanupAuthorization(plan_id=plan.plan_id, plan_content_hash=plan.content_hash, actor="step23-validator", authorized=True), control_store=reopened, artifact_store=store)
+        except CleanupAuthorizationError:
+            mutation_rejected = True
+        _check(checks, "cleanup authorization rejects plan mutation", mutation_rejected, "a dry-run to executable mutation changes the bound semantic hash and requires fresh authorization")
+
+        injected = _publish_managed(store, reopened, artifact_id=f"step23-cleanup-injected-{int(datetime.now(timezone.utc).timestamp() * 1000000)}", kind="DisposableCleanup", payload=b"injected", created_at=datetime.now(timezone.utc) - timedelta(days=2))
+        injected_candidate = CleanupCandidate(artifact_id=injected.artifact_id, expected_content_hash=injected.content_hash, reason="injected candidate", retention_class=injected.retention_class, age_seconds=999, byte_size=injected.byte_size, planned_action=CleanupAction.DELETE_BLOB_IF_UNREFERENCED)
+        injected_plan = plan.model_copy(update={"dry_run": False, "candidates": (*plan.candidates, injected_candidate)})
+        candidate_injection_rejected = False
+        try:
+            PlatformLifecycleService().execute_cleanup(injected_plan, CleanupAuthorization(plan_id=plan.plan_id, plan_content_hash=plan.content_hash, actor="step23-validator", authorized=True), control_store=reopened, artifact_store=store)
+        except CleanupAuthorizationError:
+            candidate_injection_rejected = True
+        _check(checks, "cleanup authorization rejects candidate injection", candidate_injection_rejected and store.exists(injected), "adding an artifact to the candidate set is rejected under the original authorization")
+
+        cross_run_candidate = CleanupCandidate(artifact_id=second_ref.artifact_id, expected_content_hash=second_ref.content_hash, reason="cross-run injection", retention_class=second_ref.retention_class, age_seconds=999, byte_size=second_ref.byte_size, planned_action=CleanupAction.DELETE_BLOB_IF_UNREFERENCED)
+        cross_run_plan = plan.model_copy(update={"dry_run": False, "candidates": (cross_run_candidate,)})
+        cross_run_result = PlatformLifecycleService().execute_cleanup(cross_run_plan, CleanupAuthorization(plan_id=cross_run_plan.plan_id, plan_content_hash=cross_run_plan.content_hash, actor="step23-validator", authorized=True), control_store=reopened, artifact_store=store)
+        _check(checks, "cleanup run scope is enforced", cross_run_result.rejected_artifact_ids == (second_ref.artifact_id,) and store.exists(second_ref), "even a freshly authorized plan cannot delete an artifact outside its declared run scope")
+
+        permit_rejected = False
+        try:
+            store.delete(cleanup_old, CleanupDeletionPermit(plan_id=plan.plan_id, plan_content_hash=plan.content_hash, run_id=REFERENCE_RUN_ID, artifact_id=cleanup_old.artifact_id, expected_content_hash="f" * 64, expected_byte_size=cleanup_old.byte_size, retention_class=cleanup_old.retention_class, planned_action=CleanupAction.DELETE_BLOB_IF_UNREFERENCED))
+        except CleanupAuthorizationError:
+            permit_rejected = True
+        _check(checks, "deletion permit is exact and hash-bound", permit_rejected and store.exists(cleanup_old), "direct deletion with a mismatched content hash cannot consume the artifact")
+
+        executable = plan.model_copy(update={"dry_run": False})
+        executed_cleanup = PlatformLifecycleService().execute_cleanup(executable, CleanupAuthorization(plan_id=executable.plan_id, plan_content_hash=executable.content_hash, actor="step23-validator", authorized=True), control_store=reopened, artifact_store=store, artifact_stores=(platform.staging_artifact_store,))
+        _check(checks, "authorized cleanup tombstones exact candidates", cleanup_old.artifact_id in executed_cleanup.deleted_artifact_ids and not store.exists(cleanup_old) and reopened.get_artifact(cleanup_old.artifact_id).publication_state.value == "TOMBSTONED", "only the exact authorized managed candidate is tombstoned and its unshared blob is removed")
         pinned_protected = all(item.artifact_id != report_ref.artifact_id for item in plan.candidates)
         try:
-            store.delete(report_ref, CleanupAuthorization(plan_id=plan.plan_id, actor="step23-validator", authorized=True))
+            store.delete(report_ref, CleanupDeletionPermit(plan_id=plan.plan_id, plan_content_hash=plan.content_hash, run_id=REFERENCE_RUN_ID, artifact_id=report_ref.artifact_id, expected_content_hash=report_ref.content_hash, expected_byte_size=report_ref.byte_size, retention_class=report_ref.retention_class, planned_action=CleanupAction.DELETE_BLOB_IF_UNREFERENCED))
             pinned_protected = False
         except Exception:
             pass
@@ -351,7 +487,7 @@ def main() -> int:
             "dependency_count": len(reopened.inspect_dependencies(semantic.artifact_id).dependencies),
             "cache_status": reopened.get_cache_entry(cache_key).status.value,
             "gate": reopened.get_gate_evidence("G6_DATA_CORRECTNESS", run_id=REFERENCE_RUN_ID).model_dump(mode="json"),
-            "staged_dataset": reopened.get_staged_dataset("step23-staged-dataset", "v1").model_dump(mode="json"),
+            "staged_dataset": reopened.get_staged_dataset(REFERENCE_RUN_ID, dataset_id, "v1").model_dump(mode="json"),
             "integrity_scan": scan.model_dump(mode="json"),
             "reproducibility_manifest": reproducibility.model_dump(mode="json"),
             "audit_events": audit_events,
