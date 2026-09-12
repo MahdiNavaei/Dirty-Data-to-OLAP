@@ -1,0 +1,75 @@
+schema_version: 1
+step: 25
+role: ux_product_designer
+scope: v1_review_experience_contract
+status: DESIGN_CONTRACT_ONLY
+source_of_truth:
+  review_decision: src/dirty_data_to_olap/domain/contracts/canonical.py:ReviewDecision
+  review_policy: src/dirty_data_to_olap/application/review_policy.py:ReviewPolicyService
+  checkpoints: docs/architecture/specs/review_checkpoints.yml
+  privacy: src/dirty_data_to_olap/domain/contracts/privacy.py
+exact_checkpoints:
+  - checkpoint_id: REVIEW_EVIDENCE_DECISIONS
+    subject_stage: EVIDENCE_FUSION
+    subject_types: [RelationshipDecision, SemanticMappingDecision, RepairProposal, Conflict]
+    guarded_stage: CANONICAL_HYPOTHESES
+    review_fields: [subject_stage, subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, applicability_fingerprint, actor, actor_source, reviewed_at, rationale]
+    satisfying_decisions: [ACCEPTED, SKIPPED]
+    invalidating_changes: [evidence_content_change, mapping_change, repair_category_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
+  - checkpoint_id: REVIEW_CANONICAL_IDENTITY
+    subject_stage: CANONICAL_IDENTITY_PREPARATION
+    subject_types: [CanonicalIdentityProposal, CanonicalModelHypothesis, EntityResolutionResult]
+    guarded_stage: CANONICAL_FINALIZATION
+    review_fields: [subject_stage, subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, applicability_fingerprint, actor, actor_source, reviewed_at, rationale]
+    satisfying_decisions: [ACCEPTED, SKIPPED]
+    conditional_context: ER_REQUIRED families require a compatible COMPLETE ER result and cannot skip the guard
+    invalidating_changes: [canonical_hypothesis_change, entity_resolution_configuration_change, linkage_artifact_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change, survivorship_policy_change]
+  - checkpoint_id: REVIEW_ANALYTICAL_PLAN
+    subject_stage: ANALYTICAL_PLANNING
+    subject_types: [AnalyticalPlan, FactSpec, DimensionSpec, GrainSpec, MeasureSpec]
+    guarded_stage: COMPILATION
+    review_fields: [subject_stage, subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, applicability_fingerprint, actor, actor_source, reviewed_at, rationale]
+    satisfying_decisions: [ACCEPTED, SKIPPED]
+    invalidating_changes: [analytical_plan_change, analytical_spec_package_change, fact_spec_change, dimension_spec_change, grain_spec_change, measure_spec_change, fact_grain_change, measure_semantics_change, dimensional_interpretation_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
+  - checkpoint_id: REVIEW_MATERIALIZATION_PLAN
+    subject_stage: COMPILATION
+    subject_types: [CompiledPlan, GeneratedSQL]
+    guarded_stage: MATERIALIZATION
+    review_fields: [subject_stage, subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, applicability_fingerprint, actor, actor_source, reviewed_at, rationale]
+    satisfying_decisions: [ACCEPTED, SKIPPED]
+    invalidating_changes: [compiled_plan_change, generated_sql_hash_change, target_configuration_change, analytical_plan_change, policy_version_change]
+review_object_required_fields: [subject, state, meaning, risk, evidence, conflicts, missing, scope, provenance, downstream, technical_details, actions, freshness]
+evidence_semantics:
+  raw_score_is_probability: false
+  probability_requires_explicit_calibration: true
+  sample_is_full_snapshot: false
+  human_decision_is_model_evidence: false
+  cluster_is_canonical_identity: false
+  failure_or_not_evaluated_is_pass: false
+  validation_failure_is_promotable: false
+  nonadditive_measure_default_aggregation: forbidden
+evidence_states: [OBSERVED, NOT_OBSERVED, NOT_CONFIGURED, SKIPPED, UNAVAILABLE, FAILED, PRIVACY_BLOCKED, INCOMPLETE]
+reliability_states: [FULL, BOUNDED, SAMPLED, NULL_REDUCED, TEMPORALLY_UNALIGNED, INCOMPLETE, UNKNOWN]
+review_decision_states: [ACCEPTED, REJECTED, DEFERRED, SKIPPED, INVALIDATED]
+bulk_policy:
+  bounded_scope_required: true
+  preview_required: true
+  conflict_exclusion_required: true
+  stale_exclusion_required: true
+  partial_selection_must_be_visible: true
+  confirmation_and_audit_required: true
+  arbitrary_mass_entity_merge_allowed: false
+  high_impact_mass_approval_allowed: false
+privacy:
+  raw_pii_in_urls_navigation_audit_or_fixtures: forbidden
+  allowed_example_identifiers: synthetic_opaque_ids_only
+  blocked_state: PRIVACY_BLOCKED
+accessibility:
+  color_alone_sufficient: false
+  keyboard_operable: true
+  nonvisual_relationship_and_lineage_representation: required
+  screen_reader_expansion_of_evidence: required
+handoff:
+  next_step: 26
+  next_role: data_visualization_engineer
+  step26_implementation_authorized: false

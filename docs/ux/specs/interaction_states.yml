@@ -1,0 +1,26 @@
+schema_version: 1
+step: 25
+status: DESIGN_CONTRACT_ONLY
+state_contract:
+  required_fields: [state_id, label, meaning, scope, recovery, downstream_consequence, retryable]
+  overall_success_requires_explicit_terminal_evidence: true
+  partial_success_is_not_overall_success: true
+  failure_is_not_negative_evidence: true
+states:
+  - {state_id: NO_EVIDENCE, label: No evidence, meaning: Required evidence was not produced, scope: subject-scoped, recovery: Run or configure the required producer or record a policy skip, downstream_consequence: No inference or acceptance from absence, retryable: true}
+  - {state_id: NO_CANDIDATES, label: No candidates, meaning: Producer ran but found no candidates in scope, scope: producer-scoped, recovery: Inspect scope and rules, downstream_consequence: No candidate exists to approve, retryable: false}
+  - {state_id: CAPABILITY_UNAVAILABLE, label: Capability unavailable, meaning: Selected capability cannot run in this environment, scope: capability-scoped, recovery: Choose a supported capability or defer, downstream_consequence: Unresolved, retryable: true}
+  - {state_id: PROVIDER_FAILED, label: Provider failed, meaning: Provider attempted and failed, scope: producer-scoped, recovery: Inspect failure and retry if allowed, downstream_consequence: Failure cannot authorize a stage, retryable: true}
+  - {state_id: TIMEOUT, label: Timed out, meaning: Bounded execution exceeded its limit, scope: attempt-scoped, recovery: Retry with bounded scope, downstream_consequence: Incomplete and non-consumable, retryable: true}
+  - {state_id: INCOMPLETE, label: Incomplete, meaning: Required inputs or outputs are partial, scope: artifact-scoped, recovery: Complete inputs or explicitly narrow scope, downstream_consequence: Completeness guard remains blocked, retryable: true}
+  - {state_id: PRIVACY_BLOCKED, label: Privacy blocked, meaning: Policy denied requested exposure or processing, scope: exposure-scoped, recovery: Use masked/aggregate/pseudonymized mode or policy review, downstream_consequence: Raw exposure and derived approval are blocked, retryable: false}
+  - {state_id: REVIEW_REQUIRED, label: Review required, meaning: Compatible human decision is required, scope: checkpoint-scoped, recovery: Review exact subject and record rationale, downstream_consequence: Guarded stage remains blocked, retryable: false}
+  - {state_id: STALE, label: Stale, meaning: Subject no longer matches review context, scope: content-scoped, recovery: Reconcile hashes/fingerprints and re-review, downstream_consequence: Old decision cannot authorize new subject, retryable: false}
+  - {state_id: INVALIDATED, label: Invalidated, meaning: Prior artifact or decision is no longer consumable, scope: artifact-scoped, recovery: Follow replacement and review it, downstream_consequence: Prior result is blocked, retryable: false}
+  - {state_id: SUPERSEDED, label: Superseded, meaning: Newer artifact or decision replaced this item, scope: history-scoped, recovery: Inspect superseding item, downstream_consequence: History remains visible, retryable: false}
+  - {state_id: TARGET_CHANGED, label: Target changed, meaning: Compiled target differs from approved context, scope: materialization-scoped, recovery: Recompile and re-review, downstream_consequence: Old approval cannot materialize, retryable: true}
+  - {state_id: VALIDATION_FAILED, label: Validation failed, meaning: Required check failed or has discrepancy, scope: validation-scoped, recovery: Inspect evidence and correct upstream stage, downstream_consequence: Cannot be promoted to PASS, retryable: false}
+  - {state_id: NOT_EVALUATED, label: Not evaluated, meaning: Required check did not run, scope: check-scoped, recovery: Run check or document not-applicable policy, downstream_consequence: Never PASS, retryable: true}
+  - {state_id: NOT_APPLICABLE, label: Not applicable, meaning: Typed policy says check does not apply, scope: check-scoped, recovery: Inspect policy and scope, downstream_consequence: Gate derives only from typed policy, retryable: false}
+  - {state_id: PARTIAL_SUCCESS, label: Partial success, meaning: Some bounded items completed while others did not, scope: selection-scoped, recovery: Review completed and failed subsets separately, downstream_consequence: No overall success claim, retryable: true}
+  - {state_id: LONG_RUNNING, label: Long-running, meaning: Bounded local operation is still running, scope: attempt-scoped, recovery: Monitor or safely navigate away, downstream_consequence: No result is consumable until terminal state, retryable: false}
