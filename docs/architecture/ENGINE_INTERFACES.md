@@ -141,6 +141,11 @@ directly.
 - Failure: lifecycle transition fails explicitly; no in-memory-only success.
 - Forbidden: raw large source/intermediate row storage.
 
+Step23's SQLiteControlStore is the tested local adapter. It records schema
+version/migrations, run and stage revisions, dependency edges, staged-dataset
+manifests, cache entries, gate receipts and safe audit events. It rejects
+unsupported future schemas and uses parameterized adapter-owned SQL.
+
 ## ArtifactStorePort
 
 - Purpose: allocate attempt-local locations, publish and read immutable artifacts, verify hashes and invalidate/supersede references.
@@ -150,6 +155,11 @@ directly.
 - Optionality: required.
 - Failure: artifact remains non-consumable and evidence is retained.
 - Forbidden: exposing path manipulation throughout core services.
+
+Step23's LocalArtifactStore provides immutable SHA-256 content addressing,
+atomic publication, controlled external references, integrity states and
+authorized retention cleanup. It does not implement S3; the capability
+registry reports that provider as future and unexecuted.
 
 ## Privacy policy service boundary
 

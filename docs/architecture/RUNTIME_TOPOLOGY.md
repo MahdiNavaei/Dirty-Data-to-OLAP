@@ -7,12 +7,15 @@ The reference runtime is one local checkout with:
 1. CLI or future API entrypoint;
 2. application/orchestration process;
 3. local StageExecutor;
-4. SQLite Control Store;
-5. filesystem Artifact Store;
-6. Parquet intermediate artifacts;
-7. DuckDB analytical target.
+4. SQLite Control Store through ControlStorePort;
+5. content-addressed filesystem Artifact Store through ArtifactStorePort;
+6. separate staged-dataset artifact area for Parquet intermediates;
+7. DuckDB analytical target, usually retained as a controlled external artifact.
 
-Heavy stages run through StageExecutor even when the implementation is local. Cheap control operations such as reading run metadata, listing artifacts, submitting a review decision and reading status may be synchronous.
+Step23 does not execute heavy stages. It persists run/stage metadata and
+provides the local artifact, staging, capability and lifecycle primitives that
+the future executor will consume. Cheap control operations such as reading run
+metadata and listing artifacts may be synchronous.
 
 ## Heavy versus control execution
 

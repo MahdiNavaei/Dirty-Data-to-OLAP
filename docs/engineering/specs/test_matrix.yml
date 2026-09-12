@@ -2,7 +2,7 @@ schema_version: "1.0"
 scope: "v1 test strategy and evidence tiers"
 provenance:
   authority: "docs/08_BENCHMARK_AND_VALIDATION_PLAN.md, software architecture specs, Step 05 engineering plan"
-  status: "planned execution policy; no CI workflow created"
+  status: "Step23 local-platform execution evidence recorded; no CI workflow created"
 
 tiers:
   - {tier_id: TIER0, name: repository_contract, runs: "now", blocking: true, evidence: "domain/data/solution/engineering validators"}
@@ -23,6 +23,11 @@ categories:
   - {category: failure_recovery, purpose: "failed stage, resume, cancellation, invalidation and retained artifacts", must_be_real: true, allowed_mocks: "fault injection", owner: "Step28", tier: TIER2, blocking: true}
   - {category: security, purpose: "read-only source, secrets, authorization and PII-safe logging", must_be_real: true, allowed_mocks: "safe test credentials", owner: "Step33", tier: TIER1, blocking: true}
   - {category: performance, purpose: "stage runtime, memory, rows scanned and cache behavior", must_be_real: true, allowed_mocks: "none for measurement", owner: "Step37", tier: TIER4, blocking: false}
+
+platform_test_requirements:
+  owner: "Step23 Data Platform Engineer"
+  required_evidence: ["immutable publication", "hash and size verification", "SQLite migration and rollback", "restart recovery", "dependency staleness", "staged Parquet metadata", "cache invalidation", "cleanup authorization and retention", "path confinement", "future capability truthfulness"]
+  reference_command: "python tools/validate_step23_data_platform.py"
 
 stage_test_requirements:
   - {stage_id: SOURCE_DISCOVERY, required_categories: [contract, adapter_contract, integration], owner: "Step07"}

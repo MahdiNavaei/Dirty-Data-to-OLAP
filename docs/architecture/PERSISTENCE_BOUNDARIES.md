@@ -1,8 +1,11 @@
 # Dirty Data to OLAP — Persistence Boundaries
 
+Step23 implements the local V1 boundaries described here. The implementation
+is deliberately replaceable and does not claim cloud or distributed scale.
+
 ## Control Store
 
-V1 recommends SQLite behind ControlStorePort. It stores:
+Step23 uses SQLite behind ControlStorePort. It stores:
 
 - project and run manifests;
 - pinned configuration metadata;
@@ -17,7 +20,12 @@ The Control Store does not store raw source tables, large samples, Parquet row d
 
 ## Artifact/Data Store
 
-V1 recommends a project-local filesystem behind ArtifactStorePort. The logical workspace is workspace/runs/<run_id>/ with catalog, samples, profiles, evidence, decisions, canonical, analytical, generated_sql, validation and target areas. Attempt-local writes are separate from published artifact locations.
+Step23 uses a bounded project-local filesystem behind ArtifactStorePort. The
+platform-managed root is workspace/platform/, with separate control, managed
+artifact, staging and temporary areas. Existing run artifacts remain under
+workspace/runs/<run_id>/ and are referenced as controlled external artifacts
+when the platform does not own their bytes. Attempt-local writes are separate
+from published artifact locations.
 
 - Parquet stores large tabular intermediates and profiles.
 - JSON/YAML stores small envelopes, decisions and plans.
@@ -37,9 +45,15 @@ lifecycles as stage attempts, artifact references and run transitions, so
 Review / Policy Service remains the only semantic authority: entrypoints and
 checkpoint stages call that service and never write decision records directly.
 
-ArtifactStorePort supports allocate attempt-local location, publish complete artifact, read published artifact, verify content hash, list artifacts, invalidate, supersede and resolve a project-relative logical location.
+ArtifactStorePort supports reserve/publish complete artifacts, read published
+artifacts, verify content hash and size, list references, register controlled
+external files, and perform authorized tombstone cleanup. LocalStagingStore adds
+versioned staged-dataset manifests while keeping Parquet bytes outside the
+control database.
 
-Later PostgreSQL, object-storage and other implementations must satisfy these semantics without changing application or domain contracts.
+Step23 has tested the SQLite/filesystem reference path. PostgreSQL,
+object-storage and other implementations remain future replacements and must
+satisfy these semantics without changing application or domain contracts.
 
 ## Safety
 

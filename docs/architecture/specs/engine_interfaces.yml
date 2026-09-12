@@ -134,6 +134,8 @@ interfaces:
     capability_id: persistence.control_store
     failure_mode: explicit persistence failure
     adapter_component: persistence.control_store
+    implementation_status: REFERENCE_TESTED_LOCAL_V1
+    implementation_notes: "SQLiteControlStore persists typed metadata, revisions, dependencies, cache entries, staged manifests, gate receipts and audit events; raw rows remain outside the control plane."
     forbidden_behavior: [raw large row storage, opaque third-party objects, direct entrypoint mutation of review decisions]
   - interface_id: ArtifactStorePort
     purpose: Artifact-plane allocation, publication, verification and invalidation.
@@ -145,6 +147,8 @@ interfaces:
     capability_id: persistence.artifact_store
     failure_mode: non-consumable artifact and retained failure
     adapter_component: persistence.artifact_store
+    implementation_status: REFERENCE_TESTED_LOCAL_V1
+    implementation_notes: "LocalArtifactStore provides atomic SHA-256 managed publication, controlled external references, integrity verification and authorized tombstones."
     forbidden_behavior: [incomplete consumption, uncontrolled path access]
   - interface_id: StageExecutorPort
     purpose: Execute heavy stages locally or behind a future worker boundary.
@@ -167,4 +171,6 @@ interfaces:
     capability_id: runtime.capability_registry
     failure_mode: unavailable record; no import-time crash
     adapter_component: runtime.capability_registry
+    implementation_status: REFERENCE_TESTED_LOCAL_V1
+    implementation_notes: "Local capability records distinguish tested SQLite/filesystem primitives from future unexecuted PostgreSQL, S3 and distributed execution providers."
     forbidden_behavior: [fake capability output, silent provider substitution]

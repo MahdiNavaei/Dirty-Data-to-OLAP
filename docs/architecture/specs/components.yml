@@ -595,12 +595,12 @@ components:
     output_contracts: [ControlMetadata]
     depends_on: [domain.contracts]
     extension_port: ControlStorePort
-    implementation_owner: Step06 Database Engineer / DBA
-    implementation_step: 6
-    implementation_status: PLANNED
-    ownership_scope: bootstrap-only; comprehensive platform ownership remains Step23
+    implementation_owner: Step23 Data Platform Engineer
+    implementation_step: 23
+    implementation_status: IMPLEMENTED
+    ownership_scope: comprehensive platform implementation; Step06 remains the bootstrap owner of the database-access substrate
     side_effect_class: control_metadata
-    persistence_access: SQLite in V1; implementation deferred
+    persistence_access: SQLite V1 through a project-owned adapter; raw rows remain outside control metadata
     optional: false
     failure_behavior: transactional persistence failure
   - component_id: persistence.artifact_store
@@ -614,9 +614,9 @@ components:
     extension_port: ArtifactStorePort
     implementation_owner: Step23 Data Platform Engineer
     implementation_step: 23
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: artifact_write
-    persistence_access: project-local filesystem in V1; implementation deferred
+    persistence_access: bounded project-local content-addressed filesystem in V1; external artifacts remain controlled references
     optional: false
     failure_behavior: non-consumable artifact and retained error
   - component_id: runtime.stage_executor
@@ -646,9 +646,9 @@ components:
     extension_port: CapabilityRegistryPort
     implementation_owner: Step23 Data Platform Engineer
     implementation_step: 23
-    implementation_status: PLANNED
+    implementation_status: IMPLEMENTED
     side_effect_class: none
-    persistence_access: ControlStorePort through port
+    persistence_access: in-memory capability records through the port; no provider import is required
     optional: false
     failure_behavior: unavailable capability record, not import-time crash
   - component_id: entrypoints.cli

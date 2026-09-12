@@ -301,3 +301,12 @@ stages:
     cacheable: true
     idempotency: pinned source snapshot/truth, finalized canonical model, both accounting boundaries, analytical dataset/binding, all fact specs, target/hash and validation policy
     review_boundary: final acceptance; no new review checkpoint; source truth is QA-only and never a transformation input
+
+cross_cutting_boundaries:
+  - boundary_id: LOCAL_PLATFORM_PERSISTENCE
+    owner: Step23 Data Platform Engineer
+    status: IMPLEMENTED
+    ports: [ControlStorePort, ArtifactStorePort, CapabilityRegistryPort]
+    supports: [run_metadata, stage_attempts, artifact_publication, staged_dataset_manifests, cache_metadata, gate_evidence, integrity_scans, retention_cleanup]
+    not_a_business_stage: true
+    notes: "Cross-cutting SQLite/filesystem infrastructure; it does not alter transformation DAG semantics and does not execute Step24 distributed work."

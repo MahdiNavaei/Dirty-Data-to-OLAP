@@ -34,6 +34,7 @@ data/generated/
 *.log
 workspace/tests/
 workspace/test-temp/
+workspace/platform/
 .venv*/
 
 # Research clones are disposable and must never be runtime dependencies.

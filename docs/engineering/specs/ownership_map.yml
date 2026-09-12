@@ -2,7 +2,7 @@ schema_version: "1.0"
 scope: "v1 implementation ownership for the frozen software architecture"
 provenance:
   authority: "05_MASTER_BUILD_SEQUENCE.md, architecture/specs/components.yml, architecture/specs/engine_interfaces.yml"
-  status: "Step13 implementation ownership and Step14 future handoff"
+  status: "Step23 local platform ownership; Step24 distributed execution remains future"
 
 implementation_ownership_schema:
   owner_field: primary_specialist
@@ -61,10 +61,10 @@ components:
   - {component_id: adapters.ml, primary_specialist: "Step15 Applied ML Engineer", implementation_step: 15, implementation_status: IMPLEMENTED, test_strategy: "real sklearn adapter, contribution reconstruction and JSON persistence tests"}
   - {component_id: adapters.semantic, primary_specialist: "Step16 LLM / Semantic AI Engineer", implementation_step: 16, implementation_status: IMPLEMENTED, test_strategy: "provider provenance and unavailable-path tests"}
   - {component_id: adapters.materialization, primary_specialist: "Step20 OLAP Engineer", implementation_step: 20, implementation_status: IMPLEMENTED, test_strategy: "DuckDB/materializer compatibility tests"}
-  - {component_id: persistence.control_store, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, comprehensive_platform_owner: "Step23 Data Platform Engineer", test_strategy: "schema, migration and lifecycle tests"}
-  - {component_id: persistence.artifact_store, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, test_strategy: "immutability, hash and retention tests"}
+  - {component_id: persistence.control_store, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, implementation_scope: comprehensive platform implementation, bootstrap_owner: "Step06 Database Engineer / DBA", comprehensive_platform_owner: "Step23 Data Platform Engineer", test_strategy: "schema, migration, transaction and lifecycle tests"}
+  - {component_id: persistence.artifact_store, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, implementation_status: IMPLEMENTED, test_strategy: "immutability, hash, external-reference, integrity and retention tests"}
   - {component_id: runtime.stage_executor, primary_specialist: "Step28 Distributed Systems / Jobs Engineer", implementation_step: 28, test_strategy: "attempt isolation and retry tests"}
-  - {component_id: runtime.capability_registry, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, test_strategy: "capability policy and version tests"}
+  - {component_id: runtime.capability_registry, primary_specialist: "Step23 Data Platform Engineer", implementation_step: 23, implementation_status: IMPLEMENTED, test_strategy: "capability policy, version and unavailable-provider tests"}
   - {component_id: entrypoints.cli, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "CLI contract and smoke tests"}
   - {component_id: entrypoints.api, primary_specialist: "Step27 Backend Engineer", implementation_step: 27, test_strategy: "API contract and authorization tests"}
   - {component_id: composition.root, primary_specialist: "Step06 Database Engineer / DBA", implementation_step: 6, implementation_scope: bootstrap-only, ongoing_owners: "Step23 Data Platform / Step27 Backend / Step28 Distributed Systems according to wired concern", test_strategy: "composition and import-boundary tests"}
