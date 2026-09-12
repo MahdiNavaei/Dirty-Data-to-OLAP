@@ -1331,3 +1331,19 @@ handoff_to:
 - content_commit_sha: `496ca80647a7a5b752803dab6d50491f5663e4a7` (`fix: close Step23 platform integrity gaps`)
 - metadata_commit_sha: recorded in the final metadata-only Git commit
 - state: `last_completed_step=23`; `current_step=24`; `current_role=distributed_data_engineer`; G5 `PASS`; G6 `PASS`; G7 `PENDING`; Step24 `NOT_STARTED`
+
+## Specialist Step24 - Distributed Data Engineer
+
+- execution_step: `24`
+- role_id: `distributed_data`
+- specialist_file: `36_DISTRIBUTED_DATA_ENGINEER.md`
+- status: `PASS` for bounded deterministic `PARTITIONED_LOCAL` execution and exact G7A semantic equivalence
+- starting_baseline: required `HEAD=66d8c478ee8905e6a371e8621fd5259ee5ec420d`; branch `main`; starting `origin/main` matched; protected `tests/quality_unit_artifacts/` preserved, unstaged and uncommitted
+- implementation: typed scale/partition/merge/equivalence contracts; deterministic HASH/RANGE/BLOCK_KEY routing; bounded worker execution; exact merge barriers; failure/idempotence/stale/foreign checks; Step23 artifact/control/staging integration; explicit local fallback and future external-engine capabilities
+- benchmark: synthetic `order_lines` fixture with `12,000` rows, `8` partitions and `4` worker slots; observed max concurrency `4`; partition counts `825/1575/750/5550/975/975/600/750`; skew ratio `3.7` with `REVIEW_REQUIRED`; logical shuffle `12,000` records / `5,831,646` bytes / replication `0`
+- g7a_evidence: report `scale-equivalence_75ff1905690fbd638121c246c493ee6f`; semantic report hash `589329b16a158fbf46ca2f77ae118127d9543b2482f018466a49b9c3468715c8`; local/partitioned semantic hash `2e27bda2d225304119971e9aad5dd98f91ef91439560d64817d494d216b683b6`; plan `partition-plan_b2c2d68ba07c60c937178a0a59114bc8`; plan hash `78e17f4044477ae4fd5a16dbd3cd3aa7d3b73d90061822be4f74aa9e233585ba`
+- tests: Step24 focused `31 passed`; protected-boundary repository regression `332 passed, 2 skipped, 41 warnings` while excluding only the two tests that write to `tests/quality_unit_artifacts/`; known non-fatal dlt/SQLite cursor-cleanup traceback remains documented
+- validators: Step23 validator passed twice in isolation; all repository validators passed in two consecutive sweeps after Step25 handoff compatibility was closed; compileall and diff-check passed
+- known_limitations: local reference semantics only; no Spark/Ray/Dask/Kafka/Redis/Kubernetes, cluster/HA/physical distributed execution, network throughput or production capacity claim; Step20 physical partitioned materialization and Step28 job control remain future scope
+- handoff_to: `Step25 - UX / Product Designer`; Step25 remains `NOT_STARTED`; G7 remains `PENDING`
+- verified_content_commit: `b66bb5cc23764ae45838aeaf2d4791e4d6ea228f`
