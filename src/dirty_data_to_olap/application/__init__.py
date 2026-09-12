@@ -16,6 +16,7 @@ from .distributed import (
     ScaleError,
     ScaleService,
 )
+from .visualization import VisualizationInputError, VisualizationService
 
 __all__ = [
     "DependencyDiscoveryService",
@@ -38,4 +39,6 @@ __all__ = [
     "ScaleAuthorizationError",
     "ScaleError",
     "ScaleService",
+    "VisualizationInputError",
+    "VisualizationService",
 ]

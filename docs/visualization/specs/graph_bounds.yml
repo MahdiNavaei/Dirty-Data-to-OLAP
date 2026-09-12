@@ -1,0 +1,25 @@
+schema_version: "1.0"
+owner: "Step26 Data Visualization Engineer"
+default_mode: OVERVIEW
+default_max_nodes: 250
+default_max_edges: 500
+max_request_nodes: 5000
+max_request_edges: 10000
+neighborhood:
+  focus_required: true
+  max_hops: 8
+  traversal: deterministic_breadth_first
+  directions: [UPSTREAM, DOWNSTREAM, BOTH]
+disclosure:
+  hidden_node_count_required: true
+  hidden_edge_count_required: true
+  aggregate_counts_explicit: true
+  show_more_required: true
+  truncation_reason_required: true
+  silent_truncation: false
+benchmark:
+  synthetic_only: true
+  browser_fps_claim: false
+  representative_tables: 220
+  representative_nodes_minimum: 3000
+  representative_edges_minimum: 3000
