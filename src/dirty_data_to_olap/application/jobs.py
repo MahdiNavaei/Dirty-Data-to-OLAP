@@ -52,6 +52,11 @@ class StageExecutorPort(Protocol):
 
 
 StageHandlerPort = StageExecutorPort
+FaultInjector = Callable[[str, JobRecord, StageAttemptRecord | None], None]
+
+
+class InjectedWorkerCrash(RuntimeError):
+    """Deterministic test-only crash signal; durable state remains unreconciled."""
 
 
 class MissingStageHandler:
@@ -131,6 +136,7 @@ class JobWorker:
         lease_seconds: int = 30,
         retry_policy: RetryPolicy | None = None,
         clock: Callable[[], datetime] | None = None,
+        fault_injector: FaultInjector | None = None,
     ) -> None:
         if not worker_id or lease_seconds < 1:
             raise ValueError("worker_id and a positive lease are required")
@@ -141,6 +147,7 @@ class JobWorker:
         self.lease_seconds = lease_seconds
         self.retry_policy = retry_policy or RetryPolicy()
         self.clock = clock
+        self.fault_injector = fault_injector
         self.review_policy = ReviewPolicyService()
 
     def run_once(self) -> WorkerOutcome:
@@ -148,6 +155,7 @@ class JobWorker:
         job = self.control_store.claim_next_job(worker_id=self.worker_id, now=now, lease_seconds=self.lease_seconds)
         if job is None:
             return WorkerOutcome(None, "IDLE", "no eligible durable job")
+        self._inject_fault("after_claim", job, None)
         if job.job_kind is JobKind.COMMAND:
             return self._run_command(job, now)
         return self._run_stage(job, now)
@@ -281,6 +289,7 @@ class JobWorker:
         plan = self.control_store.get_execution_plan(job.run_id)
         stage = None if plan is None else plan.stage(job.stage_id or "")
         attempt = self.control_store.ensure_stage_attempt(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=now)
+        self._inject_fault("after_stage_attempt", job, attempt)
         if plan is None or stage is None:
             result = StageExecutionResult(
                 status=StageResultStatus.BLOCKED,
@@ -322,6 +331,7 @@ class JobWorker:
                 metadata={"handler_key": stage.handler_key},
             )
             result = self._execute(stage.handler_key, request)
+            self._inject_fault("after_artifact_publication", job, attempt)
             after = _safe_now(self.clock)
             refreshed = self.control_store.heartbeat_job(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=after, lease_seconds=self.lease_seconds)
             del refreshed
@@ -335,6 +345,8 @@ class JobWorker:
                         failure_classification=FailureClassification.TERMINAL_FAILURE,
                         failure_reason="stage output was not durably registered and verified",
                     )
+        except InjectedWorkerCrash:
+            raise
         except ConcurrencyConflictError:
             raise
         except PlatformError:
@@ -346,6 +358,7 @@ class JobWorker:
                 failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT,
                 failure_reason="stage execution outcome is unknown after worker delivery",
             )
+        self._inject_fault("before_stage_finalization", job, attempt)
         stored = self._finalize(job, attempt, result, _safe_now(self.clock))
         self._advance_after_stage(plan, stage.stage_id, stored)
         return WorkerOutcome(stored.job_id, stored.status.value, f"stage {stage.stage_id} finalized")
@@ -355,6 +368,10 @@ class JobWorker:
             return self.executor.execute_for(handler_key, request)
         result = self.executor.execute(request)
         return StageExecutionResult.model_validate(result)
+
+    def _inject_fault(self, point: str, job: JobRecord, attempt: StageAttemptRecord | None) -> None:
+        if self.fault_injector is not None:
+            self.fault_injector(point, job, attempt)
 
     def _handler_available(self, handler_key: str) -> bool:
         return not isinstance(self.executor, StageHandlerRegistry) or self.executor.has_handler(handler_key)
@@ -539,6 +556,8 @@ def load_authoritative_execution_plan(project_root: str | Path, *, run_id: str, 
 __all__ = [
     "BoundedWorkerPool",
     "DurableExecutionSubmission",
+    "FaultInjector",
+    "InjectedWorkerCrash",
     "JobWorker",
     "load_authoritative_execution_plan",
     "MissingStageHandler",

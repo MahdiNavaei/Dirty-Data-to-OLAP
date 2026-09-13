@@ -7,7 +7,7 @@ import sqlite3
 import pytest
 
 from dirty_data_to_olap.adapters.platform import LocalArtifactStore, SQLiteControlStore
-from dirty_data_to_olap.application.jobs import DurableExecutionSubmission, JobWorker, StageHandlerRegistry
+from dirty_data_to_olap.application.jobs import DurableExecutionSubmission, InjectedWorkerCrash, JobWorker, StageHandlerRegistry
 from dirty_data_to_olap.application.platform import ConcurrencyConflictError
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand, ReviewRecord
@@ -301,4 +301,183 @@ def test_cancellation_completion_race_is_closed_by_store_fence(tmp_path: Path) -
     assert outcome.status == JobStatus.CANCELLED.value
     assert control.get_stage_job(run_id=run.run_id, stage_id="WORK").status is JobStatus.CANCELLED
     assert control.get_run(run.run_id).status.value == "CANCELLED"
+    control.close()
+
+
+def test_fault_injected_stage_start_crash_reclaims_after_restart(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path)
+    plan = ExecutionPlan(plan_id="plan-crash-start", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),))
+    control.register_execution_plan(plan)
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id), run=run)
+    clock = MutableClock()
+    crashed = False
+
+    def inject(point, _job, _attempt):
+        nonlocal crashed
+        if point == "after_stage_attempt" and not crashed:
+            crashed = True
+            raise InjectedWorkerCrash("after durable attempt start")
+
+    worker = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": SuccessfulStage()}), worker_id="worker-a", lease_seconds=5, clock=clock)
+    assert worker.run_once().status == JobStatus.SUCCEEDED.value
+    crashing = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": SuccessfulStage()}), worker_id="worker-a", lease_seconds=5, clock=clock, fault_injector=inject)
+    with pytest.raises(InjectedWorkerCrash):
+        crashing.run_once()
+    assert control.get_stage_job(run_id=run.run_id, stage_id="WORK").status is JobStatus.RUNNING
+    assert len(control.list_stage_attempts(run_id=run.run_id)) == 1
+    control.close()
+    clock.advance(6)
+    reopened = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
+    try:
+        recovered = JobWorker(control_store=reopened, artifact_store=artifacts, executor=StageHandlerRegistry({"work": SuccessfulStage()}), worker_id="worker-b", lease_seconds=5, clock=clock)
+        assert recovered.run_once().status == JobStatus.SUCCEEDED.value
+        assert reopened.get_run(run.run_id).status is not None and reopened.get_run(run.run_id).status.value == "SUCCEEDED"
+        assert len(reopened.list_stage_attempts(run_id=run.run_id)) == 1
+    finally:
+        reopened.close()
+
+
+def test_fault_injected_claim_crash_reclaims_command_after_restart(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path)
+    plan = ExecutionPlan(plan_id="plan-crash-claim", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),))
+    control.register_execution_plan(plan)
+    accepted = DurableExecutionSubmission(control).submit_command(command=_command(run.run_id), run=run)
+    clock = MutableClock()
+
+    def inject(point, _job, _attempt):
+        if point == "after_claim":
+            raise InjectedWorkerCrash("after durable claim")
+
+    crashing = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": SuccessfulStage()}), worker_id="worker-a", lease_seconds=5, clock=clock, fault_injector=inject)
+    with pytest.raises(InjectedWorkerCrash):
+        crashing.run_once()
+    assert control.get_job(accepted.submission_id).status is JobStatus.RUNNING
+    control.close()
+    clock.advance(6)
+    reopened = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
+    try:
+        recovered = JobWorker(control_store=reopened, artifact_store=artifacts, executor=StageHandlerRegistry({"work": SuccessfulStage()}), worker_id="worker-b", lease_seconds=5, clock=clock)
+        assert recovered.run_once().status == JobStatus.SUCCEEDED.value
+        assert reopened.get_job(accepted.submission_id).status is JobStatus.SUCCEEDED
+    finally:
+        reopened.close()
+
+
+def test_fault_injected_finalization_replay_reuses_attempt_identity(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path)
+    plan = ExecutionPlan(plan_id="plan-crash-finalize", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),))
+    control.register_execution_plan(plan)
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id), run=run)
+    clock = MutableClock()
+    handler = SuccessfulStage()
+    crashed = False
+
+    def inject(point, _job, _attempt):
+        nonlocal crashed
+        if point == "before_stage_finalization" and not crashed:
+            crashed = True
+            raise InjectedWorkerCrash("before durable completion")
+
+    worker = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-a", lease_seconds=5, clock=clock)
+    worker.run_once()
+    crashing = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-a", lease_seconds=5, clock=clock, fault_injector=inject)
+    with pytest.raises(InjectedWorkerCrash):
+        crashing.run_once()
+    first_attempt_id = control.list_stage_attempts(run_id=run.run_id)[0].attempt_id
+    control.close()
+    clock.advance(6)
+    reopened = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
+    try:
+        recovered = JobWorker(control_store=reopened, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-b", lease_seconds=5, clock=clock)
+        assert recovered.run_once().status == JobStatus.SUCCEEDED.value
+        assert [request.attempt_id for request in handler.requests] == [first_attempt_id, first_attempt_id]
+        assert reopened.get_run(run.run_id).status.value == "SUCCEEDED"
+    finally:
+        reopened.close()
+
+
+def test_fault_injected_after_artifact_publication_recovers_safely(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path)
+    plan = ExecutionPlan(plan_id="plan-crash-publication", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),))
+    control.register_execution_plan(plan)
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id), run=run)
+    clock = MutableClock()
+
+    class PublishingStage:
+        def __init__(self) -> None:
+            self.ref = None
+
+        def execute(self, request):
+            if self.ref is None:
+                manifest = ArtifactManifest(
+                    artifact_id=stable_id("artifact", {"attempt": request.attempt_id}),
+                    run_id=request.run_id,
+                    stage_id=request.stage_id,
+                    attempt_id=request.attempt_id,
+                    artifact_kind="FINAL_OUTPUT",
+                    media_type="application/json",
+                    producer="step28-test",
+                )
+                self.ref = artifacts.publish(manifest, b"published-before-crash")
+                control.register_artifact(self.ref)
+            return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(self.ref.artifact_id,))
+
+    handler = PublishingStage()
+    crashed = False
+
+    def inject(point, _job, _attempt):
+        nonlocal crashed
+        if point == "after_artifact_publication" and not crashed:
+            crashed = True
+            raise InjectedWorkerCrash("after artifact publication")
+
+    worker = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-a", lease_seconds=5, clock=clock)
+    worker.run_once()
+    crashing = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-a", lease_seconds=5, clock=clock, fault_injector=inject)
+    with pytest.raises(InjectedWorkerCrash):
+        crashing.run_once()
+    assert handler.ref is not None and control.get_artifact(handler.ref.artifact_id).publication_state.value == "PUBLISHED"
+    control.close()
+    clock.advance(6)
+    reopened = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
+    try:
+        recovered = JobWorker(control_store=reopened, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-b", lease_seconds=5, clock=clock)
+        assert recovered.run_once().status == JobStatus.SUCCEEDED.value
+        assert reopened.get_run(run.run_id).status.value == "SUCCEEDED"
+    finally:
+        reopened.close()
+
+
+def test_unregistered_output_and_unknown_side_effect_fail_closed(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path)
+    plan = ExecutionPlan(plan_id="plan-fail-closed", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),))
+    control.register_execution_plan(plan)
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id), run=run)
+    class BadOutput:
+        def execute(self, _request):
+            return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=("not-registered",))
+    clock = MutableClock()
+    worker = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": BadOutput()}), worker_id="worker-1", clock=clock)
+    worker.run_once()
+    assert worker.run_once().status == JobStatus.FAILED.value
+    failed = control.get_stage_job(run_id=run.run_id, stage_id="WORK")
+    assert failed.failure_code == "ARTIFACT_INTEGRITY_FAILED"
+    control.close()
+
+    unknown_root = tmp_path / "unknown"
+    unknown_root.mkdir()
+    control, artifacts, run = _stores(unknown_root)
+    plan = ExecutionPlan(plan_id="plan-unknown", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),))
+    control.register_execution_plan(plan)
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id), run=run)
+    class Unknown:
+        def execute(self, _request):
+            raise RuntimeError("traceback password=secret")
+    unknown_clock = MutableClock()
+    worker = JobWorker(control_store=control, artifact_store=artifacts, executor=StageHandlerRegistry({"work": Unknown()}), worker_id="worker-1", clock=unknown_clock)
+    worker.run_once()
+    assert worker.run_once().status == JobStatus.FAILED.value
+    failed = control.get_stage_job(run_id=run.run_id, stage_id="WORK")
+    assert failed.failure_classification is FailureClassification.UNKNOWN_SIDE_EFFECT
+    assert "secret" not in (failed.failure_reason or "") and "traceback" not in (failed.failure_reason or "")
     control.close()
