@@ -1437,3 +1437,17 @@ handoff_to:
 - content_commit_sha: `4c3fbd86f022fa640e86841ae4586e4489ab7b32` (`feat: add Step27 backend control plane API`)
 - metadata_commit_sha: recorded in the final metadata-only commit
 - state: `last_completed_step=27`; `current_step=28`; `current_role=distributed_job_processing_engineer`; `step27_started=true`; `step27_status=COMPLETED_BACKEND_API`; `step28_started=false`; `step28_status=NOT_STARTED`; `G7B=PASS`; `G7=PENDING`; `blocked=false`
+
+## CRITICAL POST-STEP27 REPAIR - Backend Trust-Boundary Integrity Closure
+
+- execution_step: `27` surgical integrity repair only; Step28 was not started
+- starting_baseline: branch `main`; `HEAD=origin/main=6c50f348ea6309aa1233380c47bf19de81310bfb`; original Step27 receipt preserved; protected `tests/quality_unit_artifacts/` untouched
+- findings_closed: server-authoritative review subject resolution with exact client assertions; explicit unsupported `SKIPPED`; atomic SQLite idempotency for run/review mutations; stable execution command identity with explicit uncertain delivery; multi-instance CAS/race controls; typed trusted-proxy read scopes; schema v3-to-v4 migration; authoritative review subject keying; and Step28 handoff state-gate coverage
+- evidence: Step27 validator `66 scenarios PASS`; focused Step27/Step23 suite `34 passed`; cross-step Step20/25/26/10 suite `57 passed`; full feasible protected-boundary regression `393 passed, 2 skipped, 41 warnings`; all repository validators `27/27 PASS`; compileall, YAML parse, OpenAPI parse/determinism, and `git diff --check` PASS
+- skip_semantics: `SKIPPED` is explicitly unsupported at Step27 and absent from the action enum; server-owned skip authorization is deferred to a later contract
+- execution_semantics: the same semantic API command yields the same durable `ExecutionCommand.command_id`; uncertain external acceptance is `DELIVERY_UNKNOWN`; exactly-once distributed execution is not claimed
+- schema: control schema version `4`; explicit v3-to-v4 migration and partial-capability reopen repair verified
+- limitations: no durable workers/queues, production authentication, browser/physical acceptance, deployment, capacity, live-provider or G7 completion claim; optional Splink/Valentine remain skipped when unavailable; known non-fatal dlt/SQLite cleanup traceback remains
+- content_commit_sha: `e840a11dfa128fb7a62afead783b0f25b72b8060` (`fix: close Step27 backend trust boundaries`)
+- receipt: `docs/execution/STEP27_BACKEND_API_INTEGRITY_REPAIR.md`
+- handoff_to: `Step28 - Distributed Job Processing Engineer`; Step28 remains `NOT_STARTED`; G7 remains `PENDING`; `blocked=false`
