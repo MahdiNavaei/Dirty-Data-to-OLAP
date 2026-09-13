@@ -1479,3 +1479,27 @@ handoff_to:
 - content_commit_sha: `578bd4458def77608e36aba25709de8e5f8f43b1` plus fault-boundary repair `98555bbf2ac9d80b8274197f7e470c5b22cfc3c5` and handoff-validator compatibility `37cf6ec0690f176258560f0ddd83c1f90e211854`
 - report: `docs/execution/STEP28_DISTRIBUTED_JOB_PROCESSING_REVIEW.md`
 - handoff_to: `Step29 - Frontend Engineer`; Step29 remains `NOT_STARTED`
+
+## CRITICAL POST-STEP28 REPAIR - Durable Runtime Integrity Closure
+
+- execution_step: `28` surgical integrity repair only; Step29 was not started
+- role_id: `distributed_job_processing_engineer`
+- status: `PASS` for durable runtime integrity closure; G7 remains pending
+- starting_baseline: branch `main`; `HEAD=origin/main=353e22305e909eb450411a38b2b6f2ee52abe9d2`; original Step28 receipt preserved and `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- content_commit: `a41f2108951a4167684c8e3da2c8d86ffba0b725`
+- implementation: one project-owned full review subject key across worker, authoritative context resolver, FastAPI review endpoint, SQLite store, resume path and compatibility policy; review-context mutation checks cover semantic ID, applicability fingerprint, artifact content hash and policy bindings
+- stage_graph: real review checkpoints are control-plane stages; required/optional/conditional stages preserve explicit selection reasons and conditional dependency semantics; optional absent branches do not block unrelated valid execution
+- delivery_integrity: durable `ATTEMPT_CREATED`, `HANDLER_DELIVERY_STARTED`, `RESULT_RECORDED` and `FINALIZED` phases are persisted for jobs and attempts; result payloads are recorded before finalization and restart recovery finalizes recorded results without handler re-execution
+- replay_policy: replay-safe handlers may be retried after uncertain delivery; non-replay-safe handlers with delivery started and no durable result fail closed as `UNKNOWN_SIDE_EFFECT` / reconciliation required; no exactly-once claim is made
+- cancellation: handlers may observe a live durable cancellation probe and completed output is converted to typed cancellation when cancellation is observed at the stage boundary
+- admission_control: transactional SQLite claim enforces bounded active jobs per run and source scope; the worker pool uses bounded executor capacity
+- g6_guard: a successful run requires exact current-run `GateEvidence` for `G6_DATA_CORRECTNESS`, `PASS`, eligible status, a registered published `ValidationReport`, matching artifact/content hashes, and typed report agreement; the worker does not recompute G6
+- persistence: additive SQLite v5-to-v6 migration preserves existing plans, jobs and attempts while adding delivery, replay, source-scope and durable-result fields
+- validator: `tools/validate_step28_job_processing.py` -> `22` scenarios PASS
+- focused_tests: `31 passed` (`tests/integration/test_step28_job_processing.py` and `tests/integration/test_step28_integrity_repair.py`)
+- full_regression: `439 passed, 2 skipped, 41 warnings` using Python 3.10; Splink and Valentine optional runtime tests were skipped because those runtimes were not installed; a non-fatal dlt/SQLite cursor-cleanup traceback was emitted after the passing run
+- validators: all `28/28` repository validators PASS; `compileall` for `src` and `tools` PASS; `git diff --check` PASS
+- gate_state: `G5=PASS`, `G6=PASS`, `G7A=PASS`, `G7B=PASS`, `G7=PENDING`, `blocked=false`
+- limitations: local SQLite reference path only; no broker/HA/multi-node production claim, frontend/browser, deployment, full observability or G7 completion; unknown external side effects require reconciliation
+- receipt: `docs/execution/STEP28_DISTRIBUTED_JOB_PROCESSING_INTEGRITY_REPAIR.md`
+- handoff_to: `Step29 - Frontend Engineer`; Step29 remains `NOT_STARTED`
