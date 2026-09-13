@@ -18,6 +18,7 @@ from dirty_data_to_olap.application.platform import (
     ControlStorePort,
     PlatformError,
 )
+from dirty_data_to_olap.application.execution_plan import ExecutionPlanService
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.application.visualization import VisualizationInputError, VisualizationService
 from dirty_data_to_olap.domain.contracts.api import (
@@ -36,7 +37,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewDecisionStatus,
     review_subject_key,
 )
-from dirty_data_to_olap.domain.contracts.jobs import JobRecord, JobStatus
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanPreparation, ExecutionPlanSelection, JobRecord, JobStatus, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import (
     ArtifactIntegrityState,
     ArtifactPublicationState,
@@ -89,7 +90,7 @@ class ControlStoreReviewSubjectResolver:
         context = self.control_store.get_review_subject_context(run_id=run_id, checkpoint=checkpoint.value, artifact_id=subject.artifact_id)
         if context is None:
             return None
-        if context.review_checkpoint_id is not checkpoint or context.subject_artifact_id != subject.artifact_id or context.subject_content_hash != subject.content_hash:
+        if context.review_checkpoint_id is not checkpoint or context.subject_artifact_id != subject.artifact_id:
             return None
         return context
 
@@ -153,6 +154,7 @@ class BackendService:
         max_page_size: int = 100,
         max_projection_bytes: int = 4_000_000,
         review_subject_resolver: ReviewSubjectResolverPort | None = None,
+        execution_plan_service: ExecutionPlanService | None = None,
     ) -> None:
         if max_page_size < 1 or max_page_size > 1000:
             raise ValueError("max_page_size must be between 1 and 1000")
@@ -166,6 +168,7 @@ class BackendService:
         self.max_projection_bytes = max_projection_bytes
         self.review_policy = ReviewPolicyService()
         self.review_subject_resolver = review_subject_resolver or ControlStoreReviewSubjectResolver(control_store)
+        self.execution_plan_service = execution_plan_service
 
     def _require_scope(self, principal: Principal, scope: str) -> None:
         if not principal.subject or scope not in principal.scopes:
@@ -324,7 +327,7 @@ class BackendService:
         authoritative = self.review_subject_resolver.resolve_context(run_id=run_id, checkpoint=checkpoint, subject=subject)
         if authoritative is None:
             raise BackendError("REVIEW_CONTEXT_UNAVAILABLE", "authoritative review context is not registered for this subject", status=409)
-        if authoritative.review_checkpoint_id is not checkpoint or authoritative.subject_artifact_id != subject.artifact_id or authoritative.subject_content_hash != subject.content_hash:
+        if authoritative.review_checkpoint_id is not checkpoint or authoritative.subject_artifact_id != subject.artifact_id:
             raise BackendError("REVIEW_CONTEXT_INVALID", "server review context is not bound to the requested subject", status=409)
         if context_assertion is not None and context_assertion.model_dump(mode="json") != authoritative.model_dump(mode="json"):
             raise BackendError("REVIEW_CONTEXT_MISMATCH", "client context is only an expected binding assertion and did not match server truth", status=409)
@@ -612,7 +615,16 @@ class BackendService:
         if not reserved_by_caller:
             return SubmissionResult.model_validate(self._idempotent_response(existing)["submission"]), True
         try:
-            result = self.execution.submit_command(command=command, run=run)
+            if action == ExecutionAction.SUBMIT.value and self.control_store.get_execution_plan(run_id) is None:
+                result = SubmissionResult(
+                    run_id=run_id,
+                    command_id=command.command_id,
+                    status="BLOCKED",
+                    detail="execution plan is not prepared; provide explicit run-specific conditional selection first",
+                    accepted_by="execution-plan-service",
+                )
+            else:
+                result = self.execution.submit_command(command=command, run=run)
             result = SubmissionResult.model_validate(result).model_copy(update={"command_id": command.command_id})
         except BackendError:
             raise
@@ -629,7 +641,7 @@ class BackendService:
         completed = reservation.model_copy(
             update={
                 "state": "COMPLETED",
-                "response_status": 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202,
+                "response_status": 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 409 if result.status in {"BLOCKED", "CONFLICT", "REVIEW_REQUIRED"} else 202,
                 "response_body": {"submission": result.model_dump(mode="json")},
                 "resource_id": command.command_id,
             }
@@ -644,6 +656,59 @@ class BackendService:
             except Exception:
                 pass
             return unknown, False
+        return result, False
+
+    def prepare_execution_plan(
+        self,
+        *,
+        run_id: str,
+        selection: ExecutionPlanSelection,
+        principal: Principal,
+        idempotency_key: str,
+    ) -> tuple[ExecutionPlanPreparation, bool]:
+        """Prepare a typed run plan before a durable submit command."""
+
+        self._require_scope(principal, "runs:write")
+        key = _safe_key(idempotency_key)
+        run = self.get_run(run_id)
+        scope = f"execution-plan:{run_id}:{principal.subject}"
+        fingerprint = idempotency_fingerprint({"run_id": run_id, "selection": selection.model_dump(mode="json")})
+        reservation = IdempotencyRecord(
+            scope=scope,
+            key=key,
+            request_fingerprint=fingerprint,
+            state="RESERVED",
+            response_status=409,
+            response_body={},
+        )
+        try:
+            existing, reserved = self.control_store.reserve_idempotency(reservation)
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
+        if not reserved:
+            body = self._idempotent_response(existing).get("preparation")
+            if not isinstance(body, dict):
+                raise BackendError("PLAN_PREPARATION_REPLAY_INVALID", "plan preparation replay metadata is invalid", status=409)
+            return ExecutionPlanPreparation.model_validate(body), True
+        if self.execution_plan_service is None:
+            result = ExecutionPlanPreparation(
+                run_id=run_id,
+                status=PlanPreparationStatus.BLOCKED,
+                selection_fingerprint=selection.content_hash,
+                unresolved_stage_ids=("PLAN_SERVICE",),
+                detail="no trusted execution plan preparation service is configured",
+            )
+        else:
+            result = self.execution_plan_service.prepare(run=run, selection=selection)
+        completed = reservation.model_copy(
+            update={
+                "state": "COMPLETED",
+                "response_status": 200 if result.status is PlanPreparationStatus.READY else 409,
+                "response_body": {"preparation": result.model_dump(mode="json")},
+                "resource_id": result.plan_id,
+            }
+        )
+        self.control_store.complete_idempotency(completed)
         return result, False
 
     def submit(self, *, run_id: str, principal: Principal, idempotency_key: str) -> tuple[SubmissionResult, bool]:

@@ -21,11 +21,13 @@ from dirty_data_to_olap.application.platform import (
     PlatformError,
 )
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
+from dirty_data_to_olap.application.review_subjects import ReviewSubjectDerivationPort, ReviewCheckpointSubjectResolver
 from dirty_data_to_olap.domain.contracts.api import ExecutionCommand, ExecutionAction, SubmissionResult
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
 from dirty_data_to_olap.domain.contracts.jobs import (
     DeliveryPhase,
     ExecutionPlan,
+    ExecutionPlanSelection,
     FailureClassification,
     JobKind,
     JobRecord,
@@ -158,6 +160,14 @@ class WorkerOutcome:
     detail: str
 
 
+class ExecutionPlanSelectionError(ValueError):
+    """The authoritative graph cannot be compiled without run-specific selection."""
+
+    def __init__(self, unresolved_stage_ids: tuple[str, ...], detail: str = "conditional stage selection is unresolved") -> None:
+        self.unresolved_stage_ids = unresolved_stage_ids
+        super().__init__(detail)
+
+
 class JobWorker:
     """One bounded at-least-once worker iteration."""
 
@@ -174,6 +184,7 @@ class JobWorker:
         fault_injector: FaultInjector | None = None,
         max_active_per_run: int = 1,
         max_active_per_source: int = 1,
+        review_subject_deriver: ReviewSubjectDerivationPort | None = None,
     ) -> None:
         if not worker_id or lease_seconds < 1 or max_active_per_run < 1 or max_active_per_source < 1:
             raise ValueError("worker_id and a positive lease are required")
@@ -188,6 +199,7 @@ class JobWorker:
         self.max_active_per_run = max_active_per_run
         self.max_active_per_source = max_active_per_source
         self.review_policy = ReviewPolicyService()
+        self.review_subject_deriver = review_subject_deriver or ReviewCheckpointSubjectResolver(control_store, artifact_store)
 
     def run_once(self) -> WorkerOutcome:
         now = _safe_now(self.clock)
@@ -266,32 +278,49 @@ class JobWorker:
             if candidate.job_kind is not JobKind.STAGE:
                 continue
             if candidate.status is JobStatus.NEEDS_REVIEW:
-                context = candidate.review_context
-                if context is None:
+                contexts = candidate.review_contexts or ((candidate.review_context,) if candidate.review_context is not None else ())
+                if not contexts:
                     blocked_reason = "review context is unavailable"
                     continue
-                authoritative = self.control_store.get_review_subject_context(
-                    run_id=run.run_id,
-                    checkpoint=context.review_checkpoint_id.value,
-                    artifact_id=context.subject_artifact_id,
-                )
-                if authoritative is None:
-                    blocked_reason = "authoritative review context is unavailable"
-                    continue
-                subject_artifact = self.control_store.get_artifact(context.subject_artifact_id)
-                if subject_artifact is None or subject_artifact.content_hash != authoritative.subject_content_hash:
-                    blocked_reason = "review subject artifact changed or is unavailable"
-                    continue
-                context = authoritative
-                subject_key = review_subject_key(context)
-                current = self.control_store.get_current_review(run_id=run.run_id, subject_key=subject_key)
-                if current is None or current.decision.decision not in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
-                    blocked_reason = "compatible accepted review is required before resume"
-                    continue
-                try:
-                    self.review_policy.require_compatible(current.decision, context)
-                except ReviewCompatibilityError:
-                    blocked_reason = "current review is stale or incompatible"
+                all_compatible = True
+                for context in contexts:
+                    authoritative = self.control_store.get_review_subject_context(
+                        run_id=run.run_id,
+                        checkpoint=context.review_checkpoint_id.value,
+                        artifact_id=context.subject_artifact_id,
+                    )
+                    if authoritative is None:
+                        blocked_reason = "authoritative review context is unavailable"
+                        all_compatible = False
+                        break
+                    subject_artifact = self.control_store.get_artifact(context.subject_artifact_id)
+                    if subject_artifact is None or subject_artifact.run_id != run.run_id:
+                        blocked_reason = "review subject artifact changed or is unavailable"
+                        all_compatible = False
+                        break
+                    try:
+                        integrity = self.artifact_store.verify(subject_artifact)
+                        stored_artifact = self.artifact_store.stat(subject_artifact)
+                    except (KeyError, OSError, PlatformError):
+                        blocked_reason = "review subject artifact changed or is unavailable"
+                        all_compatible = False
+                        break
+                    if stored_artifact != subject_artifact or integrity.state is not ArtifactIntegrityState.VERIFIED:
+                        blocked_reason = "review subject artifact changed or is unavailable"
+                        all_compatible = False
+                        break
+                    current = self.control_store.get_current_review(run_id=run.run_id, subject_key=review_subject_key(authoritative))
+                    if current is None or current.decision.decision not in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
+                        blocked_reason = "compatible accepted review is required before resume"
+                        all_compatible = False
+                        break
+                    try:
+                        self.review_policy.require_compatible(current.decision, authoritative)
+                    except ReviewCompatibilityError:
+                        blocked_reason = "current review is stale or incompatible"
+                        all_compatible = False
+                        break
+                if not all_compatible:
                     continue
                 self.control_store.resume_job(job_id=candidate.job_id, now=now)
                 resumed += 1
@@ -490,42 +519,58 @@ class JobWorker:
         checkpoint = stage.review_checkpoint
         if checkpoint is None:
             raise PlatformError("review result requested for a non-review stage")
-        context = job.review_context
-        if context is None or context.review_checkpoint_id is not checkpoint:
-            for dependency_id in (*stage.dependencies, *stage.conditional_dependencies):
-                dependency = self.control_store.get_stage_job(run_id=job.run_id, stage_id=dependency_id)
-                if dependency is None:
-                    continue
-                for artifact_id in dependency.result_refs:
-                    candidate = self.control_store.get_review_subject_context(run_id=job.run_id, checkpoint=checkpoint.value, artifact_id=artifact_id)
-                    if candidate is not None:
-                        context = candidate
-                        break
-                if context is not None:
-                    break
-        if context is None:
+        upstream: list = []
+        for dependency_id in (*stage.dependencies, *stage.conditional_dependencies):
+            dependency = self.control_store.get_stage_job(run_id=job.run_id, stage_id=dependency_id)
+            if dependency is None or dependency.status is not JobStatus.SUCCEEDED:
+                continue
+            for artifact_id in dependency.result_refs:
+                artifact = self.control_store.get_artifact(artifact_id)
+                if artifact is not None:
+                    upstream.append(artifact)
+        derivation = self.review_subject_deriver.derive(
+            run_id=job.run_id,
+            checkpoint=checkpoint,
+            upstream_artifacts=tuple(upstream),
+        )
+        contexts = derivation.contexts
+        if not contexts and job.review_context is not None and job.review_context.review_checkpoint_id is checkpoint:
+            # A resumed legacy job may already carry a context.  New real
+            # checkpoint reaches use the typed derivation above and never
+            # require a handler to register an arbitrary context.
+            contexts = (job.review_context,)
+        if not contexts:
             return StageExecutionResult(
                 status=StageResultStatus.BLOCKED,
                 failure_code="REVIEW_CONTEXT_UNAVAILABLE",
                 failure_classification=FailureClassification.BLOCKED_PREREQUISITE,
-                failure_reason="authoritative review context was not registered for the checkpoint subject",
+                failure_reason=derivation.detail or "authoritative review context could not be derived from typed upstream artifacts",
             )
-        if context.review_checkpoint_id is not checkpoint:
+        if any(context.review_checkpoint_id is not checkpoint for context in contexts):
             return StageExecutionResult(
                 status=StageResultStatus.BLOCKED,
                 failure_code="REVIEW_CONTEXT_INVALID",
                 failure_classification=FailureClassification.BLOCKED_PREREQUISITE,
                 failure_reason="registered review context names a different checkpoint",
             )
-        current = self.control_store.get_current_review(run_id=job.run_id, subject_key=review_subject_key(context))
-        if current is not None and current.decision.decision in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
+        for context in contexts:
+            self.control_store.register_review_subject_context(run_id=job.run_id, context=context)
+        accepted = True
+        for context in contexts:
+            current = self.control_store.get_current_review(run_id=job.run_id, subject_key=review_subject_key(context))
+            if current is None or current.decision.decision not in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
+                accepted = False
+                break
             try:
                 self.review_policy.require_compatible(current.decision, context)
             except ReviewCompatibilityError:
-                pass
-            else:
-                return StageExecutionResult(status=StageResultStatus.SUCCEEDED)
-        return StageExecutionResult(status=StageResultStatus.NEEDS_REVIEW, review_context=context)
+                accepted = False
+                break
+        if accepted:
+            return StageExecutionResult(status=StageResultStatus.SUCCEEDED)
+        if len(contexts) == 1:
+            return StageExecutionResult(status=StageResultStatus.NEEDS_REVIEW, review_context=contexts[0])
+        return StageExecutionResult(status=StageResultStatus.NEEDS_REVIEW, review_contexts=contexts)
 
     def _handler_available(self, handler_key: str) -> bool:
         return not isinstance(self.executor, StageHandlerRegistry) or self.executor.has_handler(handler_key)
@@ -538,7 +583,8 @@ class JobWorker:
             return False
         for dependency_id in stage.conditional_dependencies:
             dependency = self.control_store.get_stage_job(run_id=plan.run_id, stage_id=dependency_id)
-            if dependency is not None and dependency.status is not JobStatus.SUCCEEDED:
+            dependency_stage = plan.stage(dependency_id)
+            if dependency_stage is not None and dependency_stage.selected and (dependency is None or dependency.status is not JobStatus.SUCCEEDED):
                 return False
         return True
 
@@ -575,9 +621,11 @@ class JobWorker:
             job_status = JobStatus.SUCCEEDED
             attempt_status = StageStatus.SUCCEEDED
         elif result.status is StageResultStatus.NEEDS_REVIEW:
-            if result.review_context is None:
+            contexts = result.review_contexts or ((result.review_context,) if result.review_context is not None else ())
+            if not contexts:
                 raise PlatformError("review result has no authoritative context")
-            self.control_store.register_review_subject_context(run_id=job.run_id, context=result.review_context)
+            for context in contexts:
+                self.control_store.register_review_subject_context(run_id=job.run_id, context=context)
             job_status = JobStatus.NEEDS_REVIEW
             attempt_status = StageStatus.NEEDS_REVIEW
         elif result.status is StageResultStatus.BLOCKED:
@@ -712,7 +760,13 @@ class BoundedWorkerPool:
         return tuple(outcomes)
 
 
-def load_authoritative_execution_plan(project_root: str | Path, *, run_id: str, plan_id: str | None = None) -> ExecutionPlan:
+def load_authoritative_execution_plan(
+    project_root: str | Path,
+    *,
+    run_id: str,
+    selection: ExecutionPlanSelection | None = None,
+    plan_id: str | None = None,
+) -> ExecutionPlan:
     """Project the existing architecture DAG into a run-scoped durable plan.
 
     This is intentionally a loader, not a second hard-coded DAG.  The
@@ -724,23 +778,43 @@ def load_authoritative_execution_plan(project_root: str | Path, *, run_id: str, 
 
     path = Path(project_root) / "docs" / "architecture" / "specs" / "stage_graph.yml"
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    conditional_stage_ids = tuple(str(raw["stage_id"]) for raw in document.get("stages", []) if bool(raw.get("conditional", False)))
+    if selection is None:
+        raise ExecutionPlanSelectionError(conditional_stage_ids)
+    if selection.run_id != run_id:
+        raise ExecutionPlanSelectionError(conditional_stage_ids, "execution selection is bound to a different run")
+    decisions = {item.stage_id: item for item in selection.decisions}
+    unknown = tuple(sorted(set(decisions) - set(conditional_stage_ids)))
+    missing = tuple(stage_id for stage_id in conditional_stage_ids if stage_id not in decisions)
+    required_unselected = tuple(
+        str(raw["stage_id"])
+        for raw in document.get("stages", [])
+        if bool(raw.get("conditional", False)) and bool(raw.get("required", True)) and raw.get("stage_id") in decisions and not decisions[str(raw["stage_id"])].selected
+    )
+    if unknown or missing or required_unselected:
+        unresolved = tuple(sorted(set(unknown) | set(missing) | set(required_unselected)))
+        detail = "execution selection must resolve every conditional stage exactly once"
+        if required_unselected:
+            detail = "required conditional stages cannot be excluded by the execution selection"
+        raise ExecutionPlanSelectionError(unresolved, detail)
     stages = []
     for raw in document.get("stages", []):
         stage_id = str(raw["stage_id"])
         conditional = bool(raw.get("conditional", False))
         required = bool(raw.get("required", True))
+        decision = decisions.get(stage_id)
         checkpoint = raw.get("review_checkpoint_id")
         conditional_dependencies = tuple(dict.fromkeys(
             str(item.get("dependency")) for item in raw.get("conditional_dependencies", []) if isinstance(item, dict) and item.get("dependency")
         ))
-        selected = (not conditional) or required
+        selected = True if not conditional else decision.selected
         stages.append(
             StageSpec(
                 stage_id=stage_id,
                 required=required,
                 conditional=conditional,
                 selected=selected,
-                selection_reason=("required authoritative stage selected" if selected else "conditional optional capability not selected by runtime policy"),
+                selection_reason=("unconditional stage selected" if not conditional else decision.reason),
                 dependencies=tuple(str(item) for item in raw.get("dependencies", [])),
                 optional_dependencies=tuple(str(item) for item in raw.get("optional_dependencies", [])),
                 conditional_dependencies=conditional_dependencies,
@@ -749,17 +823,27 @@ def load_authoritative_execution_plan(project_root: str | Path, *, run_id: str, 
                 required_review_checkpoint=ReviewCheckpoint(str(raw["required_review_checkpoint"])) if raw.get("required_review_checkpoint") else None,
                 final_validation=stage_id == "VALIDATION_RECONCILIATION",
                 source_scope=str(raw["source_scope"]) if raw.get("source_scope") else None,
-                metadata={"graph_source": "stage_graph.yml"},
+                metadata={
+                    "graph_source": "stage_graph.yml",
+                    **({} if decision is None else {
+                        "selection_policy_ref": decision.policy_ref,
+                        "selection_scope": decision.scope,
+                        "selection_scope_fingerprint": decision.scope_fingerprint,
+                        **({"selection_evidence_ref": decision.evidence_ref} if decision.evidence_ref else {}),
+                    }),
+                },
             )
         )
     if not stages:
         raise PlatformError("authoritative stage graph contains no stages")
     return ExecutionPlan(
-        plan_id=plan_id or stable_id("execution-plan", {"run_id": run_id, "graph": str(path)}),
+        plan_id=plan_id or stable_id("execution-plan", {"run_id": run_id, "graph": str(path), "selection": selection.content_hash}),
         run_id=run_id,
         graph_source="docs/architecture/specs/stage_graph.yml",
         graph_version=str(document.get("scope", "v1_runtime_stage_dag")),
         stages=tuple(stages),
+        selection=selection,
+        success_guard_required=True,
     )
 
 
@@ -769,6 +853,7 @@ __all__ = [
     "CancellationProbePort",
     "DurableCancellationProbe",
     "DurableExecutionSubmission",
+    "ExecutionPlanSelectionError",
     "FaultInjector",
     "InjectedWorkerCrash",
     "JobWorker",

@@ -5,6 +5,8 @@ from .entity_resolution import EntityResolutionService
 from .evidence_fusion import EvidenceFusionService
 from .canonical import CanonicalFinalizationService, CanonicalHypothesisService, CanonicalIdentityProposalService, CanonicalizationError
 from .review_policy import ReviewCompatibilityError, ReviewPolicyService
+from .execution_plan import ExecutionPlanService
+from .review_subjects import ReviewCheckpointSubjectResolver, ReviewSubjectDerivation, ReviewSubjectDerivationPort
 from .validation import ValidationInputs, ValidationOutcome, ValidationService
 from .platform import GateEvidenceService
 from .distributed import (
@@ -17,7 +19,7 @@ from .distributed import (
     ScaleService,
 )
 from .visualization import VisualizationInputError, VisualizationService
-from .jobs import BoundedWorkerPool, DurableExecutionSubmission, JobWorker, StageExecutorPort, StageHandlerRegistry, load_authoritative_execution_plan
+from .jobs import BoundedWorkerPool, DurableExecutionSubmission, ExecutionPlanSelectionError, JobWorker, StageExecutorPort, StageHandlerRegistry, load_authoritative_execution_plan
 
 __all__ = [
     "DependencyDiscoveryService",
@@ -29,6 +31,10 @@ __all__ = [
     "CanonicalizationError",
     "ReviewCompatibilityError",
     "ReviewPolicyService",
+    "ExecutionPlanService",
+    "ReviewCheckpointSubjectResolver",
+    "ReviewSubjectDerivation",
+    "ReviewSubjectDerivationPort",
     "ValidationInputs",
     "ValidationOutcome",
     "ValidationService",
@@ -44,6 +50,7 @@ __all__ = [
     "VisualizationService",
     "BoundedWorkerPool",
     "DurableExecutionSubmission",
+    "ExecutionPlanSelectionError",
     "JobWorker",
     "StageExecutorPort",
     "StageHandlerRegistry",

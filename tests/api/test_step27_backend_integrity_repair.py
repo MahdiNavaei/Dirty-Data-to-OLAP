@@ -12,7 +12,9 @@ from dirty_data_to_olap.application.backend import BackendError, BackendService,
 from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.domain.contracts.api import SubmissionResult
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlan, StageSpec
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest
+from dirty_data_to_olap.domain.contracts.source import stable_id
 from dirty_data_to_olap.entrypoints.api import create_app
 from dirty_data_to_olap.platform import LocalPlatform
 
@@ -63,6 +65,16 @@ def _run(platform: LocalPlatform, backend: BackendService, key: str = "repair-ru
         principal=Principal("repair-reviewer", frozenset({"runs:write"}), "LOCAL_TEST_AUTH"),
         idempotency_key=key,
     )[0].run_id
+
+
+def _register_execution_plan(platform: LocalPlatform, run_id: str) -> None:
+    platform.control_store.register_execution_plan(
+        ExecutionPlan(
+            plan_id=stable_id("step27-test-plan", run_id),
+            run_id=run_id,
+            stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),),
+        )
+    )
 
 
 def _review_body(ref, *, context: ReviewCompatibilityContext | None = None, rationale: str = "server-authoritative review") -> dict:
@@ -227,6 +239,7 @@ def test_execution_command_identity_survives_completion_failure_without_exactly_
     executor = _RecordingExecutor()
     backend.execution = executor
     run_id = _run(platform, backend, key="execution-run")
+    _register_execution_plan(platform, run_id)
     original = platform.control_store.complete_idempotency
     failed = False
 
@@ -256,6 +269,7 @@ def test_execution_reservation_race_delivers_at_most_one_command_identity(tmp_pa
     executor = _RecordingExecutor()
     backend1.execution = executor
     run_id = _run(platform, backend1, key="execution-race-run")
+    _register_execution_plan(platform, run_id)
     from dirty_data_to_olap.adapters.platform import SQLiteControlStore
 
     store2 = SQLiteControlStore(platform.control_store.path, project_root=tmp_path)

@@ -34,11 +34,26 @@ finalization fence converts a completion race to `CANCELLED`. Review resume is
 authorized only by the existing `ReviewPolicyService` and a compatible
 persisted review context.
 
-The durable job tables are schema version 5 in the existing control store.
+The durable job tables are schema version 6 in the existing control store.
 `GET /api/v1/runs/{run_id}/jobs` and the scoped job detail route expose only
 safe metadata for the later frontend step. Step24's synchronous distributed
 partition/scale layer remains unchanged and is wrapped only at this stage
 boundary.
+
+Before a submit command is accepted, the application-owned
+`ExecutionPlanService` compiles the authoritative `stage_graph.yml` for the
+run and persists an `ExecutionPlan` bound to an explicit
+`ExecutionPlanSelection`. Conditional stages never default to omitted. The
+public preparation route is `/api/v1/runs/{run_id}/execution/prepare`; an
+unresolved selection returns a typed `BLOCKED` result and does not create a
+guessed plan.
+
+Review checkpoint stages are control-plane pauses. A worker derives their
+authoritative context from registered, verified typed upstream artifacts by
+calling the existing evidence, canonical-identity, analytical-plan or
+materialization context builder. It persists the context, reaches
+`NEEDS_REVIEW`, and only resumes after a compatible Step27 review decision.
+G6 remains the final success authority; Step29/frontend work is not started.
 
 ## Future replacement boundaries
 

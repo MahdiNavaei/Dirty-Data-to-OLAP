@@ -69,6 +69,12 @@ def _load_json(value: str | None, default: Any) -> Any:
     return default if value is None else json.loads(value)
 
 
+def _review_context_json(context: ReviewCompatibilityContext | None, contexts: tuple[ReviewCompatibilityContext, ...] = ()) -> str | None:
+    if contexts:
+        return _dump({"contexts": [item.model_dump(mode="json") for item in contexts]})
+    return _dump(context) if context is not None else None
+
+
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
@@ -651,8 +657,8 @@ class SQLiteControlStore(ControlStorePort):
 
     def register_review_subject_context(self, *, run_id: str, context: ReviewCompatibilityContext) -> ReviewCompatibilityContext:
         with self._transaction() as connection:
-            artifact = connection.execute("SELECT run_id, content_hash FROM artifacts WHERE artifact_id = ?", (context.subject_artifact_id,)).fetchone()
-            if artifact is None or str(artifact["run_id"]) != run_id or str(artifact["content_hash"]) != context.subject_content_hash:
+            artifact = connection.execute("SELECT run_id FROM artifacts WHERE artifact_id = ?", (context.subject_artifact_id,)).fetchone()
+            if artifact is None or str(artifact["run_id"]) != run_id:
                 raise PlatformError("review context must bind an existing artifact in the requested run")
             existing = connection.execute(
                 "SELECT context_json FROM review_subject_contexts WHERE run_id = ? AND checkpoint = ? AND artifact_id = ?",
@@ -985,8 +991,14 @@ class SQLiteControlStore(ControlStorePort):
     @staticmethod
     def _job_from_row(row: sqlite3.Row) -> JobRecord:
         context = None
+        contexts: tuple[ReviewCompatibilityContext, ...] = ()
         if row["review_context_json"]:
-            context = ReviewCompatibilityContext.model_validate(_load_json(str(row["review_context_json"]), {}))
+            payload = _load_json(str(row["review_context_json"]), {})
+            if isinstance(payload, dict) and isinstance(payload.get("contexts"), list):
+                contexts = tuple(ReviewCompatibilityContext.model_validate(item) for item in payload["contexts"])
+                context = contexts[0] if len(contexts) == 1 else None
+            else:
+                context = ReviewCompatibilityContext.model_validate(payload)
         durable_result = _load_json(str(row["durable_result_json"]), {}) if "durable_result_json" in row.keys() and row["durable_result_json"] else None
         return JobRecord(
             job_id=str(row["job_id"]),
@@ -1015,6 +1027,7 @@ class SQLiteControlStore(ControlStorePort):
             cancellation_requested_at=_parse_datetime(str(row["cancellation_requested_at"])) if row["cancellation_requested_at"] else None,
             result_refs=tuple(_load_json(str(row["result_refs"]), [])),
             review_context=context,
+            review_contexts=contexts,
             delivery_phase=DeliveryPhase(str(row["delivery_phase"])) if "delivery_phase" in row.keys() else DeliveryPhase.NOT_STARTED,
             replay_safety=ReplaySafety(str(row["replay_safety"])) if "replay_safety" in row.keys() else ReplaySafety.RECONCILIATION_REQUIRED_ON_UNKNOWN,
             source_scope=row["source_scope"] if "source_scope" in row.keys() else None,
@@ -1304,7 +1317,7 @@ class SQLiteControlStore(ControlStorePort):
                 durable_result = _dump(result)
             cursor = connection.execute(
                 "UPDATE jobs SET status = ?, attempt_id = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, retry_count = ?, failure_code = ?, failure_classification = ?, failure_reason = ?, result_refs = ?, review_context_json = ?, delivery_phase = ?, durable_result_json = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
-                (effective_status.value, next_attempt_id, (available_at or now).isoformat(), retry_count, failure_code, failure_classification.value if isinstance(failure_classification, FailureClassification) else failure_classification, failure_reason, _dump(result.output_artifact_refs if effective_status is not JobStatus.CANCELLED else ()), _dump(result.review_context) if result.review_context is not None else None, next_phase, durable_result, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+                (effective_status.value, next_attempt_id, (available_at or now).isoformat(), retry_count, failure_code, failure_classification.value if isinstance(failure_classification, FailureClassification) else failure_classification, failure_reason, _dump(result.output_artifact_refs if effective_status is not JobStatus.CANCELLED else ()), _review_context_json(result.review_context, result.review_contexts), next_phase, durable_result, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
             )
             if cursor.rowcount != 1:
                 raise ConcurrencyConflictError("stage finalization lost its compare-and-swap race")

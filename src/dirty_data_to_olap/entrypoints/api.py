@@ -23,6 +23,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewCompatibilityContext,
 )
 from dirty_data_to_olap.domain.contracts.jobs import JobRecord
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanSelection, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import ArtifactRef, RunRecord, StageAttemptRecord
 
 
@@ -59,6 +60,10 @@ class CreateRunRequest(ApiModel):
         if any(secret.search(str(k)) or secret.search(str(v)) for k, v in value.items()):
             raise ValueError("metadata contains a restricted field")
         return value
+
+
+class PrepareExecutionPlanRequest(ApiModel):
+    selection: ExecutionPlanSelection
 
 
 class RegisterArtifactRequest(ApiModel):
@@ -420,8 +425,25 @@ def create_app(
     @app.post("/api/v1/runs/{run_id}/execution", tags=["execution"])
     async def submit_execution(request: Request, run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
         result, replayed = backend.submit(run_id=run_id, principal=principal(request), idempotency_key=key(idempotency_key))
-        status = 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202 if result.status == "ACCEPTED" else 409 if result.status == "CONFLICT" else 422
+        status = 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202 if result.status == "ACCEPTED" else 409 if result.status in {"CONFLICT", "BLOCKED", "REVIEW_REQUIRED"} else 422
         response = JSONResponse(status_code=status, content=result.model_dump(mode="json"))
+        response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
+        return response
+
+    @app.post("/api/v1/runs/{run_id}/execution/prepare", tags=["execution"])
+    async def prepare_execution_plan(
+        payload: PrepareExecutionPlanRequest,
+        request: Request,
+        run_id: str = Path(min_length=1, max_length=128),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> JSONResponse:
+        result, replayed = backend.prepare_execution_plan(
+            run_id=run_id,
+            selection=payload.selection,
+            principal=principal(request),
+            idempotency_key=key(idempotency_key),
+        )
+        response = JSONResponse(status_code=200 if result.status is PlanPreparationStatus.READY else 409, content=result.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         return response
 
@@ -449,6 +471,7 @@ __all__ = [
     "CreateRunRequest",
     "ErrorEnvelope",
     "PageResponse",
+    "PrepareExecutionPlanRequest",
     "RegisterArtifactRequest",
     "ReviewActionDecision",
     "RunView",

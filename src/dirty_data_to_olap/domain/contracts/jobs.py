@@ -94,6 +94,81 @@ class DeliveryPhase(str, Enum):
     RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
 
 
+class PlanPreparationStatus(str, Enum):
+    READY = "READY"
+    BLOCKED = "BLOCKED"
+
+
+class StageSelectionDecision(_SourceModel):
+    """Run-specific policy evidence for one conditional stage."""
+
+    stage_id: str = Field(min_length=1, max_length=128)
+    selected: bool
+    policy_ref: str = Field(min_length=1, max_length=256)
+    evidence_ref: str | None = Field(default=None, max_length=256)
+    reason: str = Field(min_length=1, max_length=512)
+    scope: str = Field(min_length=1, max_length=256)
+    scope_fingerprint: str = Field(min_length=1, max_length=256)
+
+    @field_validator("stage_id")
+    @classmethod
+    def validate_stage_id(cls, value: str) -> str:
+        return _identity(value)
+
+
+class ExecutionPlanSelection(_SourceModel):
+    """Explicit selection evidence bound to one run and its planning scope."""
+
+    run_id: str = Field(min_length=1, max_length=128)
+    policy_ref: str = Field(min_length=1, max_length=256)
+    scope: str = Field(min_length=1, max_length=256)
+    scope_fingerprint: str = Field(min_length=1, max_length=256)
+    decisions: tuple[StageSelectionDecision, ...] = ()
+
+    @field_validator("run_id")
+    @classmethod
+    def validate_run_id(cls, value: str) -> str:
+        return _identity(value)
+
+    @model_validator(mode="after")
+    def unique_stage_decisions(self) -> "ExecutionPlanSelection":
+        stage_ids = [item.stage_id for item in self.decisions]
+        if len(stage_ids) != len(set(stage_ids)):
+            raise ValueError("execution plan selection decisions must be unique by stage")
+        return self
+
+    @property
+    def content_hash(self) -> str:
+        return stable_digest(self.model_dump(mode="json", exclude={"schema_version"}))
+
+    def decision_for(self, stage_id: str) -> StageSelectionDecision | None:
+        return next((item for item in self.decisions if item.stage_id == stage_id), None)
+
+
+class ExecutionPlanPreparation(_SourceModel):
+    """Truthful result of the application-owned plan preparation boundary."""
+
+    run_id: str = Field(min_length=1, max_length=128)
+    status: PlanPreparationStatus
+    plan_id: str | None = Field(default=None, max_length=128)
+    selection_fingerprint: str = Field(min_length=1, max_length=256)
+    unresolved_stage_ids: tuple[str, ...] = ()
+    detail: str = Field(min_length=1, max_length=512)
+
+    @field_validator("run_id")
+    @classmethod
+    def validate_run_id(cls, value: str) -> str:
+        return _identity(value)
+
+    @model_validator(mode="after")
+    def ready_has_plan(self) -> "ExecutionPlanPreparation":
+        if self.status is PlanPreparationStatus.READY and not self.plan_id:
+            raise ValueError("ready plan preparation requires a plan identity")
+        if self.status is PlanPreparationStatus.BLOCKED and not self.unresolved_stage_ids:
+            raise ValueError("blocked plan preparation requires unresolved stage identities")
+        return self
+
+
 class StageSpec(_SourceModel):
     """One run-scoped projection of the authoritative architecture DAG."""
 
@@ -148,6 +223,8 @@ class ExecutionPlan(_SourceModel):
     graph_source: str = Field(default="docs/architecture/specs/stage_graph.yml", min_length=1, max_length=256)
     graph_version: str = Field(default="v1_runtime_stage_dag", min_length=1, max_length=128)
     stages: tuple[StageSpec, ...] = Field(min_length=1)
+    selection: ExecutionPlanSelection | None = None
+    success_guard_required: bool = False
     created_at: datetime = Field(default_factory=utc_now)
 
     @field_validator("plan_id", "run_id")
@@ -161,9 +238,46 @@ class ExecutionPlan(_SourceModel):
         if len(set(ids)) != len(ids):
             raise ValueError("execution plan stage identities must be unique")
         known = set(ids)
+        conditional_ids = {stage.stage_id for stage in self.stages if stage.conditional}
+        if conditional_ids and self.selection is None:
+            raise ValueError("conditional execution stages require explicit run-specific selection evidence")
+        if self.selection is not None:
+            if self.selection.run_id != self.run_id:
+                raise ValueError("execution plan selection is bound to a different run")
+            selected_ids = {item.stage_id for item in self.selection.decisions}
+            if selected_ids != conditional_ids:
+                raise ValueError("execution plan selection must resolve every conditional stage exactly once")
+            if any(
+                item.policy_ref != self.selection.policy_ref
+                or item.scope != self.selection.scope
+                or item.scope_fingerprint != self.selection.scope_fingerprint
+                for item in self.selection.decisions
+            ):
+                raise ValueError("stage selection decisions must use the enclosing policy and scope")
+            for stage in self.stages:
+                if not stage.conditional:
+                    continue
+                decision = self.selection.decision_for(stage.stage_id)
+                if decision is None or decision.selected != stage.selected or decision.reason != stage.selection_reason:
+                    raise ValueError("stage selection does not match its authoritative selection evidence")
         for stage in self.stages:
             if stage.stage_id in stage.dependencies or any(dep not in known for dep in stage.dependencies):
                 raise ValueError("execution plan contains an invalid dependency")
+            if stage.selected:
+                for dependency_id in stage.dependencies:
+                    dependency = self.stage(dependency_id)
+                    if dependency is None or not dependency.selected:
+                        raise ValueError("selected stages cannot depend on an unselected hard dependency")
+                if stage.required_review_checkpoint is not None:
+                    checkpoint_stage = next(
+                        (candidate for candidate in self.stages if candidate.review_checkpoint is stage.required_review_checkpoint),
+                        None,
+                    )
+                    if checkpoint_stage is None or not checkpoint_stage.selected:
+                        raise ValueError("selected stages require a selected review checkpoint guard")
+            for dependency_id in stage.conditional_dependencies:
+                if dependency_id not in known:
+                    raise ValueError("conditional dependencies must be represented in the execution plan")
         pending = {
             stage.stage_id: set(
                 dep for dep in (*stage.dependencies, *stage.optional_dependencies, *stage.conditional_dependencies) if dep in known
@@ -180,6 +294,8 @@ class ExecutionPlan(_SourceModel):
                 pending.pop(stage_id)
         if sum(stage.final_validation for stage in self.stages) > 1:
             raise ValueError("execution plan may have at most one final validation stage")
+        if self.success_guard_required and not any(stage.final_validation and stage.required and stage.selected for stage in self.stages):
+            raise ValueError("successful execution plans require a selected final validation stage")
         return self
 
     @property
@@ -219,6 +335,7 @@ class JobRecord(_SourceModel):
     cancellation_requested_at: datetime | None = None
     result_refs: tuple[str, ...] = ()
     review_context: ReviewCompatibilityContext | None = None
+    review_contexts: tuple[ReviewCompatibilityContext, ...] = ()
     delivery_phase: DeliveryPhase = DeliveryPhase.NOT_STARTED
     replay_safety: ReplaySafety = ReplaySafety.RECONCILIATION_REQUIRED_ON_UNKNOWN
     source_scope: str | None = None
@@ -299,6 +416,7 @@ class StageExecutionResult(_SourceModel):
     failure_classification: FailureClassification | None = None
     failure_reason: str | None = Field(default=None, max_length=512)
     review_context: ReviewCompatibilityContext | None = None
+    review_contexts: tuple[ReviewCompatibilityContext, ...] = ()
     metadata: Mapping[str, str] = Field(default_factory=dict)
 
     @field_validator("metadata")
@@ -315,8 +433,10 @@ class StageExecutionResult(_SourceModel):
 
     @model_validator(mode="after")
     def validate_result(self) -> "StageExecutionResult":
-        if self.status is StageResultStatus.NEEDS_REVIEW and self.review_context is None:
+        if self.status is StageResultStatus.NEEDS_REVIEW and self.review_context is None and not self.review_contexts:
             raise ValueError("NEEDS_REVIEW requires an authoritative review context")
+        if self.review_context is not None and self.review_contexts and self.review_context not in self.review_contexts:
+            raise ValueError("singular review context must be one of the explicit review contexts")
         if self.status in {StageResultStatus.BLOCKED, StageResultStatus.FAILED} and not (self.failure_code and self.failure_classification):
             raise ValueError("blocked or failed stage results require a classified failure")
         if self.failure_classification is FailureClassification.NEEDS_REVIEW and self.status is not StageResultStatus.NEEDS_REVIEW:
@@ -335,6 +455,8 @@ class RetryPolicy(_SourceModel):
 
 __all__ = [
     "ExecutionPlan",
+    "ExecutionPlanPreparation",
+    "ExecutionPlanSelection",
     "DeliveryPhase",
     "FailureClassification",
     "JobKind",
@@ -343,8 +465,10 @@ __all__ = [
     "JobStatus",
     "RetryPolicy",
     "ReplaySafety",
+    "PlanPreparationStatus",
     "StageExecutionRequest",
     "StageExecutionResult",
     "StageResultStatus",
+    "StageSelectionDecision",
     "StageSpec",
 ]

@@ -29,11 +29,13 @@ from dirty_data_to_olap.domain.contracts.canonical import (
 from dirty_data_to_olap.domain.contracts.jobs import (
     DeliveryPhase,
     ExecutionPlan,
+    ExecutionPlanSelection,
     FailureClassification,
     JobStatus,
     ReplaySafety,
     StageExecutionResult,
     StageResultStatus,
+    StageSelectionDecision,
     StageSpec,
 )
 from dirty_data_to_olap.domain.contracts.platform import (
@@ -113,7 +115,25 @@ def _command(run_id: str, key: str, action: ExecutionAction = ExecutionAction.SU
 
 
 def _register_plan(control: SQLiteControlStore, run_id: str, stages: tuple[StageSpec, ...]) -> ExecutionPlan:
-    plan = ExecutionPlan(plan_id=stable_id("repair-plan", {"run": run_id, "stages": [stage.stage_id for stage in stages]}), run_id=run_id, stages=stages)
+    conditional = tuple(stage for stage in stages if stage.conditional)
+    selection = None if not conditional else ExecutionPlanSelection(
+        run_id=run_id,
+        policy_ref="step28-test-selection",
+        scope="step28-test",
+        scope_fingerprint="step28-test-scope",
+        decisions=tuple(
+            StageSelectionDecision(
+                stage_id=stage.stage_id,
+                selected=stage.selected,
+                policy_ref="step28-test-selection",
+                reason=stage.selection_reason,
+                scope="step28-test",
+                scope_fingerprint="step28-test-scope",
+            )
+            for stage in conditional
+        ),
+    )
+    plan = ExecutionPlan(plan_id=stable_id("repair-plan", {"run": run_id, "stages": [stage.stage_id for stage in stages]}), run_id=run_id, stages=stages, selection=selection)
     control.register_execution_plan(plan)
     return plan
 

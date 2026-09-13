@@ -14,6 +14,8 @@ import sqlite3
 import sys
 from tempfile import TemporaryDirectory
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
@@ -26,6 +28,7 @@ from dirty_data_to_olap.domain.contracts.api import SubmissionResult
 from dirty_data_to_olap.application.visualization import VisualizationService
 from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlan, ExecutionPlanSelection, StageSelectionDecision, StageSpec
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest
 from dirty_data_to_olap.domain.contracts.validation import (
     RecordDisposition,
@@ -327,6 +330,7 @@ def _repair_checks() -> int:
         executor = _RepairRecordingExecutor()
         backend.execution = executor
         run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("execution", frozenset({"runs:write"})), idempotency_key="execution-run")[0].run_id
+        platform.control_store.register_execution_plan(ExecutionPlan(plan_id="step27-validator-execution-plan", run_id=run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),)))
         original_complete = platform.control_store.complete_idempotency
         failed = False
         def fail_completion(record):
@@ -501,6 +505,28 @@ def main() -> int:
             checks += 1; _check(set(client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "malformed-2"}, json={"project_id": "validator-project"}).json()) == {"error"}, "error envelope")
             checks += 1; _check(client.get("/api/v1/runs", headers=AUTH, params={"page_size": 101}).status_code == 422, "hard page limit")
             checks += 1; _check(client.get("/api/v1/runs", headers=AUTH, params={"status": "PARTIAL"}).status_code == 400, "undefined run state rejected")
+            graph = yaml.safe_load((ROOT / "docs" / "architecture" / "specs" / "stage_graph.yml").read_text(encoding="utf-8"))
+            selection = ExecutionPlanSelection(
+                run_id=run_id,
+                policy_ref="step27-validator-selection-v1",
+                scope="step27-validator-scope",
+                scope_fingerprint="step27-validator-scope-fingerprint",
+                decisions=tuple(
+                    StageSelectionDecision(
+                        stage_id=str(stage["stage_id"]),
+                        selected=bool(stage.get("required", False)),
+                        policy_ref="step27-validator-selection-v1",
+                        evidence_ref=f"step27-evidence-{stage['stage_id']}",
+                        reason=f"explicit validator {'selected' if stage.get('required', False) else 'excluded'} {stage['stage_id']}",
+                        scope="step27-validator-scope",
+                        scope_fingerprint="step27-validator-scope-fingerprint",
+                    )
+                    for stage in graph.get("stages", [])
+                    if stage.get("conditional")
+                ),
+            )
+            prepared = client.post(f"/api/v1/runs/{run_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "prepare-1"}, json={"selection": selection.model_dump(mode="json")})
+            checks += 1; _check(prepared.status_code == 200 and prepared.json()["status"] == "READY", "typed execution plan preparation")
             submit = client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "submit-1"})
             checks += 1; _check(submit.status_code == 202 and submit.json()["status"] == "ACCEPTED" and submit.json()["submission_id"], "durable command submission")
             checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "submit-1"}).json() == submit.json(), "submission idempotency")
