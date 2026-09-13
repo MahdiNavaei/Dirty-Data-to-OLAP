@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -21,9 +22,9 @@ REPORT_PATH = ROOT / "output" / "step29_frontend_validation.json"
 FIXTURE = FRONTEND / "e2e" / "fixtures" / "orders.csv"
 
 
-def run_checked(label: str, command: list[str], *, cwd: Path, timeout: int = 120) -> str:
+def run_checked(label: str, command: list[str], *, cwd: Path, timeout: int = 120, env: dict[str, str] | None = None) -> str:
     print(f"[step29] {label}")
-    result = subprocess.run(command, cwd=cwd, text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=timeout)
+    result = subprocess.run(command, cwd=cwd, env=env, text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=timeout)
     output = (result.stdout + result.stderr).strip()
     if result.returncode != 0:
         raise RuntimeError(f"{label} failed with exit code {result.returncode}: {output[-3000:]}")
@@ -40,6 +41,31 @@ def wait_for_http(url: str, *, timeout: float = 20.0) -> None:
         except (OSError, URLError):
             time.sleep(0.25)
     raise RuntimeError(f"server did not become reachable: {url}")
+
+
+def reserve_local_port() -> int:
+    """Select an ephemeral loopback port so validation is not tied to a host reservation."""
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def validate_real_pipeline() -> dict[str, str]:
+    """Run the real-provider product test, including typed provenance assertions."""
+
+    run_checked(
+        "Real pipeline provenance and negative controls",
+        [sys.executable, "-m", "pytest", "-q", "tests/integration/test_step29_product_path.py"],
+        cwd=ROOT,
+        timeout=300,
+    )
+    return {
+        "status": "PASS",
+        "provider_path": "DataProfilerAdapter + DesbordanteDependencyAdapter + staged quality reader",
+        "typed_provenance": "PASS",
+        "negative_control": "duplicate order_id rejected after upload at dependency boundary",
+    }
 
 
 class BrowserCli:
@@ -106,14 +132,17 @@ def validate_browser() -> dict[str, object]:
         temporary_directory = tempfile.mkdtemp(prefix="step29-g7-runtime-")
         temporary = temporary_directory
         if temporary:
+            api_port = reserve_local_port()
+            api_url = f"http://127.0.0.1:{api_port}"
             api_process = subprocess.Popen(
-                [sys.executable, str(ROOT / "tools" / "run_step29_local.py"), "--root", temporary, "--graph-root", str(ROOT), "--port", "8765"],
+                [sys.executable, str(ROOT / "tools" / "run_step29_local.py"), "--root", temporary, "--graph-root", str(ROOT), "--port", str(api_port)],
                 cwd=ROOT,
                 stdout=api_log,
                 stderr=subprocess.STDOUT,
                 text=True,
             )
-            wait_for_http("http://127.0.0.1:8765/api/v1/health")
+            wait_for_http(f"{api_url}/api/v1/health")
+            run_checked("Frontend browser-port build", ["npm.cmd", "run", "build"], cwd=FRONTEND, timeout=180, env={**os.environ, "VITE_API_BASE_URL": api_url})
             node = shutil.which("node.exe") or shutil.which("node")
             vite_entrypoint = FRONTEND / "node_modules" / "vite" / "bin" / "vite.js"
             if node is None or not vite_entrypoint.is_file():
@@ -121,6 +150,7 @@ def validate_browser() -> dict[str, object]:
             frontend_process = subprocess.Popen(
                 [node, str(vite_entrypoint), "preview", "--host", "127.0.0.1", "--port", "4173"],
                 cwd=FRONTEND,
+                env={**os.environ, "VITE_API_BASE_URL": api_url},
                 stdout=frontend_log,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -207,9 +237,10 @@ def main() -> int:
         run_checked("OpenAPI generation", [sys.executable, "tools/generate_step29_openapi.py", "--output", str(FRONTEND / "openapi.json")], cwd=ROOT)
         for label, command in (
             ("Python compile", [sys.executable, "-m", "compileall", "-q", "src", "tools"]),
-            ("Focused backend product test", [sys.executable, "-m", "pytest", "-q", "tests/integration/test_step29_product_path.py"]),
+            ("Focused backend architecture test", [sys.executable, "-m", "pytest", "-q", "tests/integration/test_step29_product_path.py::test_step29_runtime_is_a_thin_service_composition_root"]),
         ):
             run_checked(label, command, cwd=ROOT, timeout=180)
+        report["real_pipeline"] = validate_real_pipeline()
         for script in ("typecheck", "lint", "test", "build"):
             run_checked(f"Frontend {script}", ["npm.cmd", "run", script, "--", "--run"] if script == "test" else ["npm.cmd", "run", script], cwd=FRONTEND, timeout=180)
         report["browser"] = validate_browser()

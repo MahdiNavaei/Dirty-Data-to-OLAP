@@ -1,0 +1,59 @@
+{
+  "product_id": "order",
+  "version": "order-product-v1",
+  "source_table": "orders",
+  "entity": {
+    "canonical_entity_type_id": "cet_order",
+    "semantic_id": "order",
+    "business_name": "Order event",
+    "entity_resolution_family": "order_event",
+    "identity_strategy": "source-local-order-id",
+    "identity_column": "order_id",
+    "domain_assertion_refs": ["domain:source-local-order-identity"]
+  },
+  "relationship": {
+    "from_column": "order_id",
+    "to_column": "order_id",
+    "cardinality": "MANY_TO_ONE",
+    "projection": "SOURCE_LOCAL_UCC_IDENTITY",
+    "domain_assertion_ref": "domain:source-local-order-identity"
+  },
+  "profiling": {
+    "metric_policy_version": "order-profile-v1",
+    "profile_config_version": "order-profile-config-v1",
+    "null_markers": []
+  },
+  "quality": {
+    "rule_set_id": "order-runtime-quality",
+    "version": "order-quality-v1",
+    "rules": [
+      {"rule_id": "order.required.order_id", "rule_type": "REQUIRED_VALUE", "column_names": ["order_id"]},
+      {"rule_id": "order.required.customer_id", "rule_type": "REQUIRED_VALUE", "column_names": ["customer_id"]},
+      {"rule_id": "order.required.customer_id_ref", "rule_type": "REQUIRED_VALUE", "column_names": ["customer_id_ref"]},
+      {"rule_id": "order.required.order_date", "rule_type": "REQUIRED_VALUE", "column_names": ["order_date"]},
+      {"rule_id": "order.required.quantity", "rule_type": "REQUIRED_VALUE", "column_names": ["quantity"]},
+      {"rule_id": "order.required.unit_price", "rule_type": "REQUIRED_VALUE", "column_names": ["unit_price"]},
+      {"rule_id": "order.unique.order_id", "rule_type": "UNIQUE_VALUES", "column_names": ["order_id"]},
+      {"rule_id": "order.duplicate.rows", "rule_type": "EXACT_ROW_DUPLICATION", "column_names": []}
+    ]
+  },
+  "analytical": {
+    "policy_version": "order-analytical-policy-v1",
+    "dimension": {"dimension_id": "dim_order", "table_name": "dim_order"},
+    "date_dimension": {"dimension_id": "dim_date", "table_name": "dim_date", "calendar_policy": "GREGORIAN_V1"},
+    "fact": {"fact_id": "fact_orders", "table_name": "fact_orders", "grain_id": "grain_orders"},
+    "column_types": {"order_id": "STRING", "customer_id": "STRING", "customer_id_ref": "STRING", "order_date": "DATE", "quantity": "DECIMAL", "unit_price": "DECIMAL"},
+    "measure": {"measure_id": "measure_quantity", "field_name": "quantity", "semantic_name": "Order quantity", "aggregation_rule": "SUM(quantity)", "unit_semantics": "source quantity units", "currency_semantics": "not applicable"},
+    "domain_assertion_refs": ["domain:order-quantity", "domain:source-local-order-identity"],
+    "deferred_concepts": {"order_amount": "unit_price is present but no reviewed currency or amount semantic is declared by the source contract"}
+  },
+  "validation": {
+    "policy_version": "order-validation-v1",
+    "orphan_policy": {"required_fk": "FAIL"},
+    "monetary_status": "NOT_APPLICABLE",
+    "monetary_reason": "source currency and an amount semantic are not declared by the bounded CSV contract",
+    "required_check_ids": [
+      "artifact_binding", "source_snapshot_universe", "source_record_accounting", "canonical_membership", "canonical_entity_counts", "dedup_explainability", "canonical_event_relationships", "canonical_to_analytical_accounting", "analytical_input_binding", "relationship_allocation", "target_table_set", "fact_count", "fact_grain", "fact_duplicates", "fact_business_values", "foreign_key_integrity", "key_uniqueness", "date_coverage", "quantity_global", "quantity_slices", "lineage_source_to_target", "lineage_target_to_source", "semantic_downstream_cross_check", "no_blocking_discrepancy"
+    ]
+  }
+}

@@ -507,11 +507,18 @@ def main() -> int:
         errors.append("G1 is not PASS")
     if state["gates"]["G2_ARCHITECTURE_READY"] not in {"PENDING", "PASS"}:
         errors.append("G2 is not PENDING or PASS")
+    step29_pass = (
+        state.get("specialist_execution", {}).get("current_step") == 29
+        and state.get("specialist_execution", {}).get("current_role") == "frontend_engineer"
+        and state.get("specialist_execution", {}).get("step29_status") == "PASS"
+        and state["gates"].get("G7_END_TO_END_PRODUCT") == "PASS"
+    )
     if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"} or state["gates"].get("G4_BOUNDED_INTELLIGENCE") not in {"PENDING", "PASS"} or any(
         value != "PENDING" for key, value in state["gates"].items()
         if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY", "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY"}
         and not (key == "G5_INFERENCE_VALIDITY" and value in {"REVIEW_ONLY_VALIDATED", "PASS"})
         and not (key == "G6_DATA_CORRECTNESS" and value in {"PENDING", "PASS"})
+        and not (key == "G7_END_TO_END_PRODUCT" and step29_pass)
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:

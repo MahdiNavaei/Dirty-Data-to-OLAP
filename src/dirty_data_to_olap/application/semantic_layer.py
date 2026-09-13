@@ -240,7 +240,7 @@ class SemanticLayerService:
             canonical = next((item for item in canonical_model.relationships if item.relationship_id == relationship_ref), None)
             if canonical is None:
                 raise SemanticLayerError("UNKNOWN_RELATIONSHIP: canonical relationship does not exist")
-            if canonical.to_entity_type_id != dimension.canonical_entity_type_id or canonical.from_entity_type_id not in fact.canonical_event_refs:
+            if canonical.to_entity_type_id != dimension.canonical_entity_type_id or (canonical.from_entity_type_id not in fact.canonical_event_refs and canonical.from_entity_type_id != fact.canonical_event_type_id):
                 raise SemanticLayerError("RELATIONSHIP_ENDPOINT_MISMATCH: canonical relationship cannot bind this fact FK")
             semantic_scope = SemanticRelationshipScope.CANONICAL_ACCEPTED
             relationship_kind = SemanticRelationshipKind.FACT_TO_DIMENSION

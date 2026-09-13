@@ -364,13 +364,42 @@ class EvidenceFusionService:
 
     def _dependency_items(self, result: DependencyResult) -> list[FusionEvidenceItem]:
         output: list[FusionEvidenceItem] = []
+        inclusion_refs: set[str] = set()
         for evidence in result.inclusion_dependencies:
+            inclusion_refs.add(evidence.evidence_id)
             subject = "rel:" + evidence.left_table_id + ":" + ",".join(evidence.left_columns) + "->" + evidence.right_table_id + ":" + ",".join(evidence.right_columns)
             snapshot_map = {evidence.source_id: evidence.snapshot_id}
             base = dict(producer_id="dependency", family=EvidenceFamily.DEPENDENCY, role=EvidenceRole.DIRECT_OBSERVATION, scope_id=evidence.source_id + ":" + evidence.snapshot_id, observation_scope=EvidenceReliabilityState.FULL if all(evidence.observation_scope.complete_by_table.values()) else EvidenceReliabilityState.BOUNDED, source_ids=(evidence.source_id,), snapshot_ids=(evidence.snapshot_id,), snapshot_by_source=snapshot_map, correlation_group=evidence.evidence_id)
             output.extend((FusionEvidenceItem(evidence_id=evidence.evidence_id + ":coverage", subject_id=subject, metric_name="inclusion_coverage", metric_value=evidence.coverage_ratio, metric_semantics="matched distinct non-null left values divided by eligible left values", direction=EvidenceDirection.SUPPORTS, score_dimension_id="inclusion", dependency_group="inclusion", score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":orphan", subject_id=subject, metric_name="orphan_ratio", metric_value=evidence.violation_ratio, metric_semantics="left values without a target match divided by eligible left values", direction=EvidenceDirection.CONTRADICTS, score_dimension_id="inclusion", dependency_group="inclusion", score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":uniqueness", subject_id=subject, metric_name="target_uniqueness", metric_value=evidence.target_uniqueness_ratio, metric_semantics="unique target values divided by observed target values", direction=EvidenceDirection.SUPPORTS, score_dimension_id="target_uniqueness", dependency_group="target_uniqueness", score_bearing=True, **base), FusionEvidenceItem(evidence_id=evidence.evidence_id + ":type", subject_id=subject, metric_name="type_compatibility", metric_value=1.0 if evidence.type_compatible else 0.0, metric_semantics="project-owned type compatibility boolean", direction=EvidenceDirection.SUPPORTS if evidence.type_compatible else EvidenceDirection.CONTRADICTS, score_dimension_id="type_compatibility", dependency_group="type_compatibility", score_bearing=True, **base)))
             if evidence.low_cardinality_risk:
                 output.append(FusionEvidenceItem(evidence_id=evidence.evidence_id + ":low-cardinality", subject_id=subject, producer_id="dependency", family=EvidenceFamily.DEPENDENCY, role=EvidenceRole.DIRECT_OBSERVATION, metric_name="low_cardinality_risk", metric_value=None, metric_semantics="provider flagged a tiny domain trap", direction=EvidenceDirection.CONTRADICTS, scope_id=evidence.source_id + ":" + evidence.snapshot_id, observation_scope=EvidenceReliabilityState.FULL, source_ids=(evidence.source_id,), snapshot_ids=(evidence.snapshot_id,), snapshot_by_source=snapshot_map, correlation_group=evidence.evidence_id, score_bearing=False))
+        # Some accepted providers emit a typed relationship candidate from a
+        # provider-native key result without an IND object.  Preserve that
+        # evidence instead of silently dropping it; the candidate values are
+        # still provider/result fields and the decision remains review-only.
+        for candidate in result.relationship_candidates:
+            if inclusion_refs.intersection(candidate.evidence_refs):
+                continue
+            subject = "rel:" + candidate.from_table + ":" + ",".join(candidate.from_columns) + "->" + candidate.to_table + ":" + ",".join(candidate.to_columns)
+            snapshot_map = {candidate.source_id: candidate.snapshot_id}
+            base = dict(
+                producer_id="dependency",
+                family=EvidenceFamily.DEPENDENCY,
+                role=EvidenceRole.DIRECT_OBSERVATION,
+                scope_id=candidate.source_id + ":" + candidate.snapshot_id,
+                observation_scope=EvidenceReliabilityState.FULL if all(result.observation_scope.complete_by_table.values()) else EvidenceReliabilityState.BOUNDED,
+                source_ids=(candidate.source_id,),
+                snapshot_ids=(candidate.snapshot_id,),
+                snapshot_by_source=snapshot_map,
+                correlation_group=candidate.candidate_id,
+                derived_from_refs=candidate.evidence_refs,
+            )
+            output.extend((
+                FusionEvidenceItem(evidence_id=candidate.candidate_id + ":coverage", subject_id=subject, metric_name="inclusion_coverage", metric_value=1.0 - candidate.source_orphan_ratio, metric_semantics="provider candidate inclusion support", direction=EvidenceDirection.SUPPORTS, score_dimension_id="inclusion", dependency_group="inclusion", score_bearing=True, **base),
+                FusionEvidenceItem(evidence_id=candidate.candidate_id + ":orphan", subject_id=subject, metric_name="orphan_ratio", metric_value=candidate.source_orphan_ratio, metric_semantics="provider candidate orphan ratio", direction=EvidenceDirection.CONTRADICTS, score_dimension_id="inclusion", dependency_group="inclusion", score_bearing=True, **base),
+                FusionEvidenceItem(evidence_id=candidate.candidate_id + ":uniqueness", subject_id=subject, metric_name="target_uniqueness", metric_value=candidate.target_uniqueness_ratio, metric_semantics="provider candidate target uniqueness", direction=EvidenceDirection.SUPPORTS, score_dimension_id="target_uniqueness", dependency_group="target_uniqueness", score_bearing=True, **base),
+                FusionEvidenceItem(evidence_id=candidate.candidate_id + ":type", subject_id=subject, metric_name="type_compatibility", metric_value=1.0 if candidate.type_compatible else 0.0, metric_semantics="provider candidate type compatibility", direction=EvidenceDirection.SUPPORTS if candidate.type_compatible else EvidenceDirection.CONTRADICTS, score_dimension_id="type_compatibility", dependency_group="type_compatibility", score_bearing=True, **base),
+            ))
         return output
 
     @staticmethod

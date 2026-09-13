@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Iterable
 
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
@@ -516,6 +516,7 @@ class AnalyticalCompilerService:
                     row_values.append(row.value_for(column))
                 for measure in fact_measures:
                     value = row.value_for(measure.field_name)
+                    value = _coerce_value_for_logical_type(value, measure.logical_type, measure.field_name)
                     _assert_value_compatible(value, measure.logical_type, measure.field_name)
                     row_values.append(value)
                 if "source_record_refs" not in target_names:
@@ -655,3 +656,14 @@ def _assert_value_compatible(value: object, logical_type: str, field_name: str) 
     }.get(kind)
     if compatible is not True:
         raise AnalyticalCompilationError(f"measure value is incompatible with {field_name}:{logical_type}")
+
+
+def _coerce_value_for_logical_type(value: object, logical_type: str, field_name: str) -> object:
+    """Restore exact numeric semantics after a JSON artifact round trip."""
+
+    if value is None or logical_type.upper() != "DECIMAL" or not isinstance(value, str):
+        return value
+    try:
+        return Decimal(value)
+    except (InvalidOperation, ValueError) as exc:
+        raise AnalyticalCompilationError(f"measure value is incompatible with {field_name}:{logical_type}") from exc
