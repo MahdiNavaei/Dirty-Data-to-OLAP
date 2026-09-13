@@ -43,20 +43,22 @@ from dirty_data_to_olap.domain.contracts.api import (
     ReviewHistoryRecord,
     ReviewRecord,
 )
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision, review_subject_key
 from dirty_data_to_olap.domain.contracts.jobs import (
+    DeliveryPhase,
     ExecutionPlan,
     FailureClassification,
     JobKind,
     JobRecord,
     JobStatus,
+    ReplaySafety,
     StageExecutionResult,
 )
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id
 
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 
 def _dump(value: object) -> str:
@@ -165,6 +167,10 @@ class SQLiteControlStore(ControlStorePort):
                         self._migrate_v4_to_v5(connection)
                         next_version = 5
                         detail = "Step28 durable jobs, execution plans, leases and fencing"
+                    elif version == 5:
+                        self._migrate_v5_to_v6(connection)
+                        next_version = 6
+                        detail = "Step28 durable delivery phases, replay safety and admission controls"
                     else:
                         connection.rollback()
                         raise UnsupportedSchemaVersionError(f"unsupported control database schema {version}")
@@ -193,7 +199,7 @@ class SQLiteControlStore(ControlStorePort):
         statements = (
             "CREATE TABLE IF NOT EXISTS schema_migrations (migration_id INTEGER PRIMARY KEY AUTOINCREMENT, version_from INTEGER NOT NULL, version_to INTEGER NOT NULL, applied_at TEXT NOT NULL, detail TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS runs (run_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL, configuration_fingerprint TEXT NOT NULL, git_content_commit TEXT, root_artifact_refs TEXT NOT NULL, source_snapshot_refs TEXT NOT NULL, gate_refs TEXT NOT NULL, latest_stage_refs TEXT NOT NULL, revision INTEGER NOT NULL, metadata TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS stage_attempts (attempt_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), stage_id TEXT NOT NULL, attempt_number INTEGER NOT NULL, status TEXT NOT NULL, started_at TEXT, finished_at TEXT, input_artifact_refs TEXT NOT NULL, output_artifact_refs TEXT NOT NULL, failure_code TEXT, failure_reason TEXT, policy_config_fingerprint TEXT NOT NULL, resource_budget_ref TEXT, revision INTEGER NOT NULL, UNIQUE(run_id, stage_id, attempt_number))",
+            "CREATE TABLE IF NOT EXISTS stage_attempts (attempt_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), stage_id TEXT NOT NULL, attempt_number INTEGER NOT NULL, status TEXT NOT NULL, started_at TEXT, finished_at TEXT, input_artifact_refs TEXT NOT NULL, output_artifact_refs TEXT NOT NULL, failure_code TEXT, failure_reason TEXT, policy_config_fingerprint TEXT NOT NULL, resource_budget_ref TEXT, delivery_phase TEXT NOT NULL DEFAULT 'ATTEMPT_CREATED', revision INTEGER NOT NULL, UNIQUE(run_id, stage_id, attempt_number))",
             "CREATE TABLE IF NOT EXISTS artifacts (artifact_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), stage_id TEXT NOT NULL, attempt_id TEXT NOT NULL, artifact_kind TEXT NOT NULL, contract_schema_version TEXT NOT NULL, media_type TEXT NOT NULL, content_hash TEXT NOT NULL, byte_size INTEGER NOT NULL, storage_mode TEXT NOT NULL, logical_key TEXT, storage_key TEXT, external_locator TEXT, producer TEXT NOT NULL, retention_class TEXT NOT NULL, sensitivity_ref TEXT, publication_state TEXT NOT NULL, created_at TEXT NOT NULL, provenance_refs TEXT NOT NULL, tombstone_reason TEXT, tombstoned_at TEXT)",
             "CREATE INDEX IF NOT EXISTS idx_artifacts_run_stage_kind ON artifacts(run_id, stage_id, artifact_kind)",
             "CREATE INDEX IF NOT EXISTS idx_artifacts_hash ON artifacts(content_hash)",
@@ -235,13 +241,26 @@ class SQLiteControlStore(ControlStorePort):
         statements = (
             "CREATE TABLE IF NOT EXISTS execution_plans (plan_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), graph_source TEXT NOT NULL, graph_version TEXT NOT NULL, content_hash TEXT NOT NULL, plan_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(run_id))",
             "CREATE INDEX IF NOT EXISTS idx_execution_plans_run ON execution_plans(run_id)",
-            "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), job_kind TEXT NOT NULL, command_id TEXT UNIQUE, action TEXT, stage_id TEXT, parent_job_id TEXT, plan_id TEXT REFERENCES execution_plans(plan_id), attempt_id TEXT REFERENCES stage_attempts(attempt_id), status TEXT NOT NULL, priority INTEGER NOT NULL, created_at TEXT NOT NULL, available_at TEXT NOT NULL, lease_owner TEXT, lease_generation INTEGER NOT NULL DEFAULT 0, lease_expires_at TEXT, heartbeat_at TEXT, delivery_count INTEGER NOT NULL DEFAULT 0, retry_count INTEGER NOT NULL DEFAULT 0, failure_code TEXT, failure_classification TEXT, failure_reason TEXT, cancellation_requested INTEGER NOT NULL DEFAULT 0, cancellation_requested_at TEXT, result_refs TEXT NOT NULL DEFAULT '[]', review_context_json TEXT, metadata TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 0, UNIQUE(run_id, stage_id))",
+            "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), job_kind TEXT NOT NULL, command_id TEXT UNIQUE, action TEXT, stage_id TEXT, parent_job_id TEXT, plan_id TEXT REFERENCES execution_plans(plan_id), attempt_id TEXT REFERENCES stage_attempts(attempt_id), status TEXT NOT NULL, priority INTEGER NOT NULL, created_at TEXT NOT NULL, available_at TEXT NOT NULL, lease_owner TEXT, lease_generation INTEGER NOT NULL DEFAULT 0, lease_expires_at TEXT, heartbeat_at TEXT, delivery_count INTEGER NOT NULL DEFAULT 0, retry_count INTEGER NOT NULL DEFAULT 0, failure_code TEXT, failure_classification TEXT, failure_reason TEXT, cancellation_requested INTEGER NOT NULL DEFAULT 0, cancellation_requested_at TEXT, result_refs TEXT NOT NULL DEFAULT '[]', review_context_json TEXT, delivery_phase TEXT NOT NULL DEFAULT 'NOT_STARTED', replay_safety TEXT NOT NULL DEFAULT 'RECONCILIATION_REQUIRED_ON_UNKNOWN', source_scope TEXT, durable_result_json TEXT, metadata TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 0, UNIQUE(run_id, stage_id))",
             "CREATE INDEX IF NOT EXISTS idx_jobs_claimable ON jobs(status, available_at, priority, created_at, job_id)",
             "CREATE INDEX IF NOT EXISTS idx_jobs_run_status ON jobs(run_id, status, stage_id)",
             "CREATE INDEX IF NOT EXISTS idx_jobs_command ON jobs(command_id)",
         )
         for statement in statements:
             connection.execute(statement)
+        attempt_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(stage_attempts)").fetchall()}
+        if "delivery_phase" not in attempt_columns:
+            connection.execute("ALTER TABLE stage_attempts ADD COLUMN delivery_phase TEXT NOT NULL DEFAULT 'ATTEMPT_CREATED'")
+        job_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(jobs)").fetchall()}
+        additions = (
+            ("delivery_phase", "TEXT NOT NULL DEFAULT 'NOT_STARTED'"),
+            ("replay_safety", "TEXT NOT NULL DEFAULT 'RECONCILIATION_REQUIRED_ON_UNKNOWN'"),
+            ("source_scope", "TEXT"),
+            ("durable_result_json", "TEXT"),
+        )
+        for column, definition in additions:
+            if column not in job_columns:
+                connection.execute(f"ALTER TABLE jobs ADD COLUMN {column} {definition}")
 
     @staticmethod
     def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
@@ -294,6 +313,18 @@ class SQLiteControlStore(ControlStorePort):
         """Install Step28 through an explicit forward migration."""
 
         SQLiteControlStore._ensure_step28_tables(connection)
+
+    @staticmethod
+    def _migrate_v5_to_v6(connection: sqlite3.Connection) -> None:
+        """Add only additive fields; existing runs, jobs and attempts remain intact."""
+
+        SQLiteControlStore._ensure_step28_tables(connection)
+        for row in connection.execute("SELECT plan_id, plan_json FROM execution_plans").fetchall():
+            plan = ExecutionPlan.model_validate(_load_json(str(row["plan_json"]), {}))
+            connection.execute(
+                "UPDATE execution_plans SET content_hash = ?, plan_json = ? WHERE plan_id = ?",
+                (plan.content_hash, _dump(plan), row["plan_id"]),
+            )
 
     @staticmethod
     def _artifact_from_row(row: sqlite3.Row) -> ArtifactRef:
@@ -352,6 +383,7 @@ class SQLiteControlStore(ControlStorePort):
             failure_reason=row["failure_reason"],
             policy_config_fingerprint=str(row["policy_config_fingerprint"]),
             resource_budget_ref=row["resource_budget_ref"],
+            delivery_phase=str(row["delivery_phase"]) if "delivery_phase" in row.keys() else "ATTEMPT_CREATED",
             revision=int(row["revision"]),
         )
 
@@ -461,8 +493,8 @@ class SQLiteControlStore(ControlStorePort):
                     raise ArtifactConflictError("attempt identity is already bound to different metadata")
                 return stored
             connection.execute(
-                "INSERT INTO stage_attempts(attempt_id, run_id, stage_id, attempt_number, status, started_at, finished_at, input_artifact_refs, output_artifact_refs, failure_code, failure_reason, policy_config_fingerprint, resource_budget_ref, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (attempt.attempt_id, attempt.run_id, attempt.stage_id, attempt.attempt_number, attempt.status.value, attempt.started_at.isoformat() if attempt.started_at else None, attempt.finished_at.isoformat() if attempt.finished_at else None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), attempt.failure_code, attempt.failure_reason, attempt.policy_config_fingerprint, attempt.resource_budget_ref, attempt.revision),
+                "INSERT INTO stage_attempts(attempt_id, run_id, stage_id, attempt_number, status, started_at, finished_at, input_artifact_refs, output_artifact_refs, failure_code, failure_reason, policy_config_fingerprint, resource_budget_ref, delivery_phase, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (attempt.attempt_id, attempt.run_id, attempt.stage_id, attempt.attempt_number, attempt.status.value, attempt.started_at.isoformat() if attempt.started_at else None, attempt.finished_at.isoformat() if attempt.finished_at else None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), attempt.failure_code, attempt.failure_reason, attempt.policy_config_fingerprint, attempt.resource_budget_ref, attempt.delivery_phase, attempt.revision),
             )
             self._audit(connection, "stage_attempt_created", run_id=attempt.run_id, status=attempt.status.value, detail=f"attempt {attempt.attempt_id} persisted")
             return attempt
@@ -492,8 +524,8 @@ class SQLiteControlStore(ControlStorePort):
     def update_stage_attempt(self, attempt: StageAttemptRecord, *, expected_revision: int) -> StageAttemptRecord:
         with self._transaction() as connection:
             cursor = connection.execute(
-                "UPDATE stage_attempts SET status = ?, started_at = ?, finished_at = ?, input_artifact_refs = ?, output_artifact_refs = ?, failure_code = ?, failure_reason = ?, policy_config_fingerprint = ?, resource_budget_ref = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
-                (attempt.status.value, attempt.started_at.isoformat() if attempt.started_at else None, attempt.finished_at.isoformat() if attempt.finished_at else None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), attempt.failure_code, attempt.failure_reason, attempt.policy_config_fingerprint, attempt.resource_budget_ref, attempt.attempt_id, expected_revision),
+                "UPDATE stage_attempts SET status = ?, started_at = ?, finished_at = ?, input_artifact_refs = ?, output_artifact_refs = ?, failure_code = ?, failure_reason = ?, policy_config_fingerprint = ?, resource_budget_ref = ?, delivery_phase = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
+                (attempt.status.value, attempt.started_at.isoformat() if attempt.started_at else None, attempt.finished_at.isoformat() if attempt.finished_at else None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), attempt.failure_code, attempt.failure_reason, attempt.policy_config_fingerprint, attempt.resource_budget_ref, attempt.delivery_phase, attempt.attempt_id, expected_revision),
             )
             if cursor.rowcount != 1:
                 raise ConcurrencyConflictError("stage attempt revision changed before compare-and-swap update")
@@ -587,21 +619,27 @@ class SQLiteControlStore(ControlStorePort):
 
     @staticmethod
     def _review_record_from_row(row: sqlite3.Row) -> ReviewRecord:
+        decision = ReviewDecision.model_validate(_load_json(str(row["decision_json"]), {}))
+        if str(row["subject_key"]) != review_subject_key(decision):
+            raise PlatformError("stored review subject key is not the authoritative canonical key")
         return ReviewRecord(
             run_id=str(row["run_id"]),
             subject_key=str(row["subject_key"]),
-            decision=ReviewDecision.model_validate(_load_json(str(row["decision_json"]), {})),
+            decision=decision,
             revision=int(row["revision"]),
             recorded_at=_parse_datetime(str(row["recorded_at"])),
         )
 
     @staticmethod
     def _review_history_from_row(row: sqlite3.Row) -> ReviewHistoryRecord:
+        decision = ReviewDecision.model_validate(_load_json(str(row["decision_json"]), {}))
+        if str(row["subject_key"]) != review_subject_key(decision):
+            raise PlatformError("stored review subject key is not the authoritative canonical key")
         return ReviewHistoryRecord(
             history_id=str(row["history_id"]),
             run_id=str(row["run_id"]),
             subject_key=str(row["subject_key"]),
-            decision=ReviewDecision.model_validate(_load_json(str(row["decision_json"]), {})),
+            decision=decision,
             revision=int(row["revision"]),
             recorded_at=_parse_datetime(str(row["recorded_at"])),
         )
@@ -644,6 +682,8 @@ class SQLiteControlStore(ControlStorePort):
     def _record_review_in_connection(connection: sqlite3.Connection, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
         if expected_revision < 0 or record.revision != expected_revision + 1:
             raise ConcurrencyConflictError("review revision does not match the expected compare-and-swap revision")
+        if record.subject_key != review_subject_key(record.decision):
+            raise PlatformError("review subject key must be derived from the complete authoritative context")
         if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (record.run_id,)).fetchone() is None:
             raise PlatformError("review requires an existing run")
         current = connection.execute("SELECT revision FROM review_current WHERE run_id = ? AND subject_key = ?", (record.run_id, record.subject_key)).fetchone()
@@ -947,6 +987,7 @@ class SQLiteControlStore(ControlStorePort):
         context = None
         if row["review_context_json"]:
             context = ReviewCompatibilityContext.model_validate(_load_json(str(row["review_context_json"]), {}))
+        durable_result = _load_json(str(row["durable_result_json"]), {}) if "durable_result_json" in row.keys() and row["durable_result_json"] else None
         return JobRecord(
             job_id=str(row["job_id"]),
             run_id=str(row["run_id"]),
@@ -974,6 +1015,10 @@ class SQLiteControlStore(ControlStorePort):
             cancellation_requested_at=_parse_datetime(str(row["cancellation_requested_at"])) if row["cancellation_requested_at"] else None,
             result_refs=tuple(_load_json(str(row["result_refs"]), [])),
             review_context=context,
+            delivery_phase=DeliveryPhase(str(row["delivery_phase"])) if "delivery_phase" in row.keys() else DeliveryPhase.NOT_STARTED,
+            replay_safety=ReplaySafety(str(row["replay_safety"])) if "replay_safety" in row.keys() else ReplaySafety.RECONCILIATION_REQUIRED_ON_UNKNOWN,
+            source_scope=row["source_scope"] if "source_scope" in row.keys() else None,
+            durable_result=durable_result,
             metadata=dict(_load_json(str(row["metadata"]), {})),
             revision=int(row["revision"]),
         )
@@ -1027,8 +1072,8 @@ class SQLiteControlStore(ControlStorePort):
                 metadata={"principal_source": command.principal_source, "command_fingerprint": command.request_fingerprint},
             )
             connection.execute(
-                "INSERT INTO jobs(job_id, run_id, job_kind, command_id, action, stage_id, parent_job_id, plan_id, attempt_id, status, priority, created_at, available_at, lease_owner, lease_generation, lease_expires_at, heartbeat_at, delivery_count, retry_count, failure_code, failure_classification, failure_reason, cancellation_requested, cancellation_requested_at, result_refs, review_context_json, metadata, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (job.job_id, job.run_id, job.job_kind.value, job.command_id, job.action, None, None, None, None, job.status.value, job.priority, job.created_at.isoformat(), job.available_at.isoformat(), None, 0, None, None, 0, 0, None, None, None, 0, None, _dump(job.result_refs), None, _dump(job.metadata), 0),
+                "INSERT INTO jobs(job_id, run_id, job_kind, command_id, action, stage_id, parent_job_id, plan_id, attempt_id, status, priority, created_at, available_at, lease_owner, lease_generation, lease_expires_at, heartbeat_at, delivery_count, retry_count, failure_code, failure_classification, failure_reason, cancellation_requested, cancellation_requested_at, result_refs, review_context_json, delivery_phase, replay_safety, source_scope, durable_result_json, metadata, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (job.job_id, job.run_id, job.job_kind.value, job.command_id, job.action, None, None, None, None, job.status.value, job.priority, job.created_at.isoformat(), job.available_at.isoformat(), None, 0, None, None, 0, 0, None, None, None, 0, None, _dump(job.result_refs), None, DeliveryPhase.NOT_STARTED.value, job.replay_safety.value, None, None, _dump(job.metadata), 0),
             )
             self._audit(connection, "job_enqueued", run_id=job.run_id, status=job.status.value, detail=f"job={job.job_id}; command={command.command_id}")
             return job, False
@@ -1056,11 +1101,14 @@ class SQLiteControlStore(ControlStorePort):
                 status=JobStatus.QUEUED,
                 created_at=now,
                 available_at=now,
+                delivery_phase=DeliveryPhase.ATTEMPT_CREATED,
+                replay_safety=stage.replay_safety,
+                source_scope=stage.source_scope,
                 metadata=dict(stage.metadata),
             )
             connection.execute(
-                "INSERT INTO jobs(job_id, run_id, job_kind, command_id, action, stage_id, parent_job_id, plan_id, attempt_id, status, priority, created_at, available_at, lease_owner, lease_generation, lease_expires_at, heartbeat_at, delivery_count, retry_count, failure_code, failure_classification, failure_reason, cancellation_requested, cancellation_requested_at, result_refs, review_context_json, metadata, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (job.job_id, job.run_id, job.job_kind.value, None, None, job.stage_id, job.parent_job_id, job.plan_id, None, job.status.value, job.priority, job.created_at.isoformat(), job.available_at.isoformat(), None, 0, None, None, 0, 0, None, None, None, 0, None, _dump(job.result_refs), None, _dump(job.metadata), 0),
+                "INSERT INTO jobs(job_id, run_id, job_kind, command_id, action, stage_id, parent_job_id, plan_id, attempt_id, status, priority, created_at, available_at, lease_owner, lease_generation, lease_expires_at, heartbeat_at, delivery_count, retry_count, failure_code, failure_classification, failure_reason, cancellation_requested, cancellation_requested_at, result_refs, review_context_json, delivery_phase, replay_safety, source_scope, durable_result_json, metadata, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (job.job_id, job.run_id, job.job_kind.value, None, None, job.stage_id, job.parent_job_id, job.plan_id, None, job.status.value, job.priority, job.created_at.isoformat(), job.available_at.isoformat(), None, 0, None, None, 0, 0, None, None, None, 0, None, _dump(job.result_refs), None, job.delivery_phase.value, job.replay_safety.value, job.source_scope, None, _dump(job.metadata), 0),
             )
             self._audit(connection, "stage_job_enqueued", run_id=run_id, status=job.status.value, detail=f"job={job.job_id}; stage={stage_id}")
             return job
@@ -1088,14 +1136,14 @@ class SQLiteControlStore(ControlStorePort):
         with self._connect() as connection:
             return tuple(self._job_from_row(row) for row in connection.execute(sql, tuple(params)).fetchall())
 
-    def claim_next_job(self, *, worker_id: str, now: datetime, lease_seconds: int = 30) -> JobRecord | None:
-        if not worker_id or lease_seconds < 1:
+    def claim_next_job(self, *, worker_id: str, now: datetime, lease_seconds: int = 30, max_active_per_run: int = 1, max_active_per_source: int = 1) -> JobRecord | None:
+        if not worker_id or lease_seconds < 1 or max_active_per_run < 1 or max_active_per_source < 1:
             raise ValueError("worker_id and a positive lease are required")
         expires = now + timedelta(seconds=lease_seconds)
         with self._transaction() as connection:
             row = connection.execute(
-                "SELECT * FROM jobs WHERE (status IN ('QUEUED', 'RETRY_WAIT') AND available_at <= ? AND cancellation_requested = 0) OR (status = 'RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?) ORDER BY priority DESC, available_at, created_at, job_id LIMIT 1",
-                (now.isoformat(), now.isoformat()),
+                "SELECT * FROM jobs WHERE ((status IN ('QUEUED', 'RETRY_WAIT') AND available_at <= ? AND cancellation_requested = 0) OR (status = 'RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)) AND (SELECT COUNT(*) FROM jobs AS active_run WHERE active_run.run_id = jobs.run_id AND active_run.status = 'RUNNING' AND active_run.lease_expires_at IS NOT NULL AND active_run.lease_expires_at > ?) < ? AND (jobs.source_scope IS NULL OR (SELECT COUNT(*) FROM jobs AS active_source WHERE active_source.source_scope = jobs.source_scope AND active_source.status = 'RUNNING' AND active_source.lease_expires_at IS NOT NULL AND active_source.lease_expires_at > ?) < ?) ORDER BY priority DESC, available_at, created_at, job_id LIMIT 1",
+                (now.isoformat(), now.isoformat(), now.isoformat(), max_active_per_run, now.isoformat(), max_active_per_source),
             ).fetchone()
             if row is None:
                 return None
@@ -1157,14 +1205,58 @@ class SQLiteControlStore(ControlStorePort):
                 revision=0,
             )
             connection.execute(
-                "INSERT INTO stage_attempts(attempt_id, run_id, stage_id, attempt_number, status, started_at, finished_at, input_artifact_refs, output_artifact_refs, failure_code, failure_reason, policy_config_fingerprint, resource_budget_ref, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (attempt.attempt_id, attempt.run_id, attempt.stage_id, attempt.attempt_number, attempt.status.value, attempt.started_at.isoformat(), None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), None, None, attempt.policy_config_fingerprint, None, 0),
+                "INSERT INTO stage_attempts(attempt_id, run_id, stage_id, attempt_number, status, started_at, finished_at, input_artifact_refs, output_artifact_refs, failure_code, failure_reason, policy_config_fingerprint, resource_budget_ref, delivery_phase, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (attempt.attempt_id, attempt.run_id, attempt.stage_id, attempt.attempt_number, attempt.status.value, attempt.started_at.isoformat(), None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), None, None, attempt.policy_config_fingerprint, None, attempt.delivery_phase, 0),
             )
             cursor = connection.execute("UPDATE jobs SET attempt_id = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ? AND attempt_id IS NULL", (attempt.attempt_id, job_id, JobStatus.RUNNING.value, worker_id, lease_generation))
             if cursor.rowcount != 1:
                 raise ConcurrencyConflictError("stage attempt start lost its compare-and-swap race")
             self._audit(connection, "stage_attempt_started", run_id=attempt.run_id, status=attempt.status.value, detail=f"job={job_id}; attempt={attempt.attempt_id}; generation={lease_generation}")
             return attempt
+
+    def mark_handler_delivery_started(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime) -> JobRecord:
+        with self._transaction() as connection:
+            row = self._lease_row(connection, job_id=job_id, worker_id=worker_id, lease_generation=lease_generation, now=now)
+            if row["job_kind"] != JobKind.STAGE.value or not row["attempt_id"]:
+                raise PlatformError("handler delivery requires a fenced stage attempt")
+            attempt_row = connection.execute("SELECT * FROM stage_attempts WHERE attempt_id = ?", (row["attempt_id"],)).fetchone()
+            if attempt_row is None:
+                raise PlatformError("job references a missing stage attempt")
+            attempt_revision = int(attempt_row["revision"])
+            attempt_cursor = connection.execute(
+                "UPDATE stage_attempts SET delivery_phase = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
+                (DeliveryPhase.HANDLER_DELIVERY_STARTED.value, row["attempt_id"], attempt_revision),
+            )
+            if attempt_cursor.rowcount != 1:
+                raise ConcurrencyConflictError("handler delivery marker changed before it was persisted")
+            cursor = connection.execute(
+                "UPDATE jobs SET delivery_phase = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
+                (DeliveryPhase.HANDLER_DELIVERY_STARTED.value, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("handler delivery marker lost its lease fence")
+            self._audit(connection, "handler_delivery_started", run_id=str(row["run_id"]), status=DeliveryPhase.HANDLER_DELIVERY_STARTED.value, detail=f"job={job_id}; attempt={row['attempt_id']}")
+            return self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
+
+    def record_stage_result(self, *, job_id: str, worker_id: str, lease_generation: int, attempt: StageAttemptRecord, result: StageExecutionResult, now: datetime) -> JobRecord:
+        with self._transaction() as connection:
+            row = self._lease_row(connection, job_id=job_id, worker_id=worker_id, lease_generation=lease_generation, now=now)
+            if row["job_kind"] != JobKind.STAGE.value or row["attempt_id"] != attempt.attempt_id:
+                raise ConcurrencyConflictError("stage result does not match the fenced attempt")
+            attempt_cursor = connection.execute(
+                "UPDATE stage_attempts SET delivery_phase = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
+                (DeliveryPhase.RESULT_RECORDED.value, attempt.attempt_id, attempt.revision),
+            )
+            if attempt_cursor.rowcount != 1:
+                raise ConcurrencyConflictError("stage result changed before durable recording")
+            cursor = connection.execute(
+                "UPDATE jobs SET delivery_phase = ?, durable_result_json = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
+                (DeliveryPhase.RESULT_RECORDED.value, _dump(result), job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("stage result lost its lease fence")
+            self._audit(connection, "stage_result_recorded", run_id=str(row["run_id"]), status=DeliveryPhase.RESULT_RECORDED.value, detail=f"job={job_id}; attempt={attempt.attempt_id}")
+            return self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
 
     def _lease_row(self, connection: sqlite3.Connection, *, job_id: str, worker_id: str, lease_generation: int, now: datetime | None = None) -> sqlite3.Row:
         row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
@@ -1197,18 +1289,22 @@ class SQLiteControlStore(ControlStorePort):
                 raise ConcurrencyConflictError("finalization attempt does not match the fenced job")
             updated_attempt = effective_attempt.model_copy(update={"finished_at": effective_attempt.finished_at or now})
             attempt_cursor = connection.execute(
-                "UPDATE stage_attempts SET status = ?, started_at = ?, finished_at = ?, input_artifact_refs = ?, output_artifact_refs = ?, failure_code = ?, failure_reason = ?, policy_config_fingerprint = ?, resource_budget_ref = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
-                (updated_attempt.status.value, updated_attempt.started_at.isoformat() if updated_attempt.started_at else None, updated_attempt.finished_at.isoformat() if updated_attempt.finished_at else None, _dump(updated_attempt.input_artifact_refs), _dump(updated_attempt.output_artifact_refs), updated_attempt.failure_code, updated_attempt.failure_reason, updated_attempt.policy_config_fingerprint, updated_attempt.resource_budget_ref, updated_attempt.attempt_id, updated_attempt.revision),
+                "UPDATE stage_attempts SET status = ?, started_at = ?, finished_at = ?, input_artifact_refs = ?, output_artifact_refs = ?, failure_code = ?, failure_reason = ?, policy_config_fingerprint = ?, resource_budget_ref = ?, delivery_phase = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
+                (updated_attempt.status.value, updated_attempt.started_at.isoformat() if updated_attempt.started_at else None, updated_attempt.finished_at.isoformat() if updated_attempt.finished_at else None, _dump(updated_attempt.input_artifact_refs), _dump(updated_attempt.output_artifact_refs), updated_attempt.failure_code, updated_attempt.failure_reason, updated_attempt.policy_config_fingerprint, updated_attempt.resource_budget_ref, DeliveryPhase.FINALIZED.value, updated_attempt.attempt_id, updated_attempt.revision),
             )
             if attempt_cursor.rowcount != 1:
                 raise ConcurrencyConflictError("stage attempt finalization changed before its job")
             if effective_status is JobStatus.RETRY_WAIT:
                 next_attempt_id = None
+                next_phase = DeliveryPhase.ATTEMPT_CREATED.value
+                durable_result = None
             else:
                 next_attempt_id = updated_attempt.attempt_id
+                next_phase = DeliveryPhase.FINALIZED.value
+                durable_result = _dump(result)
             cursor = connection.execute(
-                "UPDATE jobs SET status = ?, attempt_id = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, retry_count = ?, failure_code = ?, failure_classification = ?, failure_reason = ?, result_refs = ?, review_context_json = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
-                (effective_status.value, next_attempt_id, (available_at or now).isoformat(), retry_count, failure_code, failure_classification.value if isinstance(failure_classification, FailureClassification) else failure_classification, failure_reason, _dump(result.output_artifact_refs if effective_status is not JobStatus.CANCELLED else ()), _dump(result.review_context) if result.review_context is not None else None, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+                "UPDATE jobs SET status = ?, attempt_id = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, retry_count = ?, failure_code = ?, failure_classification = ?, failure_reason = ?, result_refs = ?, review_context_json = ?, delivery_phase = ?, durable_result_json = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
+                (effective_status.value, next_attempt_id, (available_at or now).isoformat(), retry_count, failure_code, failure_classification.value if isinstance(failure_classification, FailureClassification) else failure_classification, failure_reason, _dump(result.output_artifact_refs if effective_status is not JobStatus.CANCELLED else ()), _dump(result.review_context) if result.review_context is not None else None, next_phase, durable_result, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
             )
             if cursor.rowcount != 1:
                 raise ConcurrencyConflictError("stage finalization lost its compare-and-swap race")
@@ -1221,8 +1317,8 @@ class SQLiteControlStore(ControlStorePort):
         with self._transaction() as connection:
             row = self._lease_row(connection, job_id=job_id, worker_id=worker_id, lease_generation=lease_generation, now=now)
             cursor = connection.execute(
-                "UPDATE jobs SET status = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, failure_code = ?, failure_classification = ?, failure_reason = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
-                (JobStatus(status).value, failure_code, failure_classification, detail, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+                "UPDATE jobs SET status = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, failure_code = ?, failure_classification = ?, failure_reason = ?, delivery_phase = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
+                (JobStatus(status).value, failure_code, failure_classification, detail, DeliveryPhase.FINALIZED.value, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
             )
             if cursor.rowcount != 1:
                 raise ConcurrencyConflictError("command finalization lost its lease fence")
@@ -1251,8 +1347,8 @@ class SQLiteControlStore(ControlStorePort):
             if row["status"] not in {JobStatus.NEEDS_REVIEW.value, JobStatus.BLOCKED.value, JobStatus.FAILED.value}:
                 raise PlatformError("only review, blocked or failed jobs can be resumed")
             cursor = connection.execute(
-                "UPDATE jobs SET status = ?, attempt_id = NULL, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, cancellation_requested = 0, cancellation_requested_at = NULL, failure_code = NULL, failure_classification = NULL, failure_reason = NULL, revision = revision + 1 WHERE job_id = ? AND status = ?",
-                (JobStatus.QUEUED.value, now.isoformat(), job_id, row["status"]),
+                "UPDATE jobs SET status = ?, attempt_id = NULL, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, cancellation_requested = 0, cancellation_requested_at = NULL, failure_code = NULL, failure_classification = NULL, failure_reason = NULL, delivery_phase = ?, durable_result_json = NULL, revision = revision + 1 WHERE job_id = ? AND status = ?",
+                (JobStatus.QUEUED.value, now.isoformat(), DeliveryPhase.ATTEMPT_CREATED.value, job_id, row["status"]),
             )
             if cursor.rowcount != 1:
                 raise ConcurrencyConflictError("job resume lost its state compare-and-swap")

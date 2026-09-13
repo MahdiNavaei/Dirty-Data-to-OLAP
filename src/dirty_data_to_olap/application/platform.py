@@ -169,13 +169,19 @@ class ControlStorePort(Protocol):
     def list_jobs(self, *, run_id: str, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[JobRecord, ...]:
         ...
 
-    def claim_next_job(self, *, worker_id: str, now: datetime, lease_seconds: int = 30) -> JobRecord | None:
+    def claim_next_job(self, *, worker_id: str, now: datetime, lease_seconds: int = 30, max_active_per_run: int = 1, max_active_per_source: int = 1) -> JobRecord | None:
         ...
 
     def heartbeat_job(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime, lease_seconds: int = 30) -> JobRecord:
         ...
 
     def ensure_stage_attempt(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime) -> StageAttemptRecord:
+        ...
+
+    def mark_handler_delivery_started(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime) -> JobRecord:
+        ...
+
+    def record_stage_result(self, *, job_id: str, worker_id: str, lease_generation: int, attempt: StageAttemptRecord, result: StageExecutionResult, now: datetime) -> JobRecord:
         ...
 
     def finalize_stage_job(self, *, job_id: str, worker_id: str, lease_generation: int, attempt: StageAttemptRecord, result: StageExecutionResult, status: str, now: datetime, retry_count: int = 0, available_at: datetime | None = None) -> JobRecord:

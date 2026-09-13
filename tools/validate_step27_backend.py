@@ -25,7 +25,7 @@ from dirty_data_to_olap.application.backend import BackendError, BackendService,
 from dirty_data_to_olap.domain.contracts.api import SubmissionResult
 from dirty_data_to_olap.application.visualization import VisualizationService
 from dirty_data_to_olap.composition import build_local_backend
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest
 from dirty_data_to_olap.domain.contracts.validation import (
     RecordDisposition,
@@ -286,7 +286,7 @@ def _repair_checks() -> int:
             try:
                 backend2 = BackendService(control_store=reopened.control_store, artifact_store=reopened.artifact_store, configuration_fingerprint=reopened.config.configuration_fingerprint)
                 replay = TestClient(create_app(backend2), raise_server_exceptions=False).post(reopen_path, headers={**AUTH, "Idempotency-Key": "repair-reopen-key"}, json=reopen_body)
-                checks += 1; _check(replay.status_code == 200 and len(backend2.control_store.list_review_history(run_id=run_id, subject_key=backend2._subject_key(reopen_context))) == 1, "review replay after store reopen")
+                checks += 1; _check(replay.status_code == 200 and len(backend2.control_store.list_review_history(run_id=run_id, subject_key=review_subject_key(reopen_context))) == 1, "review replay after store reopen")
             finally:
                 reopened.close()
         finally:
@@ -381,7 +381,7 @@ def _repair_checks() -> int:
         from dirty_data_to_olap.adapters.platform import SQLiteControlStore
         migrated = SQLiteControlStore(path, project_root=project_root)
         try:
-            checks += 1; _check(migrated.schema_version == 5 and migrated.get_run(run_id) is not None, "v3 to v5 migration retains run")
+            checks += 1; _check(migrated.schema_version == 6 and migrated.get_run(run_id) is not None, "v3 to v6 migration retains run")
             tables = _table_names(path)
             checks += 1; _check({"api_idempotency", "review_current", "review_history", "review_subject_contexts", "execution_plans", "jobs"}.issubset(tables), "v5 control capabilities available")
         finally:
@@ -394,7 +394,7 @@ def _repair_checks() -> int:
         reopened = SQLiteControlStore(path, project_root=project_root)
         try:
             tables = _table_names(path)
-            checks += 1; _check(reopened.schema_version == 5 and reopened.get_run(run_id) is not None and {"review_subject_contexts", "execution_plans", "jobs"}.issubset(tables), "v5 reopen repairs partial capability")
+            checks += 1; _check(reopened.schema_version == 6 and reopened.get_run(run_id) is not None and {"review_subject_contexts", "execution_plans", "jobs"}.issubset(tables), "v6 reopen repairs partial capability")
         finally:
             reopened.close()
     return checks

@@ -34,6 +34,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewCheckpoint,
     ReviewCompatibilityContext,
     ReviewDecisionStatus,
+    review_subject_key,
 )
 from dirty_data_to_olap.domain.contracts.jobs import JobRecord, JobStatus
 from dirty_data_to_olap.domain.contracts.platform import (
@@ -301,17 +302,6 @@ class BackendService:
             raise BackendError("JOB_NOT_FOUND", "job was not found", status=404)
         return job
 
-    def _subject_key(self, context: ReviewCompatibilityContext) -> str:
-        return "|".join(
-            (
-                context.review_checkpoint_id.value,
-                context.subject_artifact_id,
-                context.subject_content_hash,
-                context.subject_semantic_id,
-                context.applicability_fingerprint,
-            )
-        )
-
     def _resolve_review_subject(
         self,
         *,
@@ -338,7 +328,7 @@ class BackendService:
             raise BackendError("REVIEW_CONTEXT_INVALID", "server review context is not bound to the requested subject", status=409)
         if context_assertion is not None and context_assertion.model_dump(mode="json") != authoritative.model_dump(mode="json"):
             raise BackendError("REVIEW_CONTEXT_MISMATCH", "client context is only an expected binding assertion and did not match server truth", status=409)
-        return subject, authoritative, self._subject_key(authoritative)
+        return subject, authoritative, review_subject_key(authoritative)
 
     def review(
         self,

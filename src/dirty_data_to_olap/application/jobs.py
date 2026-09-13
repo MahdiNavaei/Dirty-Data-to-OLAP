@@ -10,24 +10,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Mapping, Protocol
 
 from dirty_data_to_olap.application.platform import (
     ArtifactStorePort,
     ConcurrencyConflictError,
     ControlStorePort,
+    GateEvidenceService,
     PlatformError,
 )
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
 from dirty_data_to_olap.domain.contracts.api import ExecutionCommand, ExecutionAction, SubmissionResult
-from dirty_data_to_olap.domain.contracts.canonical import ReviewDecisionStatus
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
 from dirty_data_to_olap.domain.contracts.jobs import (
+    DeliveryPhase,
     ExecutionPlan,
     FailureClassification,
     JobKind,
     JobRecord,
     JobStatus,
     RetryPolicy,
+    ReplaySafety,
     StageExecutionRequest,
     StageExecutionResult,
     StageResultStatus,
@@ -40,7 +44,9 @@ from dirty_data_to_olap.domain.contracts.platform import (
     RunStatus,
     StageAttemptRecord,
     StageStatus,
+    GateEvidenceStatus,
 )
+from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
 
 
@@ -51,12 +57,36 @@ class StageExecutorPort(Protocol):
         ...
 
 
+class CancellationProbePort(Protocol):
+    """Live durable cancellation observation kept outside the typed request."""
+
+    def is_cancelled(self) -> bool:
+        ...
+
+
+class CancellationAwareStageExecutorPort(Protocol):
+    def execute_with_context(self, request: StageExecutionRequest, cancellation_probe: CancellationProbePort) -> StageExecutionResult:
+        ...
+
+
 StageHandlerPort = StageExecutorPort
 FaultInjector = Callable[[str, JobRecord, StageAttemptRecord | None], None]
 
 
 class InjectedWorkerCrash(RuntimeError):
     """Deterministic test-only crash signal; durable state remains unreconciled."""
+
+
+class DurableCancellationProbe:
+    def __init__(self, control_store: ControlStorePort, *, run_id: str, job_id: str) -> None:
+        self.control_store = control_store
+        self.run_id = run_id
+        self.job_id = job_id
+
+    def is_cancelled(self) -> bool:
+        run = self.control_store.get_run(self.run_id)
+        job = self.control_store.get_job(self.job_id)
+        return run is None or run.status is RunStatus.CANCELLED or job is None or job.cancellation_requested
 
 
 class MissingStageHandler:
@@ -84,8 +114,13 @@ class StageHandlerRegistry(StageExecutorPort):
     def has_handler(self, handler_key: str) -> bool:
         return handler_key in self._handlers
 
-    def execute_for(self, handler_key: str, request: StageExecutionRequest) -> StageExecutionResult:
-        return StageExecutionResult.model_validate(self._handlers.get(handler_key, MissingStageHandler()).execute(request))
+    def execute_for(self, handler_key: str, request: StageExecutionRequest, cancellation_probe: CancellationProbePort | None = None) -> StageExecutionResult:
+        handler = self._handlers.get(handler_key, MissingStageHandler())
+        if cancellation_probe is not None and hasattr(handler, "execute_with_context"):
+            result = handler.execute_with_context(request, cancellation_probe)
+        else:
+            result = handler.execute(request)
+        return StageExecutionResult.model_validate(result)
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
         return self.execute_for(request.stage_id, request)
@@ -137,8 +172,10 @@ class JobWorker:
         retry_policy: RetryPolicy | None = None,
         clock: Callable[[], datetime] | None = None,
         fault_injector: FaultInjector | None = None,
+        max_active_per_run: int = 1,
+        max_active_per_source: int = 1,
     ) -> None:
-        if not worker_id or lease_seconds < 1:
+        if not worker_id or lease_seconds < 1 or max_active_per_run < 1 or max_active_per_source < 1:
             raise ValueError("worker_id and a positive lease are required")
         self.control_store = control_store
         self.artifact_store = artifact_store
@@ -148,11 +185,13 @@ class JobWorker:
         self.retry_policy = retry_policy or RetryPolicy()
         self.clock = clock
         self.fault_injector = fault_injector
+        self.max_active_per_run = max_active_per_run
+        self.max_active_per_source = max_active_per_source
         self.review_policy = ReviewPolicyService()
 
     def run_once(self) -> WorkerOutcome:
         now = _safe_now(self.clock)
-        job = self.control_store.claim_next_job(worker_id=self.worker_id, now=now, lease_seconds=self.lease_seconds)
+        job = self.control_store.claim_next_job(worker_id=self.worker_id, now=now, lease_seconds=self.lease_seconds, max_active_per_run=self.max_active_per_run, max_active_per_source=self.max_active_per_source)
         if job is None:
             return WorkerOutcome(None, "IDLE", "no eligible durable job")
         self._inject_fault("after_claim", job, None)
@@ -231,7 +270,20 @@ class JobWorker:
                 if context is None:
                     blocked_reason = "review context is unavailable"
                     continue
-                subject_key = "|".join((context.review_checkpoint_id.value, context.subject_artifact_id, context.subject_content_hash))
+                authoritative = self.control_store.get_review_subject_context(
+                    run_id=run.run_id,
+                    checkpoint=context.review_checkpoint_id.value,
+                    artifact_id=context.subject_artifact_id,
+                )
+                if authoritative is None:
+                    blocked_reason = "authoritative review context is unavailable"
+                    continue
+                subject_artifact = self.control_store.get_artifact(context.subject_artifact_id)
+                if subject_artifact is None or subject_artifact.content_hash != authoritative.subject_content_hash:
+                    blocked_reason = "review subject artifact changed or is unavailable"
+                    continue
+                context = authoritative
+                subject_key = review_subject_key(context)
                 current = self.control_store.get_current_review(run_id=run.run_id, subject_key=subject_key)
                 if current is None or current.decision.decision not in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
                     blocked_reason = "compatible accepted review is required before resume"
@@ -289,6 +341,10 @@ class JobWorker:
         plan = self.control_store.get_execution_plan(job.run_id)
         stage = None if plan is None else plan.stage(job.stage_id or "")
         attempt = self.control_store.ensure_stage_attempt(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=now)
+        refreshed_job = self.control_store.get_job(job.job_id)
+        if refreshed_job is None:
+            raise PlatformError("stage job disappeared after attempt creation")
+        job = refreshed_job
         self._inject_fault("after_stage_attempt", job, attempt)
         if plan is None or stage is None:
             result = StageExecutionResult(
@@ -314,7 +370,44 @@ class JobWorker:
             result = StageExecutionResult(status=StageResultStatus.CANCELLED, failure_code="CANCELLATION_REQUESTED", failure_classification=FailureClassification.CANCELLED, failure_reason="run cancellation was observed before stage execution")
             stored = self._finalize(job, attempt, result, now)
             return WorkerOutcome(stored.job_id, stored.status.value, "stage cancelled before execution")
+
+        if job.delivery_phase is DeliveryPhase.RESULT_RECORDED:
+            if job.durable_result is None:
+                result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="RECONCILIATION_REQUIRED", failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT, failure_reason="durable result marker has no durable result payload")
+            else:
+                result = StageExecutionResult.model_validate(job.durable_result)
+            stored = self._finalize_after_record(job, attempt, result, plan, stage)
+            return WorkerOutcome(stored.job_id, stored.status.value, f"stage {stage.stage_id} finalized from durable result")
+
+        if job.delivery_phase is DeliveryPhase.RECONCILIATION_REQUIRED:
+            result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="RECONCILIATION_REQUIRED", failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT, failure_reason="durable handler outcome requires reconciliation")
+            stored = self._finalize(job, attempt, result, _safe_now(self.clock))
+            self._advance_after_stage(plan, stage.stage_id, stored)
+            return WorkerOutcome(stored.job_id, stored.status.value, "handler outcome requires reconciliation")
+
+        if stage.review_checkpoint is not None:
+            result = self._review_stage_result(job, stage)
+            self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
+            attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.RESULT_RECORDED.value})
+            stored = self._finalize(job, attempt, result, _safe_now(self.clock))
+            self._advance_after_stage(plan, stage.stage_id, stored)
+            return WorkerOutcome(stored.job_id, stored.status.value, f"review checkpoint {stage.stage_id} finalized")
+
+        if job.delivery_phase is DeliveryPhase.HANDLER_DELIVERY_STARTED and job.replay_safety is not ReplaySafety.REPLAY_SAFE:
+            result = StageExecutionResult(
+                status=StageResultStatus.FAILED,
+                failure_code="RECONCILIATION_REQUIRED",
+                failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT,
+                failure_reason="handler delivery began without a durable result; blind replay is forbidden",
+            )
+            self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
+            attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.RESULT_RECORDED.value})
+            stored = self._finalize(job, attempt, result, _safe_now(self.clock))
+            self._advance_after_stage(plan, stage.stage_id, stored)
+            return WorkerOutcome(stored.job_id, stored.status.value, "unknown handler outcome requires reconciliation")
+
         self._set_run_status(job.run_id, RunStatus.RUNNING)
+        probe = DurableCancellationProbe(self.control_store, run_id=job.run_id, job_id=job.job_id)
         try:
             refreshed = self.control_store.heartbeat_job(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=now, lease_seconds=self.lease_seconds)
             request = StageExecutionRequest(
@@ -330,12 +423,19 @@ class JobWorker:
                 cancellation_token_id=stable_id("cancel-token", {"run_id": job.run_id, "job_id": job.job_id, "generation": refreshed.lease_generation}),
                 metadata={"handler_key": stage.handler_key},
             )
-            result = self._execute(stage.handler_key, request)
+            self._inject_fault("before_handler_delivery_marker", job, attempt)
+            self.control_store.mark_handler_delivery_started(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=_safe_now(self.clock))
+            attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.HANDLER_DELIVERY_STARTED.value})
+            self._inject_fault("after_handler_delivery_marker", job, attempt)
+            result = self._execute(stage.handler_key, request, probe)
+            self._inject_fault("after_handler_returns_before_result_record", job, attempt)
             self._inject_fault("after_artifact_publication", job, attempt)
             after = _safe_now(self.clock)
             refreshed = self.control_store.heartbeat_job(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=after, lease_seconds=self.lease_seconds)
             del refreshed
-            if result.status in {StageResultStatus.SUCCEEDED, StageResultStatus.NEEDS_REVIEW}:
+            if probe.is_cancelled():
+                result = StageExecutionResult(status=StageResultStatus.CANCELLED, failure_code="CANCELLATION_REQUESTED", failure_classification=FailureClassification.CANCELLED, failure_reason="cooperative cancellation was observed by the stage boundary")
+            elif result.status in {StageResultStatus.SUCCEEDED, StageResultStatus.NEEDS_REVIEW}:
                 try:
                     self._verify_outputs(job, attempt, result)
                 except (KeyError, OSError, PlatformError):
@@ -358,20 +458,74 @@ class JobWorker:
                 failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT,
                 failure_reason="stage execution outcome is unknown after worker delivery",
             )
+        self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
+        attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.RESULT_RECORDED.value})
+        self._inject_fault("after_result_record_before_finalization", job, attempt)
         self._inject_fault("before_stage_finalization", job, attempt)
         stored = self._finalize(job, attempt, result, _safe_now(self.clock))
         self._advance_after_stage(plan, stage.stage_id, stored)
         return WorkerOutcome(stored.job_id, stored.status.value, f"stage {stage.stage_id} finalized")
 
-    def _execute(self, handler_key: str, request: StageExecutionRequest) -> StageExecutionResult:
+    def _execute(self, handler_key: str, request: StageExecutionRequest, cancellation_probe: CancellationProbePort | None = None) -> StageExecutionResult:
         if isinstance(self.executor, StageHandlerRegistry):
-            return self.executor.execute_for(handler_key, request)
-        result = self.executor.execute(request)
+            return self.executor.execute_for(handler_key, request, cancellation_probe)
+        if cancellation_probe is not None and hasattr(self.executor, "execute_with_context"):
+            result = self.executor.execute_with_context(request, cancellation_probe)
+        else:
+            result = self.executor.execute(request)
         return StageExecutionResult.model_validate(result)
 
     def _inject_fault(self, point: str, job: JobRecord, attempt: StageAttemptRecord | None) -> None:
         if self.fault_injector is not None:
             self.fault_injector(point, job, attempt)
+
+    def _finalize_after_record(self, job: JobRecord, attempt: StageAttemptRecord, result: StageExecutionResult, plan: ExecutionPlan, stage: StageSpec) -> JobRecord:
+        self._inject_fault("after_result_record_before_finalization", job, attempt)
+        self._inject_fault("before_stage_finalization", job, attempt)
+        stored = self._finalize(job, attempt, result, _safe_now(self.clock))
+        self._advance_after_stage(plan, stage.stage_id, stored)
+        return stored
+
+    def _review_stage_result(self, job: JobRecord, stage: StageSpec) -> StageExecutionResult:
+        checkpoint = stage.review_checkpoint
+        if checkpoint is None:
+            raise PlatformError("review result requested for a non-review stage")
+        context = job.review_context
+        if context is None or context.review_checkpoint_id is not checkpoint:
+            for dependency_id in (*stage.dependencies, *stage.conditional_dependencies):
+                dependency = self.control_store.get_stage_job(run_id=job.run_id, stage_id=dependency_id)
+                if dependency is None:
+                    continue
+                for artifact_id in dependency.result_refs:
+                    candidate = self.control_store.get_review_subject_context(run_id=job.run_id, checkpoint=checkpoint.value, artifact_id=artifact_id)
+                    if candidate is not None:
+                        context = candidate
+                        break
+                if context is not None:
+                    break
+        if context is None:
+            return StageExecutionResult(
+                status=StageResultStatus.BLOCKED,
+                failure_code="REVIEW_CONTEXT_UNAVAILABLE",
+                failure_classification=FailureClassification.BLOCKED_PREREQUISITE,
+                failure_reason="authoritative review context was not registered for the checkpoint subject",
+            )
+        if context.review_checkpoint_id is not checkpoint:
+            return StageExecutionResult(
+                status=StageResultStatus.BLOCKED,
+                failure_code="REVIEW_CONTEXT_INVALID",
+                failure_classification=FailureClassification.BLOCKED_PREREQUISITE,
+                failure_reason="registered review context names a different checkpoint",
+            )
+        current = self.control_store.get_current_review(run_id=job.run_id, subject_key=review_subject_key(context))
+        if current is not None and current.decision.decision in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
+            try:
+                self.review_policy.require_compatible(current.decision, context)
+            except ReviewCompatibilityError:
+                pass
+            else:
+                return StageExecutionResult(status=StageResultStatus.SUCCEEDED)
+        return StageExecutionResult(status=StageResultStatus.NEEDS_REVIEW, review_context=context)
 
     def _handler_available(self, handler_key: str) -> bool:
         return not isinstance(self.executor, StageHandlerRegistry) or self.executor.has_handler(handler_key)
@@ -380,12 +534,20 @@ class JobWorker:
         stage = plan.stage(stage_id)
         if stage is None:
             return False
-        return all((dependency := self.control_store.get_stage_job(run_id=plan.run_id, stage_id=dependency_id)) is not None and dependency.status is JobStatus.SUCCEEDED for dependency_id in stage.dependencies)
+        if not all((dependency := self.control_store.get_stage_job(run_id=plan.run_id, stage_id=dependency_id)) is not None and dependency.status is JobStatus.SUCCEEDED for dependency_id in stage.dependencies):
+            return False
+        for dependency_id in stage.conditional_dependencies:
+            dependency = self.control_store.get_stage_job(run_id=plan.run_id, stage_id=dependency_id)
+            if dependency is not None and dependency.status is not JobStatus.SUCCEEDED:
+                return False
+        return True
 
     def _schedule_ready(self, plan: ExecutionPlan, *, parent_job_id: str | None) -> int:
         count = 0
         for stage in plan.stages:
-            if not stage.dependencies or self._dependencies_succeeded(plan, stage.stage_id):
+            if not stage.selected:
+                continue
+            if self._dependencies_succeeded(plan, stage.stage_id):
                 existing = self.control_store.get_stage_job(run_id=plan.run_id, stage_id=stage.stage_id)
                 if existing is None:
                     self.control_store.enqueue_stage_job(run_id=plan.run_id, plan_id=plan.plan_id, stage_id=stage.stage_id, parent_job_id=parent_job_id, available_at=_safe_now(self.clock))
@@ -463,22 +625,51 @@ class JobWorker:
         elif job.status is JobStatus.NEEDS_REVIEW:
             self._set_run_status(job.run_id, RunStatus.NEEDS_REVIEW)
         elif job.status is JobStatus.BLOCKED:
-            self._set_run_status(job.run_id, RunStatus.BLOCKED)
+            if (stage := plan.stage(stage_id)) is not None and stage.required:
+                self._set_run_status(job.run_id, RunStatus.BLOCKED)
         elif job.status is JobStatus.FAILED:
-            self._set_run_status(job.run_id, RunStatus.FAILED)
+            if (stage := plan.stage(stage_id)) is not None and stage.required:
+                self._set_run_status(job.run_id, RunStatus.FAILED)
         elif job.status is JobStatus.CANCELLED:
             self._set_run_status(job.run_id, RunStatus.CANCELLED)
 
     def _maybe_complete_run(self, plan: ExecutionPlan) -> None:
-        required = [stage for stage in plan.stages if stage.required]
+        required = [stage for stage in plan.stages if stage.required and stage.selected]
         final = [stage for stage in required if stage.final_validation]
         if not final:
             return
         jobs = {job.stage_id: job for job in self.control_store.list_jobs(run_id=plan.run_id, limit=10000) if job.stage_id}
-        if all(jobs.get(stage.stage_id) is not None and jobs[stage.stage_id].status is JobStatus.SUCCEEDED for stage in required) and jobs[final[0].stage_id].status is JobStatus.SUCCEEDED:
-            run = self.control_store.get_run(plan.run_id)
-            if run is not None and run.status not in {RunStatus.CANCELLED, RunStatus.FAILED}:
-                self.control_store.update_run(run.model_copy(update={"status": RunStatus.SUCCEEDED}), expected_revision=run.revision)
+        if not all(jobs.get(stage.stage_id) is not None and jobs[stage.stage_id].status is JobStatus.SUCCEEDED for stage in required):
+            return
+        if not self._valid_g6_evidence(plan.run_id):
+            self._set_run_status(plan.run_id, RunStatus.BLOCKED)
+            return
+        run = self.control_store.get_run(plan.run_id)
+        if run is not None and run.status not in {RunStatus.CANCELLED, RunStatus.FAILED}:
+            self.control_store.update_run(run.model_copy(update={"status": RunStatus.SUCCEEDED}), expected_revision=run.revision)
+
+    def _valid_g6_evidence(self, run_id: str) -> bool:
+        evidence = self.control_store.get_gate_evidence("G6_DATA_CORRECTNESS", run_id=run_id)
+        if evidence is None or evidence.run_id != run_id or evidence.status is not GateEvidenceStatus.PASS or not evidence.eligible:
+            return False
+        artifact = self.control_store.get_artifact(evidence.validation_report_artifact_id)
+        if artifact is None or artifact.run_id != run_id or artifact.artifact_kind != "ValidationReport" or artifact.publication_state is not ArtifactPublicationState.PUBLISHED:
+            return False
+        if artifact.content_hash != evidence.validation_report_content_hash:
+            return False
+        try:
+            if self.artifact_store.stat(artifact) != artifact or self.artifact_store.verify(artifact).state is not ArtifactIntegrityState.VERIFIED:
+                return False
+            report = GateEvidenceService._decode_report(self.artifact_store.read(artifact))
+        except (KeyError, OSError, PlatformError, ValueError):
+            return False
+        return (
+            isinstance(report, ValidationReport)
+            and report.run_id == evidence.validation_report_run_id
+            and report.report_id == evidence.validation_report_id
+            and report.g6_status.value == evidence.status.value
+            and report.g6_eligible is True
+        )
 
     def _set_run_status(self, run_id: str, status: RunStatus) -> None:
         run = self.control_store.get_run(run_id)
@@ -505,15 +696,19 @@ class BoundedWorkerPool:
         self.max_jobs_per_pump = max_jobs_per_pump
         self.max_active_per_run = max_active_per_run
         self.max_active_per_source = max_active_per_source
+        for worker in self.workers:
+            worker.max_active_per_run = max_active_per_run
+            worker.max_active_per_source = max_active_per_source
 
     def pump(self) -> tuple[WorkerOutcome, ...]:
         outcomes: list[WorkerOutcome] = []
-        for index in range(self.max_jobs_per_pump):
-            worker = self.workers[index % len(self.workers)]
-            outcome = worker.run_once()
-            outcomes.append(outcome)
-            if outcome.status == "IDLE":
-                break
+        with ThreadPoolExecutor(max_workers=len(self.workers)) as executor:
+            while len(outcomes) < self.max_jobs_per_pump:
+                batch = self.workers[: min(len(self.workers), self.max_jobs_per_pump - len(outcomes))]
+                batch_outcomes = tuple(executor.map(lambda worker: worker.run_once(), batch))
+                outcomes.extend(batch_outcomes)
+                if all(outcome.status == "IDLE" for outcome in batch_outcomes):
+                    break
         return tuple(outcomes)
 
 
@@ -532,13 +727,28 @@ def load_authoritative_execution_plan(project_root: str | Path, *, run_id: str, 
     stages = []
     for raw in document.get("stages", []):
         stage_id = str(raw["stage_id"])
+        conditional = bool(raw.get("conditional", False))
+        required = bool(raw.get("required", True))
+        checkpoint = raw.get("review_checkpoint_id")
+        conditional_dependencies = tuple(dict.fromkeys(
+            str(item.get("dependency")) for item in raw.get("conditional_dependencies", []) if isinstance(item, dict) and item.get("dependency")
+        ))
+        selected = (not conditional) or required
         stages.append(
             StageSpec(
                 stage_id=stage_id,
-                required=bool(raw.get("required", True)),
+                required=required,
+                conditional=conditional,
+                selected=selected,
+                selection_reason=("required authoritative stage selected" if selected else "conditional optional capability not selected by runtime policy"),
                 dependencies=tuple(str(item) for item in raw.get("dependencies", [])),
+                optional_dependencies=tuple(str(item) for item in raw.get("optional_dependencies", [])),
+                conditional_dependencies=conditional_dependencies,
                 handler_key=stage_id,
+                review_checkpoint=ReviewCheckpoint(str(checkpoint)) if checkpoint else None,
+                required_review_checkpoint=ReviewCheckpoint(str(raw["required_review_checkpoint"])) if raw.get("required_review_checkpoint") else None,
                 final_validation=stage_id == "VALIDATION_RECONCILIATION",
+                source_scope=str(raw["source_scope"]) if raw.get("source_scope") else None,
                 metadata={"graph_source": "stage_graph.yml"},
             )
         )
@@ -555,6 +765,9 @@ def load_authoritative_execution_plan(project_root: str | Path, *, run_id: str, 
 
 __all__ = [
     "BoundedWorkerPool",
+    "CancellationAwareStageExecutorPort",
+    "CancellationProbePort",
+    "DurableCancellationProbe",
     "DurableExecutionSubmission",
     "FaultInjector",
     "InjectedWorkerCrash",

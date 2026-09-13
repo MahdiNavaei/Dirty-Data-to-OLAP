@@ -330,6 +330,7 @@ class StageAttemptRecord(_PlatformModel):
     failure_reason: str | None = None
     policy_config_fingerprint: str = Field(min_length=1)
     resource_budget_ref: str | None = None
+    delivery_phase: str = "ATTEMPT_CREATED"
     revision: int = Field(default=0, ge=0)
 
     @field_validator("attempt_id", "run_id", "stage_id")

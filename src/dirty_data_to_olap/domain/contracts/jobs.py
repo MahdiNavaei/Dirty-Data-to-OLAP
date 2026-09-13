@@ -76,14 +76,40 @@ class StageResultStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+class ReplaySafety(str, Enum):
+    """The durable contract used when a handler delivery outcome is unknown."""
+
+    REPLAY_SAFE = "REPLAY_SAFE"
+    RECONCILIATION_REQUIRED_ON_UNKNOWN = "RECONCILIATION_REQUIRED_ON_UNKNOWN"
+
+
+class DeliveryPhase(str, Enum):
+    """Durable delivery markers surrounding an external stage handler call."""
+
+    NOT_STARTED = "NOT_STARTED"
+    ATTEMPT_CREATED = "ATTEMPT_CREATED"
+    HANDLER_DELIVERY_STARTED = "HANDLER_DELIVERY_STARTED"
+    RESULT_RECORDED = "RESULT_RECORDED"
+    FINALIZED = "FINALIZED"
+    RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
+
+
 class StageSpec(_SourceModel):
     """One run-scoped projection of the authoritative architecture DAG."""
 
     stage_id: str = Field(min_length=1, max_length=128)
     required: bool = True
+    conditional: bool = False
+    selected: bool = True
+    selection_reason: str = Field(default="selected by the authoritative execution plan", min_length=1, max_length=256)
     dependencies: tuple[str, ...] = ()
+    optional_dependencies: tuple[str, ...] = ()
+    conditional_dependencies: tuple[str, ...] = ()
     handler_key: str = Field(min_length=1, max_length=128)
     review_checkpoint: ReviewCheckpoint | None = None
+    required_review_checkpoint: ReviewCheckpoint | None = None
+    replay_safety: ReplaySafety = ReplaySafety.RECONCILIATION_REQUIRED_ON_UNKNOWN
+    source_scope: str | None = Field(default=None, min_length=1, max_length=256)
     final_validation: bool = False
     policy_config_fingerprint: str = Field(default="step28-policy-v1", min_length=1, max_length=256)
     metadata: Mapping[str, str] = Field(default_factory=dict)
@@ -93,12 +119,20 @@ class StageSpec(_SourceModel):
     def validate_ids(cls, value: str) -> str:
         return _identity(value)
 
-    @field_validator("dependencies")
+    @field_validator("dependencies", "optional_dependencies", "conditional_dependencies")
     @classmethod
     def validate_dependencies(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if len(set(value)) != len(value) or any(not _ID.fullmatch(item) for item in value):
             raise ValueError("stage dependencies must be unique safe identities")
         return value
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> "StageSpec":
+        if self.conditional and not self.selection_reason.strip():
+            raise ValueError("conditional stage selection must carry an explicit reason")
+        if self.required and not self.selected:
+            raise ValueError("required stages cannot be omitted from an execution plan")
+        return self
 
     @field_validator("metadata")
     @classmethod
@@ -130,7 +164,12 @@ class ExecutionPlan(_SourceModel):
         for stage in self.stages:
             if stage.stage_id in stage.dependencies or any(dep not in known for dep in stage.dependencies):
                 raise ValueError("execution plan contains an invalid dependency")
-        pending = {stage.stage_id: set(stage.dependencies) for stage in self.stages}
+        pending = {
+            stage.stage_id: set(
+                dep for dep in (*stage.dependencies, *stage.optional_dependencies, *stage.conditional_dependencies) if dep in known
+            )
+            for stage in self.stages
+        }
         resolved: set[str] = set()
         while pending:
             ready = {stage_id for stage_id, deps in pending.items() if deps <= resolved}
@@ -180,6 +219,10 @@ class JobRecord(_SourceModel):
     cancellation_requested_at: datetime | None = None
     result_refs: tuple[str, ...] = ()
     review_context: ReviewCompatibilityContext | None = None
+    delivery_phase: DeliveryPhase = DeliveryPhase.NOT_STARTED
+    replay_safety: ReplaySafety = ReplaySafety.RECONCILIATION_REQUIRED_ON_UNKNOWN
+    source_scope: str | None = None
+    durable_result: Mapping[str, Any] | None = None
     metadata: Mapping[str, str] = Field(default_factory=dict)
     revision: int = Field(default=0, ge=0)
 
@@ -292,12 +335,14 @@ class RetryPolicy(_SourceModel):
 
 __all__ = [
     "ExecutionPlan",
+    "DeliveryPhase",
     "FailureClassification",
     "JobKind",
     "JobLease",
     "JobRecord",
     "JobStatus",
     "RetryPolicy",
+    "ReplaySafety",
     "StageExecutionRequest",
     "StageExecutionResult",
     "StageResultStatus",

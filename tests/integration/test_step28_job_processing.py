@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
 import sqlite3
 
 import pytest
 
 from dirty_data_to_olap.adapters.platform import LocalArtifactStore, SQLiteControlStore
+from dirty_data_to_olap.application.backend import BackendService, Principal
 from dirty_data_to_olap.application.jobs import DurableExecutionSubmission, InjectedWorkerCrash, JobWorker, StageHandlerRegistry
-from dirty_data_to_olap.application.platform import ConcurrencyConflictError
-from dirty_data_to_olap.application.review_policy import ReviewPolicyService
-from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand, ReviewRecord
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewDecisionStatus, ReviewCompatibilityContext
+from dirty_data_to_olap.application.platform import ConcurrencyConflictError, GateEvidenceService
+from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewDecisionStatus, ReviewCompatibilityContext, review_subject_key
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
     FailureClassification,
@@ -20,7 +21,8 @@ from dirty_data_to_olap.domain.contracts.jobs import (
     StageResultStatus,
     StageSpec,
 )
-from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, RunRecord, StageStatus
+from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, ArtifactStorageMode, RetentionClass, RunRecord, StageStatus
+from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id
 
 
@@ -49,6 +51,34 @@ def _stores(tmp_path: Path):
     control = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
     artifacts = LocalArtifactStore(tmp_path / "artifacts", project_root=tmp_path)
     run = control.create_run(RunRecord(run_id="run-step28", project_id="project", configuration_fingerprint="cfg"))
+    source = Path(__file__).resolve().parents[2] / "workspace" / "runs" / "step22-reference-run" / "validation" / "validation_report.json"
+    payload = source.read_bytes()
+    report_payload = json.loads(payload.decode("utf-8"))
+    report = ValidationReport.model_validate({key: value for key, value in report_payload.items() if key != "content_hash"})
+    report_ref = artifacts.publish(
+        ArtifactManifest(
+            artifact_id=stable_id("g6-report", {"run_id": run.run_id}),
+            run_id=run.run_id,
+            stage_id="VALIDATION_RECONCILIATION",
+            attempt_id="g6-attempt",
+            artifact_kind="ValidationReport",
+            media_type="application/json",
+            producer="step28-test-g6",
+            storage_mode=ArtifactStorageMode.MANAGED,
+            retention_class=RetentionClass.PINNED_GATE_EVIDENCE,
+        ),
+        payload,
+    )
+    control.register_artifact(report_ref)
+    GateEvidenceService().record_from_validation_report(
+        gate_id="G6_DATA_CORRECTNESS",
+        platform_run_id=run.run_id,
+        report=report,
+        report_artifact=report_ref,
+        verified_content_commit="a" * 40,
+        control_store=control,
+        artifact_store=artifacts,
+    )
     return control, artifacts, run
 
 
@@ -83,7 +113,7 @@ def test_durable_enqueue_deduplicates_command_and_reopens(tmp_path: Path) -> Non
     second, duplicate_again = control.enqueue_execution_command(command, run)
     assert first.job_id == second.job_id
     assert not duplicate and duplicate_again
-    assert control.schema_version == 5
+    assert control.schema_version == 6
     control.close()
     reopened = SQLiteControlStore(control.path, project_root=tmp_path)
     assert reopened.get_job(first.job_id).status is JobStatus.QUEUED
@@ -103,7 +133,7 @@ def test_v4_to_v5_migration_installs_job_tables_without_reset(tmp_path: Path) ->
         connection.execute("DROP TABLE execution_plans")
     reopened = SQLiteControlStore(path, project_root=tmp_path)
     try:
-        assert reopened.schema_version == 5 and reopened.get_run(run.run_id) is not None
+        assert reopened.schema_version == 6 and reopened.get_run(run.run_id) is not None
         tables = {row[0] for row in sqlite3.connect(path).execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"jobs", "execution_plans"}.issubset(tables)
         assert sqlite3.connect(path).execute("SELECT 1 FROM schema_migrations WHERE version_from = 4 AND version_to = 5").fetchone()
@@ -270,9 +300,19 @@ def test_review_resume_requires_compatible_context_and_creates_new_attempt(tmp_p
     assert first_attempt.status is StageStatus.NEEDS_REVIEW
     context = handler.context
     assert context is not None
-    decision = ReviewPolicyService().create_decision(context, decision=ReviewDecisionStatus.ACCEPTED, actor="reviewer", rationale="reviewed")
-    subject_key = "|".join((context.review_checkpoint_id.value, context.subject_artifact_id, context.subject_content_hash))
-    control.record_review(ReviewRecord(run_id=run.run_id, subject_key=subject_key, decision=decision, revision=1), expected_revision=0)
+    subject_key = review_subject_key(context)
+    BackendService(control_store=control, artifact_store=artifacts).review(
+        run_id=run.run_id,
+        checkpoint=context.review_checkpoint_id,
+        subject_artifact_id=context.subject_artifact_id,
+        subject_content_hash=context.subject_content_hash,
+        decision=ReviewDecisionStatus.ACCEPTED,
+        rationale="reviewed",
+        expected_revision=0,
+        principal=Principal(subject="reviewer", scopes=frozenset({"reviews:write"})),
+        idempotency_key="step28-review",
+    )
+    assert control.get_current_review(run_id=run.run_id, subject_key=subject_key) is not None
     DurableExecutionSubmission(control).submit_command(command=_command(run.run_id, key="resume-1", action=ExecutionAction.RESUME), run=run)
     clock.advance(5)
     assert worker.run_once().status == JobStatus.SUCCEEDED.value
@@ -390,7 +430,7 @@ def test_fault_injected_finalization_replay_reuses_attempt_identity(tmp_path: Pa
     try:
         recovered = JobWorker(control_store=reopened, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-b", lease_seconds=5, clock=clock)
         assert recovered.run_once().status == JobStatus.SUCCEEDED.value
-        assert [request.attempt_id for request in handler.requests] == [first_attempt_id, first_attempt_id]
+        assert [request.attempt_id for request in handler.requests] == [first_attempt_id]
         assert reopened.get_run(run.run_id).status.value == "SUCCEEDED"
     finally:
         reopened.close()
@@ -442,8 +482,9 @@ def test_fault_injected_after_artifact_publication_recovers_safely(tmp_path: Pat
     reopened = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
     try:
         recovered = JobWorker(control_store=reopened, artifact_store=artifacts, executor=StageHandlerRegistry({"work": handler}), worker_id="worker-b", lease_seconds=5, clock=clock)
-        assert recovered.run_once().status == JobStatus.SUCCEEDED.value
-        assert reopened.get_run(run.run_id).status.value == "SUCCEEDED"
+        assert recovered.run_once().status == JobStatus.FAILED.value
+        assert recovered.control_store.get_stage_job(run_id=run.run_id, stage_id="WORK").failure_classification is FailureClassification.UNKNOWN_SIDE_EFFECT
+        assert reopened.get_run(run.run_id).status.value == "FAILED"
     finally:
         reopened.close()
 

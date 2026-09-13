@@ -118,6 +118,20 @@ class ReviewCompatibilityContext(_SourceModel):
     skip_authorization: ReviewSkipAuthorization | None = None
 
 
+def review_subject_key(context: ReviewCompatibilityContext) -> str:
+    """Return the single durable identity for a reviewable subject."""
+
+    return "|".join(
+        (
+            context.review_checkpoint_id.value,
+            context.subject_artifact_id,
+            context.subject_content_hash,
+            context.subject_semantic_id,
+            context.applicability_fingerprint,
+        )
+    )
+
+
 class ReviewDecision(_SourceModel):
     review_decision_id: str = Field(min_length=1)
     review_checkpoint_id: ReviewCheckpoint
