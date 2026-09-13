@@ -580,6 +580,7 @@ from .platform import (
 from .jobs import (
     ExecutionPlan,
     ExecutionPlanIntent,
+    ExecutionPlanPhase,
     ExecutionPlanPreparation,
     ExecutionPlanSelection,
     PlanPreparationStatus,
@@ -1029,6 +1030,7 @@ __all__ = [
     "visual_node_id",
     "ExecutionPlan",
     "ExecutionPlanIntent",
+    "ExecutionPlanPhase",
     "ExecutionPlanPreparation",
     "ExecutionPlanSelection",
     "FailureClassification",

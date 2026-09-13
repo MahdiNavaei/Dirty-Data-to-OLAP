@@ -26,11 +26,14 @@ source exists.
 
 Execution-plan preparation is the Step28 handoff: the route
 `/api/v1/runs/{run_id}/execution/prepare` accepts only bounded
-`ExecutionPlanIntent`. The server derives conditional-stage selection from
-verified published planning artifacts, owns the policy/evidence/scope
-fingerprints, and returns `BLOCKED` when trusted planning state is missing,
-conflicting or tampered. A client cannot submit a complete authoritative
-`ExecutionPlanSelection`.
+`ExecutionPlanIntent`. An empty run is accepted with a durable `BOOTSTRAP`
+projection for `SOURCE_DISCOVERY`; no future-stage artifact is required. The
+worker advances that same plan identity after source discovery and canonical
+hypothesis stages durably succeed. The server derives conditional-stage
+selection from verified published artifacts in the succeeded owning stage's
+result set, owns the policy/evidence/scope fingerprints, and keeps missing,
+conflicting or tampered truth pending or `BLOCKED`. A client cannot submit a
+complete authoritative `ExecutionPlanSelection`.
 
 Run and review mutations persist their idempotency response in the same
 SQLite transaction as the local mutation.  Execution commands first reserve a

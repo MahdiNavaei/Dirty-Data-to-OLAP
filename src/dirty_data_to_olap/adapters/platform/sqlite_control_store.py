@@ -1058,6 +1058,31 @@ class SQLiteControlStore(ControlStorePort):
             row = connection.execute("SELECT * FROM execution_plans WHERE run_id = ?", (run_id,)).fetchone()
             return None if row is None else self._plan_from_row(row)
 
+    def advance_execution_plan(self, plan: ExecutionPlan, *, expected_content_hash: str) -> ExecutionPlan:
+        """CAS-update one stable plan identity as runtime truth becomes available."""
+
+        with self._transaction() as connection:
+            row = connection.execute("SELECT * FROM execution_plans WHERE run_id = ?", (plan.run_id,)).fetchone()
+            if row is None:
+                raise PlatformError("execution plan does not exist")
+            stored = self._plan_from_row(row)
+            if stored.plan_id != plan.plan_id or str(row["content_hash"]) != expected_content_hash:
+                raise ConcurrencyConflictError("phased execution plan advancement lost its compare-and-swap race")
+            cursor = connection.execute(
+                "UPDATE execution_plans SET content_hash = ?, plan_json = ? WHERE run_id = ? AND plan_id = ? AND content_hash = ?",
+                (plan.content_hash, _dump(plan), plan.run_id, plan.plan_id, expected_content_hash),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("phased execution plan advancement lost its compare-and-swap race")
+            self._audit(
+                connection,
+                "execution_plan_advanced",
+                run_id=plan.run_id,
+                status=plan.planning_phase.value,
+                detail=f"plan={plan.plan_id}; revision={plan.revision}; pending={','.join(plan.pending_stage_ids)}",
+            )
+            return plan
+
     @staticmethod
     def _command_job_id(command: ExecutionCommand) -> str:
         return stable_id("job", {"command_id": command.command_id})

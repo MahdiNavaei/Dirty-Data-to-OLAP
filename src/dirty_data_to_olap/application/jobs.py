@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Mapping, Protocol
+from typing import Callable, Mapping, Protocol, Sequence
 
 from dirty_data_to_olap.application.platform import (
     ArtifactStorePort,
@@ -27,6 +27,8 @@ from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, Revi
 from dirty_data_to_olap.domain.contracts.jobs import (
     DeliveryPhase,
     ExecutionPlan,
+    ExecutionPlanIntent,
+    ExecutionPlanPhase,
     ExecutionPlanSelection,
     FailureClassification,
     JobKind,
@@ -56,6 +58,13 @@ class StageExecutorPort(Protocol):
     """Project-owned typed stage executor; no provider-native types cross it."""
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
+        ...
+
+
+class ExecutionPlanAdvancerPort(Protocol):
+    """Durable coordinator that expands a phased plan from completed runtime truth."""
+
+    def advance_after_stage(self, *, run_id: str, completed_stage_id: str) -> ExecutionPlan:
         ...
 
 
@@ -185,6 +194,7 @@ class JobWorker:
         max_active_per_run: int = 1,
         max_active_per_source: int = 1,
         review_subject_deriver: ReviewSubjectDerivationPort | None = None,
+        plan_advancer: ExecutionPlanAdvancerPort | None = None,
     ) -> None:
         if not worker_id or lease_seconds < 1 or max_active_per_run < 1 or max_active_per_source < 1:
             raise ValueError("worker_id and a positive lease are required")
@@ -200,6 +210,7 @@ class JobWorker:
         self.max_active_per_source = max_active_per_source
         self.review_policy = ReviewPolicyService()
         self.review_subject_deriver = review_subject_deriver or ReviewCheckpointSubjectResolver(control_store, artifact_store)
+        self.plan_advancer = plan_advancer
 
     def run_once(self) -> WorkerOutcome:
         now = _safe_now(self.clock)
@@ -668,8 +679,20 @@ class JobWorker:
 
     def _advance_after_stage(self, plan: ExecutionPlan, stage_id: str, job: JobRecord) -> None:
         if job.status is JobStatus.SUCCEEDED:
-            self._schedule_ready(plan, parent_job_id=job.job_id)
-            self._maybe_complete_run(plan)
+            active_plan = plan
+            if self.plan_advancer is not None:
+                active_plan = self.plan_advancer.advance_after_stage(run_id=job.run_id, completed_stage_id=stage_id)
+            # A source-resolved plan may still carry a pending ER branch while
+            # its already-authorized source/evidence prefix continues.  Only a
+            # bootstrap plan with no source truth is unrunnable as a whole.
+            if active_plan.pending_stage_ids and (
+                active_plan.planning_phase is ExecutionPlanPhase.BOOTSTRAP
+                or (active_plan.planning_phase is ExecutionPlanPhase.SOURCE_RESOLVED and stage_id == "CANONICAL_HYPOTHESES")
+            ):
+                self._set_run_status(job.run_id, RunStatus.BLOCKED)
+                return
+            self._schedule_ready(active_plan, parent_job_id=job.job_id)
+            self._maybe_complete_run(active_plan)
         elif job.status is JobStatus.NEEDS_REVIEW:
             self._set_run_status(job.run_id, RunStatus.NEEDS_REVIEW)
         elif job.status is JobStatus.BLOCKED:
@@ -766,6 +789,12 @@ def load_authoritative_execution_plan(
     run_id: str,
     selection: ExecutionPlanSelection | None = None,
     plan_id: str | None = None,
+    stage_ids: Sequence[str] | None = None,
+    planning_phase: ExecutionPlanPhase = ExecutionPlanPhase.COMPLETE,
+    planning_intent: ExecutionPlanIntent | None = None,
+    pending_stage_ids: Sequence[str] = (),
+    revision: int = 0,
+    success_guard_required: bool = True,
 ) -> ExecutionPlan:
     """Project the existing architecture DAG into a run-scoped durable plan.
 
@@ -778,17 +807,23 @@ def load_authoritative_execution_plan(
 
     path = Path(project_root) / "docs" / "architecture" / "specs" / "stage_graph.yml"
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    conditional_stage_ids = tuple(str(raw["stage_id"]) for raw in document.get("stages", []) if bool(raw.get("conditional", False)))
-    if selection is None:
+    all_raw_stages = tuple(document.get("stages", []))
+    requested_stage_ids = None if stage_ids is None else {str(stage_id) for stage_id in stage_ids}
+    all_stage_ids = {str(raw["stage_id"]) for raw in all_raw_stages}
+    if requested_stage_ids is not None and not requested_stage_ids <= all_stage_ids:
+        raise ExecutionPlanSelectionError(tuple(sorted(requested_stage_ids - all_stage_ids)), "execution plan requested an unknown graph stage")
+    graph_stages = tuple(raw for raw in all_raw_stages if requested_stage_ids is None or str(raw["stage_id"]) in requested_stage_ids)
+    conditional_stage_ids = tuple(str(raw["stage_id"]) for raw in graph_stages if bool(raw.get("conditional", False)))
+    if conditional_stage_ids and selection is None:
         raise ExecutionPlanSelectionError(conditional_stage_ids)
-    if selection.run_id != run_id:
+    if selection is not None and selection.run_id != run_id:
         raise ExecutionPlanSelectionError(conditional_stage_ids, "execution selection is bound to a different run")
-    decisions = {item.stage_id: item for item in selection.decisions}
+    decisions = {} if selection is None else {item.stage_id: item for item in selection.decisions}
     unknown = tuple(sorted(set(decisions) - set(conditional_stage_ids)))
-    missing = tuple(stage_id for stage_id in conditional_stage_ids if stage_id not in decisions)
+    missing = tuple(stage_id for stage_id in conditional_stage_ids if stage_id not in decisions) if selection is not None else ()
     required_unselected = tuple(
         str(raw["stage_id"])
-        for raw in document.get("stages", [])
+        for raw in graph_stages
         if bool(raw.get("conditional", False)) and bool(raw.get("required", True)) and raw.get("stage_id") in decisions and not decisions[str(raw["stage_id"])].selected
     )
     if unknown or missing or required_unselected:
@@ -798,7 +833,7 @@ def load_authoritative_execution_plan(
             detail = "required conditional stages cannot be excluded by the execution selection"
         raise ExecutionPlanSelectionError(unresolved, detail)
     stages = []
-    for raw in document.get("stages", []):
+    for raw in graph_stages:
         stage_id = str(raw["stage_id"])
         conditional = bool(raw.get("conditional", False))
         required = bool(raw.get("required", True))
@@ -837,13 +872,17 @@ def load_authoritative_execution_plan(
     if not stages:
         raise PlatformError("authoritative stage graph contains no stages")
     return ExecutionPlan(
-        plan_id=plan_id or stable_id("execution-plan", {"run_id": run_id, "graph": str(path), "selection": selection.content_hash}),
+        plan_id=plan_id or stable_id("execution-plan", {"run_id": run_id, "graph": str(path), "selection": selection.content_hash if selection is not None else "bootstrap"}),
         run_id=run_id,
         graph_source="docs/architecture/specs/stage_graph.yml",
         graph_version=str(document.get("scope", "v1_runtime_stage_dag")),
         stages=tuple(stages),
         selection=selection,
-        success_guard_required=True,
+        success_guard_required=success_guard_required,
+        planning_phase=planning_phase,
+        planning_intent=planning_intent,
+        pending_stage_ids=tuple(pending_stage_ids),
+        revision=revision,
     )
 
 
@@ -853,6 +892,7 @@ __all__ = [
     "CancellationProbePort",
     "DurableCancellationProbe",
     "DurableExecutionSubmission",
+    "ExecutionPlanAdvancerPort",
     "ExecutionPlanSelectionError",
     "FaultInjector",
     "InjectedWorkerCrash",

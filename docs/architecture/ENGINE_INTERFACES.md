@@ -16,13 +16,19 @@ directly.
 
 ## Execution Plan Authority boundary
 
-The public preparation API accepts only bounded `ExecutionPlanIntent` flags. The
-server resolves conditional stages from verified, published
-`SourceCatalog`/`SourceSnapshotResult` and `CanonicalModelHypothesis` artifacts
-for the requested run. The resolver owns the policy reference, evidence
-references, planning scope and scope fingerprint; client-supplied authority
-fields are rejected by the transport model. Missing, conflicting or tampered
-planning inputs produce `BLOCKED` and never create a guessed plan.
+The public preparation API accepts only bounded `ExecutionPlanIntent` flags. An
+empty run first receives a durable bootstrap plan for `SOURCE_DISCOVERY` only.
+The worker then advances the same plan identity by compare-and-swap after the
+owning stage has durably succeeded. Source scope from verified, published
+`SourceCatalog`/`SourceSnapshotResult` artifacts resolves source-dependent
+selection; a verified, published `CanonicalModelHypothesis` later resolves
+entity-resolution selection. Planning artifacts must be present in the
+succeeded owning stage's result set, so a manually registered future artifact
+cannot bypass the lifecycle. The resolver owns policy, evidence, planning
+scope and scope fingerprints; client-supplied authority fields are rejected
+by the transport model. Missing, conflicting or tampered planning inputs stay
+pending or produce a typed `BLOCKED` state and never become a guessed
+selection.
 
 ## QualityStagedReader
 

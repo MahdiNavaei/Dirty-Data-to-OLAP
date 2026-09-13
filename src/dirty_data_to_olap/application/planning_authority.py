@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Collection
 
 from dirty_data_to_olap.application.platform import ArtifactStorePort, ControlStorePort, PlatformError
 from dirty_data_to_olap.domain.contracts.canonical import CanonicalModelHypothesis, EntityResolutionRequirement
-from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, ExecutionPlanSelection, StageSelectionDecision
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, ExecutionPlanSelection, JobStatus, StageSelectionDecision
 from dirty_data_to_olap.domain.contracts.platform import ArtifactIntegrityState, ArtifactPublicationState, ArtifactRef, RunRecord
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSnapshotResult, stable_digest, stable_id
 
@@ -45,7 +45,13 @@ class TrustedExecutionPlanningState:
         self.control_store = control_store
         self.artifact_store = artifact_store
 
-    def resolve(self, run: RunRecord) -> tuple[ExecutionPlanningContext | None, tuple[str, ...]]:
+    def resolve(
+        self,
+        run: RunRecord,
+        *,
+        require_hypothesis: bool = True,
+        require_runtime_ownership: bool = True,
+    ) -> tuple[ExecutionPlanningContext | None, tuple[str, ...]]:
         source_ids: set[str] = set()
         source_artifacts: list[str] = []
         hypotheses: list[tuple[ArtifactRef, CanonicalModelHypothesis]] = []
@@ -53,6 +59,18 @@ class TrustedExecutionPlanningState:
         refs = self.control_store.list_artifacts(run_id=run.run_id, limit=10000)
         for ref in refs:
             if ref.artifact_kind not in self._KINDS:
+                continue
+            expected_stage = {
+                "SourceCatalog": "SOURCE_DISCOVERY",
+                "SourceSnapshotResult": "SOURCE_SNAPSHOT_STAGE",
+                "CanonicalModelHypothesis": "CANONICAL_HYPOTHESES",
+            }[ref.artifact_kind]
+            if ref.stage_id != expected_stage:
+                continue
+            if ref.artifact_kind == "CanonicalModelHypothesis" and not require_hypothesis:
+                continue
+            if require_runtime_ownership and not self._owned_by_succeeded_stage(ref, run.run_id):
+                unresolved.add("SOURCE_SCOPE" if ref.artifact_kind in {"SourceCatalog", "SourceSnapshotResult"} else "ENTITY_RESOLUTION")
                 continue
             try:
                 artifact, payload = self._read(ref, run.run_id)
@@ -73,18 +91,22 @@ class TrustedExecutionPlanningState:
 
         if not source_ids:
             unresolved.add("SOURCE_SCOPE")
-        if not hypotheses:
+        if require_hypothesis and not hypotheses:
             unresolved.add("ENTITY_RESOLUTION")
         if unresolved:
             return None, tuple(sorted(unresolved))
 
-        requirement_sets = {
-            stable_digest(hypothesis.entity_resolution_requirements): hypothesis.entity_resolution_requirements
-            for _artifact, hypothesis in hypotheses
-        }
-        if len(requirement_sets) != 1:
-            return None, ("ENTITY_RESOLUTION",)
-        requirements = dict(next(iter(requirement_sets.values())))
+        requirements: dict[str, EntityResolutionRequirement] = {}
+        if require_hypothesis:
+            if any(set(hypothesis.source_ids) != source_ids for _artifact, hypothesis in hypotheses):
+                return None, ("ENTITY_RESOLUTION",)
+            requirement_sets = {
+                stable_digest(hypothesis.entity_resolution_requirements): hypothesis.entity_resolution_requirements
+                for _artifact, hypothesis in hypotheses
+            }
+            if len(requirement_sets) != 1:
+                return None, ("ENTITY_RESOLUTION",)
+            requirements = dict(next(iter(requirement_sets.values())))
         return ExecutionPlanningContext(
             run_id=run.run_id,
             source_ids=tuple(sorted(source_ids)),
@@ -92,6 +114,15 @@ class TrustedExecutionPlanningState:
             hypothesis_artifact_ids=tuple(sorted(artifact.artifact_id for artifact, _hypothesis in hypotheses)),
             entity_resolution_requirements=requirements,
         ), ()
+
+    def _owned_by_succeeded_stage(self, ref: ArtifactRef, run_id: str) -> bool:
+        job = self.control_store.get_stage_job(run_id=run_id, stage_id=ref.stage_id)
+        return bool(
+            job is not None
+            and job.status is JobStatus.SUCCEEDED
+            and job.attempt_id == ref.attempt_id
+            and ref.artifact_id in job.result_refs
+        )
 
     def _read(self, supplied: ArtifactRef, run_id: str) -> tuple[ArtifactRef, Any]:
         registered = self.control_store.get_artifact(supplied.artifact_id)
@@ -117,8 +148,20 @@ class ServerOwnedExecutionPlanSelectionResolver:
         self.state = TrustedExecutionPlanningState(control_store, artifact_store)
         self.graph_root = Path(graph_root).resolve()
 
-    def resolve(self, *, run: RunRecord, intent: ExecutionPlanIntent) -> SelectionResolution:
-        context, unresolved = self.state.resolve(run)
+    def resolve(
+        self,
+        *,
+        run: RunRecord,
+        intent: ExecutionPlanIntent,
+        require_hypothesis: bool = True,
+        stage_ids: Collection[str] | None = None,
+        require_runtime_ownership: bool = True,
+    ) -> SelectionResolution:
+        context, unresolved = self.state.resolve(
+            run,
+            require_hypothesis=require_hypothesis,
+            require_runtime_ownership=require_runtime_ownership,
+        )
         if context is None:
             return SelectionResolution(
                 unresolved_stage_ids=unresolved,
@@ -134,7 +177,12 @@ class ServerOwnedExecutionPlanSelectionResolver:
         except yaml.YAMLError:
             return SelectionResolution(unresolved_stage_ids=("PLAN_GRAPH",), detail="authoritative execution graph could not be loaded")
 
-        stages = tuple(graph.get("stages", ()))
+        all_stages = tuple(graph.get("stages", ()))
+        all_stage_ids = {str(raw["stage_id"]) for raw in all_stages}
+        requested_stage_ids = None if stage_ids is None else {str(stage_id) for stage_id in stage_ids}
+        if requested_stage_ids is not None and not requested_stage_ids <= all_stage_ids:
+            return SelectionResolution(unresolved_stage_ids=("PLAN_GRAPH",), detail="authoritative graph selection requested an unknown stage")
+        stages = tuple(raw for raw in all_stages if requested_stage_ids is None or str(raw["stage_id"]) in requested_stage_ids)
         conditional_ids = tuple(str(raw["stage_id"]) for raw in stages if bool(raw.get("conditional", False)))
         scope_fingerprint = stable_digest({
             "run_id": run.run_id,
@@ -143,6 +191,7 @@ class ServerOwnedExecutionPlanSelectionResolver:
             "source_artifact_ids": context.source_artifact_ids,
             "hypothesis_artifact_ids": context.hypothesis_artifact_ids,
             "entity_resolution_requirements": {key: value.value for key, value in sorted(context.entity_resolution_requirements.items())},
+            "selection_stage_ids": tuple(str(raw["stage_id"]) for raw in stages),
             "policy": self.POLICY_REF,
         })
         scope = f"trusted-run-planning:{run.run_id}"

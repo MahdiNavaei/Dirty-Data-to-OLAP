@@ -154,6 +154,10 @@ class ControlStorePort(Protocol):
     def get_execution_plan(self, run_id: str) -> ExecutionPlan | None:
         ...
 
+    def advance_execution_plan(self, plan: ExecutionPlan, *, expected_content_hash: str) -> ExecutionPlan:
+        """CAS-advance a phased plan after its owning runtime stage succeeds."""
+        ...
+
     def enqueue_execution_command(self, command: Any, run: RunRecord) -> tuple[JobRecord, bool]:
         ...
 

@@ -99,6 +99,14 @@ class PlanPreparationStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class ExecutionPlanPhase(str, Enum):
+    """Durable lifecycle of a plan while runtime truth becomes available."""
+
+    BOOTSTRAP = "BOOTSTRAP"
+    SOURCE_RESOLVED = "SOURCE_RESOLVED"
+    COMPLETE = "COMPLETE"
+
+
 class ExecutionPlanIntent(_SourceModel):
     """Bounded caller intent; it contains no selection authority."""
 
@@ -166,6 +174,7 @@ class ExecutionPlanPreparation(_SourceModel):
     plan_id: str | None = Field(default=None, max_length=128)
     selection_fingerprint: str = Field(min_length=1, max_length=256)
     unresolved_stage_ids: tuple[str, ...] = ()
+    planning_phase: ExecutionPlanPhase = ExecutionPlanPhase.COMPLETE
     detail: str = Field(min_length=1, max_length=512)
 
     @field_validator("run_id")
@@ -238,6 +247,10 @@ class ExecutionPlan(_SourceModel):
     stages: tuple[StageSpec, ...] = Field(min_length=1)
     selection: ExecutionPlanSelection | None = None
     success_guard_required: bool = False
+    planning_phase: ExecutionPlanPhase = ExecutionPlanPhase.COMPLETE
+    planning_intent: ExecutionPlanIntent | None = None
+    pending_stage_ids: tuple[str, ...] = ()
+    revision: int = Field(default=0, ge=0)
     created_at: datetime = Field(default_factory=utc_now)
 
     @field_validator("plan_id", "run_id")
@@ -250,6 +263,10 @@ class ExecutionPlan(_SourceModel):
         ids = [stage.stage_id for stage in self.stages]
         if len(set(ids)) != len(ids):
             raise ValueError("execution plan stage identities must be unique")
+        if len(set(self.pending_stage_ids)) != len(self.pending_stage_ids) or any(not _ID.fullmatch(item) for item in self.pending_stage_ids):
+            raise ValueError("pending plan stage identities must be unique safe identities")
+        if self.planning_phase is ExecutionPlanPhase.COMPLETE and self.pending_stage_ids:
+            raise ValueError("complete execution plans cannot retain pending stage decisions")
         known = set(ids)
         conditional_ids = {stage.stage_id for stage in self.stages if stage.conditional}
         if conditional_ids and self.selection is None:
@@ -471,6 +488,7 @@ __all__ = [
     "ExecutionPlanIntent",
     "ExecutionPlanPreparation",
     "ExecutionPlanSelection",
+    "ExecutionPlanPhase",
     "DeliveryPhase",
     "FailureClassification",
     "JobKind",

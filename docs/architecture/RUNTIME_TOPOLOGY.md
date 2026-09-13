@@ -44,12 +44,17 @@ Before a submit command is accepted, the application-owned
 `ExecutionPlanService` compiles the authoritative `stage_graph.yml` for the
 run. The public preparation route
 `/api/v1/runs/{run_id}/execution/prepare` accepts only bounded
-`ExecutionPlanIntent`; server authority resolves conditional stages from
-verified, published run planning artifacts and persists an `ExecutionPlan`
-bound to the resulting `ExecutionPlanSelection`. Conditional stages never
-default to omitted. An unresolved or conflicting trusted input returns a typed
-`BLOCKED` result and does not create a guessed plan. Selection policy,
-evidence, scope and scope fingerprints are server-owned.
+`ExecutionPlanIntent`. A genuinely empty run receives a durable `BOOTSTRAP`
+plan containing only `SOURCE_DISCOVERY`; it does not need future source or
+canonical artifacts to start. After a successful owning stage, the worker
+asks the service to compare-and-swap the same plan identity into
+`SOURCE_RESOLVED` and later `COMPLETE` phases. Conditional selections are
+derived only from verified, published artifacts owned by a succeeded stage
+job: discovered source scope drives `SCHEMA_MATCHING`, and
+`CanonicalModelHypothesis` drives `ENTITY_RESOLUTION`. Pending future
+decisions remain explicit and never become `false`; missing, conflicting or
+tampered truth fails closed. Selection policy, evidence, scope and scope
+fingerprints are server-owned.
 
 Review checkpoint stages are control-plane pauses. A worker derives their
 authoritative context from registered, verified typed upstream artifacts by

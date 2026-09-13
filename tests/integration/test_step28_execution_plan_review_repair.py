@@ -384,62 +384,24 @@ def _authoritative_selection(run_id: str, *, omit_stage: str | None = None) -> E
     )
 
 
-def test_public_api_prepares_plan_before_submit_and_blocks_unresolved_selection(tmp_path: Path) -> None:
+def test_public_api_bootstraps_plan_before_submit_without_future_artifacts(tmp_path: Path) -> None:
     platform, backend = build_local_backend(tmp_path / "product")
     client = TestClient(create_app(backend), raise_server_exceptions=False)
     try:
         created = client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "product-run"}, json={"project_id": "product", "configuration_fingerprint": platform.config.configuration_fingerprint})
         assert created.status_code == 201, created.text
         run_id = created.json()["run_id"]
-        for source_id in ("crm", "erp"):
-            catalog = _trusted_catalog(source_id)
-            _publish_typed(
-                platform.control_store,
-                platform.artifact_store,
-                run_id=run_id,
-                stage_id="SOURCE_DISCOVERY",
-                attempt_id="trusted-planning-attempt",
-                artifact_id=f"catalog-{source_id}",
-                artifact_kind="SourceCatalog",
-                value=catalog,
-            )
-        hypothesis = _trusted_hypothesis(run_id, ("crm", "erp"), EntityResolutionRequirement.ER_NOT_REQUIRED)
-        _publish_typed(
-            platform.control_store,
-            platform.artifact_store,
-            run_id=run_id,
-            stage_id="CANONICAL_HYPOTHESES",
-            attempt_id="trusted-planning-attempt",
-            artifact_id=hypothesis.artifact_id,
-            artifact_kind="CanonicalModelHypothesis",
-            value=hypothesis,
-        )
         intent = ExecutionPlanIntent(cross_source_mapping_requested=False, entity_resolution_requested=False)
         prepared = client.post(f"/api/v1/runs/{run_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "product-plan"}, json={"intent": intent.model_dump(mode="json")})
         assert prepared.status_code == 200, prepared.text
         assert prepared.json()["status"] == "READY"
+        assert prepared.json()["planning_phase"] == "BOOTSTRAP"
         plan = platform.control_store.get_execution_plan(run_id)
-        assert plan is not None and plan.selection is not None
-        assert plan.selection.policy_ref == "execution-plan-authority-v2"
-        assert plan.selection.decision_for("SCHEMA_MATCHING").selected is True
-        assert plan.selection.decision_for("ENTITY_RESOLUTION").selected is False
+        assert plan is not None and plan.selection is None
+        assert plan.planning_phase.value == "BOOTSTRAP"
+        assert tuple(stage.stage_id for stage in plan.stages) == ("SOURCE_DISCOVERY",)
 
         submitted = client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "product-submit"})
         assert submitted.status_code == 202, submitted.text
-        worker = JobWorker(control_store=platform.control_store, artifact_store=platform.artifact_store, executor=StageHandlerRegistry(), worker_id="product-worker")
-        assert worker.run_once().status == JobStatus.SUCCEEDED.value
-        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="SOURCE_DISCOVERY") is not None
-
-        unresolved_created = client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "unresolved-run"}, json={"project_id": "product", "configuration_fingerprint": platform.config.configuration_fingerprint})
-        unresolved_id = unresolved_created.json()["run_id"]
-        unresolved = client.post(f"/api/v1/runs/{unresolved_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "unresolved-plan"}, json={"intent": intent.model_dump(mode="json")})
-        assert unresolved.status_code == 409
-        assert unresolved.json()["status"] == "BLOCKED"
-        assert "ENTITY_RESOLUTION" in unresolved.json()["unresolved_stage_ids"]
-        assert "SOURCE_SCOPE" in unresolved.json()["unresolved_stage_ids"]
-        not_ready = client.post(f"/api/v1/runs/{unresolved_id}/execution", headers={**AUTH, "Idempotency-Key": "unresolved-submit"})
-        assert not_ready.status_code == 409
-        assert not_ready.json()["status"] == "BLOCKED"
-        assert platform.control_store.get_execution_plan(unresolved_id) is None
     finally:
         platform.close()

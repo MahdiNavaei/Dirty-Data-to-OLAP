@@ -39,6 +39,8 @@ from dirty_data_to_olap.domain.contracts.canonical import (
 from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
+    ExecutionPlanIntent,
+    ExecutionPlanPhase,
     ExecutionPlanSelection,
     FailureClassification,
     JobStatus,
@@ -210,6 +212,323 @@ def validator_relationship_decision() -> RelationshipDecision:
         input_evidence_fingerprint="validator-input",
         provenance="step28-validator-real-checkpoint",
     )
+
+
+class ValidatorFreshRunHandlers:
+    """Controlled project-owned handlers that publish truth only at execution time."""
+
+    def __init__(self, control, artifacts, source_ids: tuple[str, ...], requirement: EntityResolutionRequirement, *, corrupt_source_truth: bool = False) -> None:
+        self.control = control
+        self.artifacts = artifacts
+        self.source_ids = source_ids
+        self.requirement = requirement
+        self.corrupt_source_truth = corrupt_source_truth
+        self.calls: list[str] = []
+
+    def registry(self) -> StageHandlerRegistry:
+        return StageHandlerRegistry({stage_id: self for stage_id in (
+            "SOURCE_DISCOVERY", "SOURCE_SNAPSHOT_STAGE", "PROFILING", "DEPENDENCY_DISCOVERY", "SCHEMA_MATCHING",
+            "QUALITY_ANALYSIS", "EVIDENCE_FUSION", "CANONICAL_HYPOTHESES", "ENTITY_RESOLUTION", "CANONICAL_IDENTITY_PREPARATION",
+        )})
+
+    def execute(self, request):
+        self.calls.append(request.stage_id)
+        outputs: list[str] = []
+        if request.stage_id == "SOURCE_DISCOVERY":
+            if self.corrupt_source_truth:
+                artifact_id = stable_id("validator-fresh-corrupt-catalog", request.run_id)
+                ref = self.artifacts.publish(
+                    ArtifactManifest(
+                        artifact_id=artifact_id,
+                        run_id=request.run_id,
+                        stage_id=request.stage_id,
+                        attempt_id=request.attempt_id,
+                        artifact_kind="SourceCatalog",
+                        media_type="application/json",
+                        producer="step28-validator-fresh",
+                        storage_key=f"runs/{request.run_id}/artifacts/{artifact_id}.json",
+                    ),
+                    b"{\"source\": \"corrupt\"}",
+                )
+                self.control.register_artifact(ref)
+                outputs.append(ref.artifact_id)
+            else:
+                for source_id in self.source_ids:
+                    ref = publish_typed(
+                        self.control,
+                        self.artifacts,
+                        run_id=request.run_id,
+                        stage_id=request.stage_id,
+                        attempt_id=request.attempt_id,
+                        value=validator_source_catalog(source_id),
+                        artifact_kind="SourceCatalog",
+                        artifact_id=stable_id("validator-fresh-catalog", {"run_id": request.run_id, "source_id": source_id}),
+                    )
+                    outputs.append(ref.artifact_id)
+        elif request.stage_id == "EVIDENCE_FUSION":
+            decision = validator_relationship_decision().model_copy(update={
+                "decision_id": stable_id("validator-fresh-relationship", request.run_id),
+                "candidate_id": f"validator-candidate-{request.run_id}",
+                "subject_id": f"validator-subject-{request.run_id}",
+            })
+            ref = publish_typed(self.control, self.artifacts, run_id=request.run_id, stage_id=request.stage_id, attempt_id=request.attempt_id, value=decision, artifact_kind="RelationshipDecision", artifact_id=decision.decision_id)
+            outputs.append(ref.artifact_id)
+        elif request.stage_id == "CANONICAL_HYPOTHESES":
+            hypothesis = validator_planning_hypothesis(request.run_id, self.source_ids).model_copy(update={"entity_resolution_requirements": {"customer": self.requirement}})
+            ref = publish_typed(self.control, self.artifacts, run_id=request.run_id, stage_id=request.stage_id, attempt_id=request.attempt_id, value=hypothesis, artifact_kind="CanonicalModelHypothesis", artifact_id=hypothesis.artifact_id)
+            outputs.append(ref.artifact_id)
+        return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=tuple(outputs))
+
+
+def fresh_validator_setup(root: Path, name: str, source_ids: tuple[str, ...], requirement: EntityResolutionRequirement, *, corrupt_source_truth: bool = False):
+    platform, backend = build_local_backend(root / name)
+    client = TestClient(create_app(backend), raise_server_exceptions=False)
+    headers = {"X-Local-Principal": f"validator-{name}", "Idempotency-Key": f"{name}-run"}
+    created = client.post(
+        "/api/v1/runs",
+        headers=headers,
+        json={"project_id": "validator-fresh", "configuration_fingerprint": platform.config.configuration_fingerprint},
+    )
+    assert created.status_code == 201, created.text
+    run_id = created.json()["run_id"]
+    prepared = client.post(
+        f"/api/v1/runs/{run_id}/execution/prepare",
+        headers={"X-Local-Principal": f"validator-{name}", "Idempotency-Key": f"{name}-plan"},
+        json={"intent": ExecutionPlanIntent(entity_resolution_requested=False).model_dump(mode="json")},
+    )
+    assert prepared.status_code == 200 and prepared.json()["planning_phase"] == ExecutionPlanPhase.BOOTSTRAP.value
+    assert platform.control_store.list_artifacts(run_id=run_id, limit=100) == ()
+    submitted = client.post(
+        f"/api/v1/runs/{run_id}/execution",
+        headers={"X-Local-Principal": f"validator-{name}", "Idempotency-Key": f"{name}-submit"},
+    )
+    assert submitted.status_code == 202, submitted.text
+    handlers = ValidatorFreshRunHandlers(platform.control_store, platform.artifact_store, source_ids, requirement, corrupt_source_truth=corrupt_source_truth)
+    worker = JobWorker(control_store=platform.control_store, artifact_store=platform.artifact_store, executor=handlers.registry(), worker_id=f"validator-{name}-worker", plan_advancer=backend.execution_plan_service)
+    return platform, backend, client, run_id, handlers, worker
+
+
+def run_until_evidence_review(control, run_id: str, worker: JobWorker):
+    for _ in range(40):
+        outcome = worker.run_once()
+        review = control.get_stage_job(run_id=run_id, stage_id="REVIEW_EVIDENCE_DECISIONS")
+        if review is not None and review.status is JobStatus.NEEDS_REVIEW:
+            return review
+        assert outcome.status != "IDLE", outcome
+    raise AssertionError("fresh validator run did not reach evidence review")
+
+
+def accept_validator_evidence_review(client: TestClient, control, run_id: str, checkpoint) -> None:
+    context = checkpoint.review_context
+    assert context is not None
+    subject = control.get_artifact(context.subject_artifact_id)
+    assert subject is not None
+    reviewed = client.post(
+        f"/api/v1/runs/{run_id}/reviews/REVIEW_EVIDENCE_DECISIONS",
+        headers={"X-Local-Principal": "validator-reviewer", "Idempotency-Key": f"{run_id}-evidence-review"},
+        json={
+            "subject_artifact_id": subject.artifact_id,
+            "subject_content_hash": subject.content_hash,
+            "decision": "ACCEPTED",
+            "rationale": "accepted validator fresh-run evidence",
+            "expected_revision": 0,
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    resumed = client.post(
+        f"/api/v1/runs/{run_id}/resume",
+        headers={"X-Local-Principal": "validator-reviewer", "Idempotency-Key": f"{run_id}-evidence-resume"},
+    )
+    assert resumed.status_code == 202, resumed.text
+
+
+def finish_validator_fresh_run(control, run_id: str, worker: JobWorker):
+    for _ in range(40):
+        outcome = worker.run_once()
+        plan = control.get_execution_plan(run_id)
+        if plan is not None and plan.planning_phase is ExecutionPlanPhase.COMPLETE:
+            return plan
+        assert outcome.status != "IDLE", outcome
+    raise AssertionError("fresh validator run did not resolve the canonical hypothesis")
+
+
+def validate_fresh_required_case(root: Path) -> int:
+    platform, _backend, client, run_id, handlers, worker = fresh_validator_setup(
+        root,
+        "fresh-required",
+        ("validator-crm", "validator-erp"),
+        EntityResolutionRequirement.ER_REQUIRED,
+    )
+    try:
+        checkpoint = run_until_evidence_review(platform.control_store, run_id, worker)
+        source_plan = platform.control_store.get_execution_plan(run_id)
+        assert source_plan is not None and source_plan.planning_phase is ExecutionPlanPhase.SOURCE_RESOLVED
+        assert source_plan.selection is not None and source_plan.selection.decision_for("SCHEMA_MATCHING").selected is True
+        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="CANONICAL_HYPOTHESES") is None
+        assert handlers.calls.count("SOURCE_DISCOVERY") == 1
+        accept_validator_evidence_review(client, platform.control_store, run_id, checkpoint)
+        final_plan = finish_validator_fresh_run(platform.control_store, run_id, worker)
+        assert final_plan.selection is not None and final_plan.selection.decision_for("ENTITY_RESOLUTION").selected is True
+        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="ENTITY_RESOLUTION") is not None
+        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="CANONICAL_IDENTITY_PREPARATION") is None
+        assert handlers.calls.count("CANONICAL_HYPOTHESES") == 1
+        return 8
+    finally:
+        platform.close()
+
+
+def validate_fresh_optional_case(root: Path) -> int:
+    platform, _backend, client, run_id, handlers, worker = fresh_validator_setup(
+        root,
+        "fresh-optional",
+        ("validator-crm",),
+        EntityResolutionRequirement.ER_NOT_REQUIRED,
+    )
+    try:
+        checkpoint = run_until_evidence_review(platform.control_store, run_id, worker)
+        source_plan = platform.control_store.get_execution_plan(run_id)
+        assert source_plan is not None and source_plan.selection is not None
+        assert source_plan.selection.decision_for("SCHEMA_MATCHING").selected is False
+        assert "SCHEMA_MATCHING" not in handlers.calls
+        accept_validator_evidence_review(client, platform.control_store, run_id, checkpoint)
+        final_plan = finish_validator_fresh_run(platform.control_store, run_id, worker)
+        assert final_plan.selection is not None
+        assert final_plan.selection.decision_for("ENTITY_RESOLUTION").selected is False
+        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="ENTITY_RESOLUTION") is None
+        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="CANONICAL_IDENTITY_PREPARATION") is not None
+        assert handlers.calls.count("CANONICAL_HYPOTHESES") == 1
+        return 7
+    finally:
+        platform.close()
+
+
+def validate_fresh_restart_case(root: Path) -> int:
+    platform, _backend, _client, run_id, handlers, worker = fresh_validator_setup(
+        root,
+        "fresh-restart",
+        ("validator-crm", "validator-erp"),
+        EntityResolutionRequirement.ER_REQUIRED,
+    )
+    case_root = root / "fresh-restart"
+    assert worker.run_once().status == JobStatus.SUCCEEDED.value
+    assert worker.run_once().status == JobStatus.SUCCEEDED.value
+    before = platform.control_store.get_execution_plan(run_id)
+    assert before is not None and before.planning_phase is ExecutionPlanPhase.SOURCE_RESOLVED and before.selection is not None
+    before_hash = before.selection.content_hash
+    platform.close()
+    reopened, reopened_backend = build_local_backend(case_root)
+    try:
+        after = reopened.control_store.get_execution_plan(run_id)
+        assert after is not None and after.planning_phase is ExecutionPlanPhase.SOURCE_RESOLVED and after.selection is not None
+        assert after.selection.content_hash == before_hash
+        resumed_handlers = ValidatorFreshRunHandlers(reopened.control_store, reopened.artifact_store, ("validator-crm", "validator-erp"), EntityResolutionRequirement.ER_REQUIRED)
+        resumed_worker = JobWorker(control_store=reopened.control_store, artifact_store=reopened.artifact_store, executor=resumed_handlers.registry(), worker_id="validator-fresh-restart-worker", plan_advancer=reopened_backend.execution_plan_service)
+        checkpoint = run_until_evidence_review(reopened.control_store, run_id, resumed_worker)
+        assert checkpoint.status is JobStatus.NEEDS_REVIEW
+        assert resumed_handlers.calls.count("SOURCE_DISCOVERY") == 0
+        return 5
+    finally:
+        reopened.close()
+
+
+def validate_fresh_unresolved_case(root: Path) -> int:
+    platform, _backend, _client, run_id, _handlers, worker = fresh_validator_setup(
+        root,
+        "fresh-unresolved",
+        (),
+        EntityResolutionRequirement.ER_REQUIRED,
+    )
+    case_root = root / "fresh-unresolved"
+    try:
+        assert worker.run_once().status == JobStatus.SUCCEEDED.value
+        assert worker.run_once().status == JobStatus.SUCCEEDED.value
+        plan = platform.control_store.get_execution_plan(run_id)
+        source_job = platform.control_store.get_stage_job(run_id=run_id, stage_id="SOURCE_DISCOVERY")
+        assert source_job is not None and source_job.status is JobStatus.SUCCEEDED
+        assert plan is not None and plan.planning_phase is ExecutionPlanPhase.BOOTSTRAP and plan.selection is None
+        assert plan.pending_stage_ids == ("SCHEMA_MATCHING", "ENTITY_RESOLUTION")
+        assert platform.control_store.get_run(run_id).status is RunStatus.BLOCKED
+        platform.close()
+        reopened = SQLiteControlStore(case_root / "workspace" / "platform" / "control.sqlite", project_root=case_root)
+        try:
+            persisted = reopened.get_execution_plan(run_id)
+            assert persisted is not None and persisted.selection is None and persisted.pending_stage_ids == ("SCHEMA_MATCHING", "ENTITY_RESOLUTION")
+        finally:
+            reopened.close()
+        return 6
+    finally:
+        try:
+            platform.close()
+        except Exception:
+            pass
+
+
+def validate_fresh_corrupt_case(root: Path) -> int:
+    platform, _backend, _client, run_id, _handlers, worker = fresh_validator_setup(
+        root,
+        "fresh-corrupt",
+        ("validator-crm",),
+        EntityResolutionRequirement.ER_REQUIRED,
+        corrupt_source_truth=True,
+    )
+    try:
+        assert worker.run_once().status == JobStatus.SUCCEEDED.value
+        assert worker.run_once().status == JobStatus.SUCCEEDED.value
+        plan = platform.control_store.get_execution_plan(run_id)
+        assert plan is not None and plan.planning_phase is ExecutionPlanPhase.BOOTSTRAP and plan.selection is None
+        assert platform.control_store.get_run(run_id).status is RunStatus.BLOCKED
+        return 3
+    finally:
+        platform.close()
+
+
+def validate_fresh_corrupt_hypothesis_case(root: Path) -> int:
+    platform, _backend, client, run_id, _handlers, worker = fresh_validator_setup(
+        root,
+        "fresh-corrupt-hypothesis",
+        ("validator-crm",),
+        EntityResolutionRequirement.ER_REQUIRED,
+    )
+    original_execute = worker.executor.execute_for
+
+    def corrupting_execute(handler_key, request, cancellation_probe=None):
+        if request.stage_id == "CANONICAL_HYPOTHESES":
+            artifact_id = stable_id("validator-fresh-corrupt-hypothesis", request.run_id)
+            ref = worker.artifact_store.publish(
+                ArtifactManifest(
+                    artifact_id=artifact_id,
+                    run_id=request.run_id,
+                    stage_id=request.stage_id,
+                    attempt_id=request.attempt_id,
+                    artifact_kind="CanonicalModelHypothesis",
+                    media_type="application/json",
+                    producer="step28-validator-fresh",
+                    storage_key=f"runs/{request.run_id}/artifacts/{artifact_id}.json",
+                ),
+                b"{\"artifact_id\": \"corrupt\"}",
+            )
+            worker.control_store.register_artifact(ref)
+            return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,))
+        return original_execute(handler_key, request, cancellation_probe)
+
+    worker.executor.execute_for = corrupting_execute
+    try:
+        checkpoint = run_until_evidence_review(platform.control_store, run_id, worker)
+        accept_validator_evidence_review(client, platform.control_store, run_id, checkpoint)
+        for _ in range(20):
+            outcome = worker.run_once()
+            hypothesis_job = platform.control_store.get_stage_job(run_id=run_id, stage_id="CANONICAL_HYPOTHESES")
+            if hypothesis_job is not None and hypothesis_job.status is JobStatus.SUCCEEDED:
+                break
+            assert outcome.status != "IDLE", outcome
+        plan = platform.control_store.get_execution_plan(run_id)
+        assert plan is not None and plan.planning_phase is ExecutionPlanPhase.SOURCE_RESOLVED
+        assert plan.pending_stage_ids == ("ENTITY_RESOLUTION",)
+        assert platform.control_store.get_stage_job(run_id=run_id, stage_id="ENTITY_RESOLUTION") is None
+        assert platform.control_store.get_run(run_id).status is RunStatus.BLOCKED
+        return 4
+    finally:
+        platform.close()
 
 
 def extended_scenarios(root: Path) -> int:
@@ -484,35 +803,12 @@ def extended_scenarios(root: Path) -> int:
     scenarios += 2
     excluded_control.close()
 
-    product_root = root / "product-path"
-    product_root.mkdir()
-    product_platform, product_backend = build_local_backend(product_root)
-    product_client = TestClient(create_app(product_backend), raise_server_exceptions=False)
-    product_response = product_client.post("/api/v1/runs", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-run"}, json={"project_id": "validator-product", "configuration_fingerprint": product_platform.config.configuration_fingerprint})
-    assert product_response.status_code == 201
-    product_run_id = product_response.json()["run_id"]
-    for source_id in ("validator-crm", "validator-erp"):
-        publish_typed(product_platform.control_store, product_platform.artifact_store, run_id=product_run_id, stage_id="SOURCE_DISCOVERY", attempt_id="validator-planning", value=validator_source_catalog(source_id), artifact_kind="SourceCatalog", artifact_id=stable_id("validator-catalog", {"run_id": product_run_id, "source_id": source_id}))
-    publish_typed(product_platform.control_store, product_platform.artifact_store, run_id=product_run_id, stage_id="CANONICAL_HYPOTHESES", attempt_id="validator-planning", value=validator_planning_hypothesis(product_run_id, ("validator-crm", "validator-erp")), artifact_kind="CanonicalModelHypothesis", artifact_id=stable_id("chyp", {"run_id": product_run_id, "source_ids": ("validator-crm", "validator-erp")}))
-    prepared = product_client.post(f"/api/v1/runs/{product_run_id}/execution/prepare", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-plan"}, json={"intent": {"cross_source_mapping_requested": False, "entity_resolution_requested": False}})
-    assert prepared.status_code == 200 and product_platform.control_store.get_execution_plan(product_run_id) is not None
-    prepared_plan = product_platform.control_store.get_execution_plan(product_run_id)
-    assert prepared_plan is not None and prepared_plan.selection is not None
-    assert prepared_plan.selection.policy_ref == "execution-plan-authority-v2"
-    assert next(item for item in prepared_plan.selection.decisions if item.stage_id == "SCHEMA_MATCHING").selected is True
-    assert prepared.json()["selection_fingerprint"] == prepared_plan.selection.content_hash
-    submitted = product_client.post(f"/api/v1/runs/{product_run_id}/execution", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-submit"})
-    assert submitted.status_code == 202
-    product_worker = JobWorker(control_store=product_platform.control_store, artifact_store=product_platform.artifact_store, executor=StageHandlerRegistry(), worker_id="product-worker")
-    assert product_worker.run_once().status == JobStatus.SUCCEEDED.value and product_platform.control_store.get_stage_job(run_id=product_run_id, stage_id="SOURCE_DISCOVERY") is not None
-    unresolved_response = product_client.post("/api/v1/runs", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-run"}, json={"project_id": "validator-product", "configuration_fingerprint": product_platform.config.configuration_fingerprint})
-    unresolved_run_id = unresolved_response.json()["run_id"]
-    unresolved_preparation = product_client.post(f"/api/v1/runs/{unresolved_run_id}/execution/prepare", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-plan"}, json={"intent": {"cross_source_mapping_requested": False, "entity_resolution_requested": False}})
-    assert unresolved_preparation.status_code == 409 and {"SOURCE_SCOPE", "ENTITY_RESOLUTION"}.issubset(set(unresolved_preparation.json()["unresolved_stage_ids"]))
-    unresolved_submit = product_client.post(f"/api/v1/runs/{unresolved_run_id}/execution", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-submit"})
-    assert unresolved_submit.status_code == 409 and unresolved_submit.json()["status"] == "BLOCKED" and product_platform.control_store.get_execution_plan(unresolved_run_id) is None
-    scenarios += 7
-    product_platform.close()
+    scenarios += validate_fresh_required_case(root)
+    scenarios += validate_fresh_optional_case(root)
+    scenarios += validate_fresh_restart_case(root)
+    scenarios += validate_fresh_unresolved_case(root)
+    scenarios += validate_fresh_corrupt_case(root)
+    scenarios += validate_fresh_corrupt_hypothesis_case(root)
 
     negative, negative_artifacts, negative_run = run_case(root, "g6-negative")
     negative_plan = ExecutionPlan(plan_id="plan-g6-negative", run_id=negative_run.run_id, stages=(StageSpec(stage_id="FINAL", handler_key="final", final_validation=True),))
