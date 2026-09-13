@@ -356,7 +356,7 @@ components:
     ownership: Dirty Data to OLAP
     responsibilities: [compile any bounded reviewed V1 analytical plan into deterministic execution artifacts]
     input_contracts: [AnalyticalPlan with exact spec package, FactSpec, DimensionSpec, GrainSpec, MeasureSpec, AnalyticalInputDataset, ReviewDecision from REVIEW_ANALYTICAL_PLAN]
-    output_contracts: [CompiledPlan, GeneratedSQL]
+    output_contracts: [CompiledPlan, GeneratedSQL, TargetConfig]
     depends_on: [application.analytical_planner, application.review_policy, domain.contracts]
     ports_used: [ArtifactStorePort]
     implementation_owner: Step20 OLAP Engineer
@@ -371,7 +371,7 @@ components:
     layer: application
     ownership: Dirty Data to OLAP
     responsibilities: [execute any approved compiled V1 plan into its exact reviewed controlled target]
-    input_contracts: [CompiledPlan, GeneratedSQL, AnalyticalInputDataset, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
+    input_contracts: [CompiledPlan, GeneratedSQL, TargetConfig, AnalyticalInputDataset, ReviewDecision from REVIEW_MATERIALIZATION_PLAN]
     output_contracts: [MaterializationArtifact]
     depends_on: [application.compiler, application.review_policy, domain.contracts]
     ports_used: [MaterializerPort, ArtifactStorePort]

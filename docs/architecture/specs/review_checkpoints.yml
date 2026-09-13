@@ -67,7 +67,7 @@ checkpoints:
   - checkpoint_id: REVIEW_MATERIALIZATION_PLAN
     checkpoint_stage: REVIEW_MATERIALIZATION_PLAN
     subject_stage: COMPILATION
-    subject_artifact_types: [CompiledPlan, GeneratedSQL]
+    subject_artifact_types: [CompiledPlan, GeneratedSQL, TargetConfig]
     review_types: [materialization_approval, compiled_plan, generated_sql, target_configuration, controlled_target_risk]
     required_when: materialization approval policy requires a human decision for the compiled target plan
     downstream_guarded_stage: MATERIALIZATION

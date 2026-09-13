@@ -33,7 +33,7 @@ exact_checkpoints:
     invalidating_changes: [analytical_plan_change, analytical_spec_package_change, fact_spec_change, dimension_spec_change, grain_spec_change, measure_spec_change, fact_grain_change, measure_semantics_change, dimensional_interpretation_change, source_schema_fingerprint_change, policy_version_change, domain_assertion_scope_change]
   - checkpoint_id: REVIEW_MATERIALIZATION_PLAN
     subject_stage: COMPILATION
-    subject_types: [CompiledPlan, GeneratedSQL]
+    subject_types: [CompiledPlan, GeneratedSQL, TargetConfig]
     guarded_stage: MATERIALIZATION
     review_fields: [subject_stage, subject_artifact_id, subject_content_hash, subject_schema_version, model_version, source_schema_fingerprints, policy_version, domain_assertion_refs, subject_semantic_id, applicability_fingerprint, actor, actor_source, reviewed_at, rationale]
     satisfying_decisions: [ACCEPTED, SKIPPED]

@@ -14,6 +14,16 @@ fingerprints, policy/domain scope and semantic subject ID. Entry points and
 future UI/API transports call this service; they do not mutate decision records
 directly.
 
+## Execution Plan Authority boundary
+
+The public preparation API accepts only bounded `ExecutionPlanIntent` flags. The
+server resolves conditional stages from verified, published
+`SourceCatalog`/`SourceSnapshotResult` and `CanonicalModelHypothesis` artifacts
+for the requested run. The resolver owns the policy reference, evidence
+references, planning scope and scope fingerprint; client-supplied authority
+fields are rejected by the transport model. Missing, conflicting or tampered
+planning inputs produce `BLOCKED` and never create a guessed plan.
+
 ## QualityStagedReader
 
 - Purpose: read a requested projection from COMPLETE staged Parquet evidence for
@@ -121,7 +131,7 @@ directly.
 ## MaterializerPort
 
 - Purpose: execute an approved compiled analytical plan into a controlled target.
-- Input: project-owned `CompiledPlan`, `GeneratedSQL`, typed `AnalyticalInputDataset` and the exact
+- Input: project-owned `CompiledPlan`, `GeneratedSQL`, typed `TargetConfig`, `AnalyticalInputDataset` and the exact
   `REVIEW_MATERIALIZATION_PLAN` `ReviewDecision`.
 - Output: project-owned `MaterializationArtifact` with target, hash, row-count
   and usability evidence.

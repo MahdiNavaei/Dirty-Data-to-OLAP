@@ -37,7 +37,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewDecisionStatus,
     review_subject_key,
 )
-from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanPreparation, ExecutionPlanSelection, JobRecord, JobStatus, PlanPreparationStatus
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, ExecutionPlanPreparation, JobRecord, JobStatus, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import (
     ArtifactIntegrityState,
     ArtifactPublicationState,
@@ -366,7 +366,11 @@ class BackendService:
             subject_content_hash=subject_content_hash,
             context_assertion=context,
         )
-        scope = f"review:{run_id}:{subject_key}:{principal.subject}"
+        scope = stable_id("review-scope", {
+            "run_id": run_id,
+            "subject_key": subject_key,
+            "principal": principal.subject,
+        })
         request = {
             "run_id": run_id,
             "checkpoint": checkpoint.value,
@@ -431,7 +435,11 @@ class BackendService:
             subject_content_hash=subject_content_hash,
             context_assertion=context,
         )
-        scope = f"review-invalidate:{run_id}:{subject_key}:{principal.subject}"
+        scope = stable_id("review-invalidate-scope", {
+            "run_id": run_id,
+            "subject_key": subject_key,
+            "principal": principal.subject,
+        })
         fingerprint = idempotency_fingerprint({"run_id": run_id, "checkpoint": checkpoint.value, "context": authoritative.model_dump(mode="json"), "reason": reason, "expected_revision": expected_revision})
         current = self.control_store.get_current_review(run_id=run_id, subject_key=subject_key)
         if current is None:
@@ -662,7 +670,7 @@ class BackendService:
         self,
         *,
         run_id: str,
-        selection: ExecutionPlanSelection,
+        intent: ExecutionPlanIntent,
         principal: Principal,
         idempotency_key: str,
     ) -> tuple[ExecutionPlanPreparation, bool]:
@@ -672,7 +680,7 @@ class BackendService:
         key = _safe_key(idempotency_key)
         run = self.get_run(run_id)
         scope = f"execution-plan:{run_id}:{principal.subject}"
-        fingerprint = idempotency_fingerprint({"run_id": run_id, "selection": selection.model_dump(mode="json")})
+        fingerprint = idempotency_fingerprint({"run_id": run_id, "intent": intent.model_dump(mode="json")})
         reservation = IdempotencyRecord(
             scope=scope,
             key=key,
@@ -694,12 +702,12 @@ class BackendService:
             result = ExecutionPlanPreparation(
                 run_id=run_id,
                 status=PlanPreparationStatus.BLOCKED,
-                selection_fingerprint=selection.content_hash,
+                selection_fingerprint=intent.content_hash,
                 unresolved_stage_ids=("PLAN_SERVICE",),
                 detail="no trusted execution plan preparation service is configured",
             )
         else:
-            result = self.execution_plan_service.prepare(run=run, selection=selection)
+            result = self.execution_plan_service.prepare(run=run, intent=intent)
         completed = reservation.model_copy(
             update={
                 "state": "COMPLETED",

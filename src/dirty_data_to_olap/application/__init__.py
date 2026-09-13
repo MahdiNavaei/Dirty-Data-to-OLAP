@@ -20,6 +20,8 @@ from .distributed import (
 )
 from .visualization import VisualizationInputError, VisualizationService
 from .jobs import BoundedWorkerPool, DurableExecutionSubmission, ExecutionPlanSelectionError, JobWorker, StageExecutorPort, StageHandlerRegistry, load_authoritative_execution_plan
+from .compiler import CompilationArtifactPublisher, CompilationOutputRefs
+from .planning_authority import ExecutionPlanningContext, SelectionResolution, ServerOwnedExecutionPlanSelectionResolver, TrustedExecutionPlanningState
 
 __all__ = [
     "DependencyDiscoveryService",
@@ -51,6 +53,12 @@ __all__ = [
     "BoundedWorkerPool",
     "DurableExecutionSubmission",
     "ExecutionPlanSelectionError",
+    "CompilationArtifactPublisher",
+    "CompilationOutputRefs",
+    "ExecutionPlanningContext",
+    "SelectionResolution",
+    "ServerOwnedExecutionPlanSelectionResolver",
+    "TrustedExecutionPlanningState",
     "JobWorker",
     "StageExecutorPort",
     "StageHandlerRegistry",

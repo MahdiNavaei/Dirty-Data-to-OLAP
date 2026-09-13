@@ -14,7 +14,6 @@ import sqlite3
 import sys
 from tempfile import TemporaryDirectory
 
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -27,9 +26,10 @@ from dirty_data_to_olap.application.backend import BackendError, BackendService,
 from dirty_data_to_olap.domain.contracts.api import SubmissionResult
 from dirty_data_to_olap.application.visualization import VisualizationService
 from dirty_data_to_olap.composition import build_local_backend
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
-from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlan, ExecutionPlanSelection, StageSelectionDecision, StageSpec
+from dirty_data_to_olap.domain.contracts.canonical import CanonicalEntityKind, CanonicalEntityType, CanonicalModelHypothesis, EntityResolutionRequirement, ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlan, ExecutionPlanIntent, StageSpec
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest
+from dirty_data_to_olap.domain.contracts.source import AdapterReference, SelectionScope, SourceCatalog, SourceDescriptor, SourceType, stable_id, utc_now
 from dirty_data_to_olap.domain.contracts.validation import (
     RecordDisposition,
     ValidationArtifactBindings,
@@ -111,6 +111,49 @@ def _context(ref, checkpoint: ReviewCheckpoint = ReviewCheckpoint.REVIEW_EVIDENC
         domain_assertion_refs=("validator-assertion",),
         subject_semantic_id=f"semantic-{ref.artifact_id}",
         applicability_fingerprint=f"applicability-{ref.artifact_id}",
+    )
+
+
+def _planning_catalog(source_id: str) -> SourceCatalog:
+    return SourceCatalog(
+        source=SourceDescriptor(
+            source_id=source_id,
+            display_name=source_id,
+            source_type=SourceType.SQLITE,
+            file_locator=f"{source_id}.sqlite",
+            selection_scope=SelectionScope(),
+            schema_fingerprint=f"validator-schema-{source_id}",
+            adapter_reference=AdapterReference(name="step27-validator-source", version="1", config_fingerprint="step27-validator-source-v1"),
+        ),
+        tables=(),
+        columns=(),
+        declared_constraints=(),
+    )
+
+
+def _planning_hypothesis(run_id: str, source_ids: tuple[str, ...]) -> CanonicalModelHypothesis:
+    return CanonicalModelHypothesis(
+        artifact_id=stable_id("chyp", {"run_id": run_id, "source_ids": source_ids}),
+        run_id=run_id,
+        execution_context_id="step27-validator-planning",
+        model_version="canonical-v1",
+        upstream_review_decision_refs=("step27-planning-review",),
+        source_ids=source_ids,
+        domain_assertion_refs=("step27-planning-domain",),
+        entity_types=(CanonicalEntityType(
+            canonical_entity_type_id="cet_step27_customer",
+            semantic_id="step27-customer",
+            business_name="Step27 Customer",
+            kind=CanonicalEntityKind.IDENTITY,
+            entity_resolution_family="customer",
+            identity_strategy="step27-trusted-planning",
+            review_state="ACCEPTED_BY_REVIEW",
+            provenance_refs=("step27-validator",),
+        ),),
+        entity_resolution_requirements={"customer": EntityResolutionRequirement.ER_NOT_REQUIRED},
+        evidence_refs=("step27-planning-evidence",),
+        provenance_refs=("step27-validator",),
+        created_at=utc_now(),
     )
 
 
@@ -426,6 +469,10 @@ def main() -> int:
             changed = client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "run-1"}, json={"project_id": "other", "configuration_fingerprint": platform.config.configuration_fingerprint})
             checks += 1; _check(changed.status_code == 409, "changed idempotency conflict")
             checks += 1; _check(client.get(f"/api/v1/runs/{run_id}", headers=AUTH).json()["run_id"] == run_id and client.get("/api/v1/runs/unknown", headers=AUTH).status_code == 404, "get and unknown run")
+            for source_id in ("step27-crm", "step27-erp"):
+                _publish(bundle, run_id, stable_id("step27-catalog", {"run_id": run_id, "source_id": source_id}), kind="SourceCatalog", payload=_planning_catalog(source_id).model_dump_json().encode("utf-8"))
+            hypothesis = _planning_hypothesis(run_id, ("step27-crm", "step27-erp"))
+            _publish(bundle, run_id, hypothesis.artifact_id, kind="CanonicalModelHypothesis", payload=hypothesis.model_dump_json().encode("utf-8"))
 
             # 9-15: attempts and artifact boundary.
             from dirty_data_to_olap.domain.contracts.platform import StageAttemptRecord, StageStatus
@@ -434,7 +481,7 @@ def main() -> int:
             attempts = client.get(f"/api/v1/runs/{run_id}/attempts", headers=AUTH, params={"page_size": 100})
             checks += 1; _check({x["status"] for x in attempts.json()["items"]} == {x.value for x in StageStatus}, "stage status vocabulary")
             artifact = _publish(bundle, run_id, "validator-artifact")
-            checks += 1; _check(client.get(f"/api/v1/runs/{run_id}/artifacts", headers=AUTH, params={"page_size": 1}).json()["items"][0]["artifact_id"] == artifact.artifact_id, "scoped artifact metadata")
+            checks += 1; _check(artifact.artifact_id in {item["artifact_id"] for item in client.get(f"/api/v1/runs/{run_id}/artifacts", headers=AUTH, params={"page_size": 100}).json()["items"]}, "scoped artifact metadata")
             checks += 1; _check(client.get(f"/api/v1/runs/{run_id}/artifacts", headers=AUTH, params={"artifact_kind": "ReviewSubject", "page_size": 1}).status_code == 200, "artifact filtering")
             checks += 1; _check(client.get(f"/api/v1/artifacts/unknown-artifact", headers=AUTH, params={"run_id": run_id}).status_code == 404, "unregistered artifact rejection")
             checks += 1; _check(client.get(f"/api/v1/artifacts/{artifact.artifact_id}", headers=AUTH, params={"run_id": "foreign-run"}).status_code == 404, "cross-run artifact rejection")
@@ -505,28 +552,10 @@ def main() -> int:
             checks += 1; _check(set(client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "malformed-2"}, json={"project_id": "validator-project"}).json()) == {"error"}, "error envelope")
             checks += 1; _check(client.get("/api/v1/runs", headers=AUTH, params={"page_size": 101}).status_code == 422, "hard page limit")
             checks += 1; _check(client.get("/api/v1/runs", headers=AUTH, params={"status": "PARTIAL"}).status_code == 400, "undefined run state rejected")
-            graph = yaml.safe_load((ROOT / "docs" / "architecture" / "specs" / "stage_graph.yml").read_text(encoding="utf-8"))
-            selection = ExecutionPlanSelection(
-                run_id=run_id,
-                policy_ref="step27-validator-selection-v1",
-                scope="step27-validator-scope",
-                scope_fingerprint="step27-validator-scope-fingerprint",
-                decisions=tuple(
-                    StageSelectionDecision(
-                        stage_id=str(stage["stage_id"]),
-                        selected=bool(stage.get("required", False)),
-                        policy_ref="step27-validator-selection-v1",
-                        evidence_ref=f"step27-evidence-{stage['stage_id']}",
-                        reason=f"explicit validator {'selected' if stage.get('required', False) else 'excluded'} {stage['stage_id']}",
-                        scope="step27-validator-scope",
-                        scope_fingerprint="step27-validator-scope-fingerprint",
-                    )
-                    for stage in graph.get("stages", [])
-                    if stage.get("conditional")
-                ),
-            )
-            prepared = client.post(f"/api/v1/runs/{run_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "prepare-1"}, json={"selection": selection.model_dump(mode="json")})
-            checks += 1; _check(prepared.status_code == 200 and prepared.json()["status"] == "READY", "typed execution plan preparation")
+            prepared = client.post(f"/api/v1/runs/{run_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "prepare-1"}, json={"intent": ExecutionPlanIntent(cross_source_mapping_requested=False, entity_resolution_requested=False).model_dump(mode="json")})
+            prepared_plan = platform.control_store.get_execution_plan(run_id)
+            checks += 2; _check(prepared.status_code == 200 and prepared.json()["status"] == "READY", "typed execution plan preparation")
+            _check(prepared_plan is not None and prepared_plan.selection is not None and prepared_plan.selection.policy_ref == "execution-plan-authority-v2", "server-owned execution plan selection")
             submit = client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "submit-1"})
             checks += 1; _check(submit.status_code == 202 and submit.json()["status"] == "ACCEPTED" and submit.json()["submission_id"], "durable command submission")
             checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "submit-1"}).json() == submit.json(), "submission idempotency")

@@ -24,6 +24,14 @@ passes that context to `ReviewPolicyService`.  `SKIPPED` is intentionally not
 part of the Step27 API action enum until a server-owned skip authorization
 source exists.
 
+Execution-plan preparation is the Step28 handoff: the route
+`/api/v1/runs/{run_id}/execution/prepare` accepts only bounded
+`ExecutionPlanIntent`. The server derives conditional-stage selection from
+verified published planning artifacts, owns the policy/evidence/scope
+fingerprints, and returns `BLOCKED` when trusted planning state is missing,
+conflicting or tampered. A client cannot submit a complete authoritative
+`ExecutionPlanSelection`.
+
 Run and review mutations persist their idempotency response in the same
 SQLite transaction as the local mutation.  Execution commands first reserve a
 stable secret-free command identity.  If delivery or response finalization is
@@ -31,10 +39,11 @@ uncertain, the API returns `DELIVERY_UNKNOWN` and retries replay that command
 identity without claiming exactly-once distributed execution.  Step28 owns
 durable processing.
 
-The control store schema is version `5`.  Opening a supported Step23 version
-`3` or Step27 version `4` database applies ordered forward migrations. Version
-5 adds the durable execution-plan and job tables without moving raw data into
-the control store.
+The control store schema is version `6`. Opening supported Step23 version `3`,
+Step27 version `4` or earlier Step28 version `5` databases applies ordered
+forward migrations. Version 6 adds durable delivery phases, replay-safety,
+source-scope and durable-result fields without moving raw data into the control
+store.
 
 Generic artifact payload serving is denied.  Validation reports are projected
 through the trusted Step26 `ValidationReport -> UI_PREVIEW` path, and stored
@@ -44,6 +53,9 @@ integrity verification.
 Step28 owns durable job processing. The local composition wires
 `DurableExecutionSubmission` to SQLite; submit/cancel/resume return a stable
 accepted command/job identity, while a worker later records the authoritative
-outcome. `GET /api/v1/runs/{run_id}/jobs` and scoped job detail expose the
-project-owned safe query contract. No exactly-once or live-production queue
-claim is made.
+outcome. `COMPILATION` publishes typed `CompiledPlan`, `GeneratedSQL` and
+`TargetConfig` on one attempt. Materialization review and execution require
+matching SQL ID/hash, target fingerprint and run/stage/attempt lineage; raw
+artifact transport SHA and semantic review context hashes remain distinct.
+`GET /api/v1/runs/{run_id}/jobs` and scoped job detail expose the project-owned
+safe query contract. No exactly-once or live-production queue claim is made.

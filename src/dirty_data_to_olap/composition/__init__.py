@@ -22,7 +22,7 @@ def build_local_backend(
     platform = LocalPlatform.from_project_root(project_root, resource_budget=resource_budget)
     execution_port = execution or DurableExecutionSubmission(platform.control_store)
     architecture_root = Path(__file__).resolve().parents[3]
-    execution_plan_service = ExecutionPlanService(project_root, platform.control_store, graph_root=architecture_root)
+    execution_plan_service = ExecutionPlanService(project_root, platform.control_store, platform.artifact_store, graph_root=architecture_root)
     backend = BackendService(
         control_store=platform.control_store,
         artifact_store=platform.artifact_store,

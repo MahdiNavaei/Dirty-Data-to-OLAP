@@ -99,6 +99,19 @@ class PlanPreparationStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class ExecutionPlanIntent(_SourceModel):
+    """Bounded caller intent; it contains no selection authority."""
+
+    cross_source_mapping_requested: bool | None = None
+    entity_resolution_requested: bool | None = None
+    optional_semantic_evidence_enabled: bool = False
+    learned_evidence_enabled: bool = False
+
+    @property
+    def content_hash(self) -> str:
+        return stable_digest(self.model_dump(mode="json", exclude={"schema_version"}))
+
+
 class StageSelectionDecision(_SourceModel):
     """Run-specific policy evidence for one conditional stage."""
 
@@ -455,6 +468,7 @@ class RetryPolicy(_SourceModel):
 
 __all__ = [
     "ExecutionPlan",
+    "ExecutionPlanIntent",
     "ExecutionPlanPreparation",
     "ExecutionPlanSelection",
     "DeliveryPhase",

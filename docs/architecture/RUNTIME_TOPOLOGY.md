@@ -42,18 +42,26 @@ boundary.
 
 Before a submit command is accepted, the application-owned
 `ExecutionPlanService` compiles the authoritative `stage_graph.yml` for the
-run and persists an `ExecutionPlan` bound to an explicit
-`ExecutionPlanSelection`. Conditional stages never default to omitted. The
-public preparation route is `/api/v1/runs/{run_id}/execution/prepare`; an
-unresolved selection returns a typed `BLOCKED` result and does not create a
-guessed plan.
+run. The public preparation route
+`/api/v1/runs/{run_id}/execution/prepare` accepts only bounded
+`ExecutionPlanIntent`; server authority resolves conditional stages from
+verified, published run planning artifacts and persists an `ExecutionPlan`
+bound to the resulting `ExecutionPlanSelection`. Conditional stages never
+default to omitted. An unresolved or conflicting trusted input returns a typed
+`BLOCKED` result and does not create a guessed plan. Selection policy,
+evidence, scope and scope fingerprints are server-owned.
 
 Review checkpoint stages are control-plane pauses. A worker derives their
 authoritative context from registered, verified typed upstream artifacts by
 calling the existing evidence, canonical-identity, analytical-plan or
 materialization context builder. It persists the context, reaches
 `NEEDS_REVIEW`, and only resumes after a compatible Step27 review decision.
-G6 remains the final success authority; Step29/frontend work is not started.
+`COMPILATION` publishes `CompiledPlan`, `GeneratedSQL` and `TargetConfig` with
+one run/stage/attempt lineage. Before materialization review or execution, the
+runtime verifies generated SQL ID/hash, target fingerprint and lineage
+bindings; transport SHA-256 integrity and the semantic review context hash
+remain distinct. G6 remains the final success authority; Step29/frontend work
+is not started.
 
 ## Future replacement boundaries
 

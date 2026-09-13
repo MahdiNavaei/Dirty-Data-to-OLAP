@@ -26,7 +26,16 @@ from dirty_data_to_olap.application.jobs import BoundedWorkerPool, DurableExecut
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.application.platform import ConcurrencyConflictError
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
+from dirty_data_to_olap.domain.contracts.canonical import (
+    CanonicalEntityKind,
+    CanonicalEntityType,
+    CanonicalModelHypothesis,
+    EntityResolutionRequirement,
+    ReviewCheckpoint,
+    ReviewCompatibilityContext,
+    ReviewDecisionStatus,
+    review_subject_key,
+)
 from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
@@ -48,7 +57,7 @@ from dirty_data_to_olap.application.platform import GateEvidenceService
 from dirty_data_to_olap.application.backend import Principal
 
 from dirty_data_to_olap.domain.contracts.evidence_fusion import DecisionExplanation, DecisionState, FusionScore, RelationshipDecision
-from dirty_data_to_olap.domain.contracts.source import stable_digest, stable_id, utc_now
+from dirty_data_to_olap.domain.contracts.source import AdapterReference, SelectionScope, SourceCatalog, SourceDescriptor, SourceType, stable_digest, stable_id, utc_now
 
 
 def command(run_id: str, key: str, action: ExecutionAction = ExecutionAction.SUBMIT) -> ExecutionCommand:
@@ -138,6 +147,49 @@ def publish_typed(control: SQLiteControlStore, artifacts: LocalArtifactStore, *,
     )
     control.register_artifact(ref)
     return ref
+
+
+def validator_source_catalog(source_id: str) -> SourceCatalog:
+    return SourceCatalog(
+        source=SourceDescriptor(
+            source_id=source_id,
+            display_name=source_id,
+            source_type=SourceType.SQLITE,
+            file_locator=f"{source_id}.sqlite",
+            selection_scope=SelectionScope(),
+            schema_fingerprint=f"validator-schema-{source_id}",
+            adapter_reference=AdapterReference(name="step28-validator-source", version="1", config_fingerprint="step28-validator-source-v1"),
+        ),
+        tables=(),
+        columns=(),
+        declared_constraints=(),
+    )
+
+
+def validator_planning_hypothesis(run_id: str, source_ids: tuple[str, ...]) -> CanonicalModelHypothesis:
+    return CanonicalModelHypothesis(
+        artifact_id=stable_id("chyp", {"run_id": run_id, "source_ids": source_ids}),
+        run_id=run_id,
+        execution_context_id="step28-validator-planning",
+        model_version="canonical-v1",
+        upstream_review_decision_refs=("validator-planning-review",),
+        source_ids=source_ids,
+        domain_assertion_refs=("validator-planning-domain",),
+        entity_types=(CanonicalEntityType(
+            canonical_entity_type_id="cet_validator_customer",
+            semantic_id="validator-customer",
+            business_name="Validator Customer",
+            kind=CanonicalEntityKind.IDENTITY,
+            entity_resolution_family="customer",
+            identity_strategy="validator-trusted-planning",
+            review_state="ACCEPTED_BY_REVIEW",
+            provenance_refs=("step28-validator",),
+        ),),
+        entity_resolution_requirements={"customer": EntityResolutionRequirement.ER_NOT_REQUIRED},
+        evidence_refs=("validator-planning-evidence",),
+        provenance_refs=("step28-validator",),
+        created_at=datetime(2026, 9, 13, tzinfo=timezone.utc),
+    )
 
 
 def validator_relationship_decision() -> RelationshipDecision:
@@ -439,16 +491,24 @@ def extended_scenarios(root: Path) -> int:
     product_response = product_client.post("/api/v1/runs", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-run"}, json={"project_id": "validator-product", "configuration_fingerprint": product_platform.config.configuration_fingerprint})
     assert product_response.status_code == 201
     product_run_id = product_response.json()["run_id"]
-    prepared = product_client.post(f"/api/v1/runs/{product_run_id}/execution/prepare", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-plan"}, json={"selection": explicit_selection(product_run_id).model_dump(mode="json")})
+    for source_id in ("validator-crm", "validator-erp"):
+        publish_typed(product_platform.control_store, product_platform.artifact_store, run_id=product_run_id, stage_id="SOURCE_DISCOVERY", attempt_id="validator-planning", value=validator_source_catalog(source_id), artifact_kind="SourceCatalog", artifact_id=stable_id("validator-catalog", {"run_id": product_run_id, "source_id": source_id}))
+    publish_typed(product_platform.control_store, product_platform.artifact_store, run_id=product_run_id, stage_id="CANONICAL_HYPOTHESES", attempt_id="validator-planning", value=validator_planning_hypothesis(product_run_id, ("validator-crm", "validator-erp")), artifact_kind="CanonicalModelHypothesis", artifact_id=stable_id("chyp", {"run_id": product_run_id, "source_ids": ("validator-crm", "validator-erp")}))
+    prepared = product_client.post(f"/api/v1/runs/{product_run_id}/execution/prepare", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-plan"}, json={"intent": {"cross_source_mapping_requested": False, "entity_resolution_requested": False}})
     assert prepared.status_code == 200 and product_platform.control_store.get_execution_plan(product_run_id) is not None
+    prepared_plan = product_platform.control_store.get_execution_plan(product_run_id)
+    assert prepared_plan is not None and prepared_plan.selection is not None
+    assert prepared_plan.selection.policy_ref == "execution-plan-authority-v2"
+    assert next(item for item in prepared_plan.selection.decisions if item.stage_id == "SCHEMA_MATCHING").selected is True
+    assert prepared.json()["selection_fingerprint"] == prepared_plan.selection.content_hash
     submitted = product_client.post(f"/api/v1/runs/{product_run_id}/execution", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "product-submit"})
     assert submitted.status_code == 202
     product_worker = JobWorker(control_store=product_platform.control_store, artifact_store=product_platform.artifact_store, executor=StageHandlerRegistry(), worker_id="product-worker")
     assert product_worker.run_once().status == JobStatus.SUCCEEDED.value and product_platform.control_store.get_stage_job(run_id=product_run_id, stage_id="SOURCE_DISCOVERY") is not None
     unresolved_response = product_client.post("/api/v1/runs", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-run"}, json={"project_id": "validator-product", "configuration_fingerprint": product_platform.config.configuration_fingerprint})
     unresolved_run_id = unresolved_response.json()["run_id"]
-    unresolved_preparation = product_client.post(f"/api/v1/runs/{unresolved_run_id}/execution/prepare", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-plan"}, json={"selection": explicit_selection(unresolved_run_id, omit_stage="ENTITY_RESOLUTION").model_dump(mode="json")})
-    assert unresolved_preparation.status_code == 409 and "ENTITY_RESOLUTION" in unresolved_preparation.json()["unresolved_stage_ids"]
+    unresolved_preparation = product_client.post(f"/api/v1/runs/{unresolved_run_id}/execution/prepare", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-plan"}, json={"intent": {"cross_source_mapping_requested": False, "entity_resolution_requested": False}})
+    assert unresolved_preparation.status_code == 409 and {"SOURCE_SCOPE", "ENTITY_RESOLUTION"}.issubset(set(unresolved_preparation.json()["unresolved_stage_ids"]))
     unresolved_submit = product_client.post(f"/api/v1/runs/{unresolved_run_id}/execution", headers={"X-Local-Principal": "validator-product", "Idempotency-Key": "unresolved-submit"})
     assert unresolved_submit.status_code == 409 and unresolved_submit.json()["status"] == "BLOCKED" and product_platform.control_store.get_execution_plan(unresolved_run_id) is None
     scenarios += 7

@@ -23,7 +23,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewCompatibilityContext,
 )
 from dirty_data_to_olap.domain.contracts.jobs import JobRecord
-from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanSelection, PlanPreparationStatus
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import ArtifactRef, RunRecord, StageAttemptRecord
 
 
@@ -63,7 +63,7 @@ class CreateRunRequest(ApiModel):
 
 
 class PrepareExecutionPlanRequest(ApiModel):
-    selection: ExecutionPlanSelection
+    intent: ExecutionPlanIntent
 
 
 class RegisterArtifactRequest(ApiModel):
@@ -439,7 +439,7 @@ def create_app(
     ) -> JSONResponse:
         result, replayed = backend.prepare_execution_plan(
             run_id=run_id,
-            selection=payload.selection,
+            intent=payload.intent,
             principal=principal(request),
             idempotency_key=key(idempotency_key),
         )

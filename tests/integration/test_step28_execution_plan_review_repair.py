@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -13,10 +14,11 @@ from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, review_subject_key
+from dirty_data_to_olap.domain.contracts.canonical import CanonicalEntityKind, CanonicalEntityType, CanonicalModelHypothesis, EntityResolutionRequirement, ReviewCheckpoint, review_subject_key
 from dirty_data_to_olap.domain.contracts.evidence_fusion import DecisionExplanation, DecisionState, FusionScore, RelationshipDecision
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
+    ExecutionPlanIntent,
     ExecutionPlanSelection,
     JobStatus,
     StageExecutionResult,
@@ -25,7 +27,7 @@ from dirty_data_to_olap.domain.contracts.jobs import (
     StageSpec,
 )
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, RunRecord
-from dirty_data_to_olap.domain.contracts.source import stable_digest, stable_id
+from dirty_data_to_olap.domain.contracts.source import AdapterReference, SelectionScope, SourceCatalog, SourceDescriptor, SourceType, stable_digest, stable_id
 from dirty_data_to_olap.entrypoints.api import create_app
 
 
@@ -111,6 +113,49 @@ def _publish_typed(control: SQLiteControlStore, artifacts: LocalArtifactStore, *
     )
     control.register_artifact(ref)
     return ref
+
+
+def _trusted_catalog(source_id: str) -> SourceCatalog:
+    return SourceCatalog(
+        source=SourceDescriptor(
+            source_id=source_id,
+            display_name=source_id,
+            source_type=SourceType.SQLITE,
+            file_locator=f"{source_id}.sqlite",
+            selection_scope=SelectionScope(),
+            schema_fingerprint=f"schema-{source_id}",
+            adapter_reference=AdapterReference(name="step28-test-source", version="1", config_fingerprint="step28-source-config"),
+        ),
+        tables=(),
+        columns=(),
+        declared_constraints=(),
+    )
+
+
+def _trusted_hypothesis(run_id: str, source_ids: tuple[str, ...], requirement: EntityResolutionRequirement) -> CanonicalModelHypothesis:
+    return CanonicalModelHypothesis(
+        artifact_id=stable_id("chyp", {"run_id": run_id, "source_ids": source_ids, "requirement": requirement.value}),
+        run_id=run_id,
+        execution_context_id="step28-trusted-planning",
+        model_version="canonical-v1",
+        upstream_review_decision_refs=("trusted-review",),
+        source_ids=source_ids,
+        domain_assertion_refs=("trusted-domain",),
+        entity_types=(CanonicalEntityType(
+            canonical_entity_type_id="cet_customer",
+            semantic_id="customer",
+            business_name="Customer",
+            kind=CanonicalEntityKind.IDENTITY,
+            entity_resolution_family="customer",
+            identity_strategy="trusted-planning-fixture",
+            review_state="ACCEPTED_BY_REVIEW",
+            provenance_refs=("step28-test",),
+        ),),
+        entity_resolution_requirements={"customer": requirement},
+        evidence_refs=("trusted-evidence",),
+        provenance_refs=("step28-trusted-planning",),
+        created_at=datetime(2026, 9, 13, tzinfo=timezone.utc),
+    )
 
 
 def _checkpoint_plan(run_id: str, *, checkpoint: ReviewCheckpoint, upstream_stage: str, downstream_stage: str | None = None) -> ExecutionPlan:
@@ -346,12 +391,38 @@ def test_public_api_prepares_plan_before_submit_and_blocks_unresolved_selection(
         created = client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "product-run"}, json={"project_id": "product", "configuration_fingerprint": platform.config.configuration_fingerprint})
         assert created.status_code == 201, created.text
         run_id = created.json()["run_id"]
-        selection = _authoritative_selection(run_id)
-        prepared = client.post(f"/api/v1/runs/{run_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "product-plan"}, json={"selection": selection.model_dump(mode="json")})
+        for source_id in ("crm", "erp"):
+            catalog = _trusted_catalog(source_id)
+            _publish_typed(
+                platform.control_store,
+                platform.artifact_store,
+                run_id=run_id,
+                stage_id="SOURCE_DISCOVERY",
+                attempt_id="trusted-planning-attempt",
+                artifact_id=f"catalog-{source_id}",
+                artifact_kind="SourceCatalog",
+                value=catalog,
+            )
+        hypothesis = _trusted_hypothesis(run_id, ("crm", "erp"), EntityResolutionRequirement.ER_NOT_REQUIRED)
+        _publish_typed(
+            platform.control_store,
+            platform.artifact_store,
+            run_id=run_id,
+            stage_id="CANONICAL_HYPOTHESES",
+            attempt_id="trusted-planning-attempt",
+            artifact_id=hypothesis.artifact_id,
+            artifact_kind="CanonicalModelHypothesis",
+            value=hypothesis,
+        )
+        intent = ExecutionPlanIntent(cross_source_mapping_requested=False, entity_resolution_requested=False)
+        prepared = client.post(f"/api/v1/runs/{run_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "product-plan"}, json={"intent": intent.model_dump(mode="json")})
         assert prepared.status_code == 200, prepared.text
         assert prepared.json()["status"] == "READY"
         plan = platform.control_store.get_execution_plan(run_id)
-        assert plan is not None and plan.selection == selection
+        assert plan is not None and plan.selection is not None
+        assert plan.selection.policy_ref == "execution-plan-authority-v2"
+        assert plan.selection.decision_for("SCHEMA_MATCHING").selected is True
+        assert plan.selection.decision_for("ENTITY_RESOLUTION").selected is False
 
         submitted = client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "product-submit"})
         assert submitted.status_code == 202, submitted.text
@@ -361,10 +432,11 @@ def test_public_api_prepares_plan_before_submit_and_blocks_unresolved_selection(
 
         unresolved_created = client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "unresolved-run"}, json={"project_id": "product", "configuration_fingerprint": platform.config.configuration_fingerprint})
         unresolved_id = unresolved_created.json()["run_id"]
-        unresolved = client.post(f"/api/v1/runs/{unresolved_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "unresolved-plan"}, json={"selection": _authoritative_selection(unresolved_id, omit_stage="ENTITY_RESOLUTION").model_dump(mode="json")})
+        unresolved = client.post(f"/api/v1/runs/{unresolved_id}/execution/prepare", headers={**AUTH, "Idempotency-Key": "unresolved-plan"}, json={"intent": intent.model_dump(mode="json")})
         assert unresolved.status_code == 409
         assert unresolved.json()["status"] == "BLOCKED"
         assert "ENTITY_RESOLUTION" in unresolved.json()["unresolved_stage_ids"]
+        assert "SOURCE_SCOPE" in unresolved.json()["unresolved_stage_ids"]
         not_ready = client.post(f"/api/v1/runs/{unresolved_id}/execution", headers={**AUTH, "Idempotency-Key": "unresolved-submit"})
         assert not_ready.status_code == 409
         assert not_ready.json()["status"] == "BLOCKED"

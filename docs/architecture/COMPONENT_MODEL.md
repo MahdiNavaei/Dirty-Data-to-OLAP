@@ -19,6 +19,7 @@ The component model is a set of small project-owned services connected through p
 - Source Discovery consumes source selection/registry metadata, uses the discovery operation of `SourceAdapter`, and produces `SourceCatalog` without requiring a snapshot.
 - Source Snapshot Coordinator consumes `SourceCatalog` plus `SamplingPolicy`, uses the bounded-snapshot operation of `SourceAdapter`, and stages immutable `SourceSnapshot`, `BatchReference` and `SourceRecordReference` artifacts.
 - Stage services own one semantic responsibility: discovery, profiling, dependency discovery, schema matching, quality analysis, optional semantic evidence, evidence fusion, canonical hypotheses, linkage-evidence-only entity resolution, canonical finalization, analytical planning, compilation, materialization, semantic modeling/query resolution and validation/reconciliation.
+- Execution Plan Authority compiles bounded caller intent against the run's verified SourceCatalog/SourceSnapshotResult and CanonicalModelHypothesis artifacts. It owns conditional-stage selection, policy/evidence/scope fingerprints and fail-closed unresolved planning; clients cannot submit a complete authoritative selection.
 - Dependency Discovery consumes only complete hash-bound staged snapshot artifacts and an explicit local-only privacy context. It measures UCC/key, FD/AFD, IND/approximate-IND and search-bound evidence, retains orphan/type/uniqueness/cardinality signals, and emits relationship candidates only; it never accepts a PK/FK or reconnects to a source.
 - Entity Resolution owns `EntityMatchEdge` and `EntityCluster` linkage evidence only. Canonical Finalization owns accepted canonical identity and `SourceRecordCanonicalMap` after policy, review, conflict and provenance checks.
 
@@ -56,8 +57,8 @@ The source lifecycle is `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog ->
 | Entity Resolution | linkage edges and clusters | never assigns canonical identity |
 | Canonical Finalization | accepted canonical instances and source mappings | no source writes; family-scoped ER guard |
 | Analytical services | analytical plans and mappings | no source writes |
-| Compiler | compiled execution plan | no execution |
-| Materializer | controlled target creation | writes only controlled target |
+| Compiler | compiled execution plan, generated SQL and typed TargetConfig | no execution |
+| Materializer | controlled target creation from bound compiler outputs | writes only controlled target |
 | Semantic Layer | business-readable semantic projection and bounded query plans | writes metadata artifacts only; reads the exact target; never changes Step20 semantics or target |
 | Validation | checks and reconciliation | reads artifacts; records result |
 | Review checkpoints | stage-scoped artifact approval guards | unresolved required review drives `NEEDS_REVIEW` |
@@ -66,7 +67,7 @@ The source lifecycle is `SourceSelection -> SOURCE_DISCOVERY -> SourceCatalog ->
 
 ## 3. Component interaction
 
-The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts. Review checkpoints are explicit DAG boundaries: each is entered only after its subject artifact exists, and each calls the common Review / Policy Service. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`. Canonical Finalization evaluates the conditional ER guard per entity family; it cannot publish a mapping when required linkage evidence or its post-ER identity review is absent or unacceptable.
+The orchestrator asks a stage service for a project-owned request/result. The stage service obtains an adapter through a port, persists an attempt-local artifact, validates its contract, and asks the Artifact Store to publish it. The Control Store records the state transition and references. Downstream services consume only published COMPLETE artifacts. Before submission, the public product path accepts bounded execution intent and the server resolves authoritative selection from verified run artifacts. Compilation publishes `CompiledPlan`, `GeneratedSQL` and `TargetConfig` on the same `COMPILATION` attempt. Review checkpoints are explicit DAG boundaries: each is entered only after its subject artifact exists, and each calls the common Review / Policy Service. A required unresolved checkpoint pauses its guarded stage and run in `NEEDS_REVIEW`. Materialization is admitted only when compiled/generated IDs and hashes, target fingerprint and run/stage/attempt lineage bind to the review context. Canonical Finalization evaluates the conditional ER guard per entity family; it cannot publish a mapping when required linkage evidence or its post-ER identity review is absent or unacceptable.
 
 ### Privacy policy boundary
 

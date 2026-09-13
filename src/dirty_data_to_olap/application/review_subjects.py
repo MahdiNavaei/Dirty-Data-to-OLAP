@@ -163,23 +163,55 @@ class ReviewCheckpointSubjectResolver:
         unresolved: list[str],
     ) -> ReviewSubjectDerivation:
         compiled = {
-            payload.compiled_plan_id: payload
+            payload.compiled_plan_id: (artifact, payload)
             for artifact, payload in verified
             if artifact.artifact_kind == "CompiledPlan" and isinstance(payload, CompiledPlan) and payload.compiled_plan_id == artifact.artifact_id
         }
         generated = {
-            payload.generated_sql_id: payload
+            payload.generated_sql_id: (artifact, payload)
             for artifact, payload in verified
             if artifact.artifact_kind == "GeneratedSQL" and isinstance(payload, GeneratedSQL) and payload.generated_sql_id == artifact.artifact_id
         }
-        targets = [payload for artifact, payload in verified if artifact.artifact_kind == "TargetConfig" and isinstance(payload, TargetConfig)]
+        targets = [
+            (artifact, payload)
+            for artifact, payload in verified
+            if artifact.artifact_kind == "TargetConfig" and isinstance(payload, TargetConfig)
+        ]
         contexts: list[ReviewCompatibilityContext] = []
-        for compiled_plan in compiled.values():
-            sql = generated.get(compiled_plan.generated_sql_id)
-            if sql is None or not targets:
+        for compiled_artifact, compiled_plan in compiled.values():
+            generated_item = generated.get(compiled_plan.generated_sql_id)
+            if generated_item is None:
                 unresolved.append(compiled_plan.compiled_plan_id)
                 continue
-            for target in targets:
+            generated_artifact, sql = generated_item
+            if (
+                compiled_artifact.run_id != generated_artifact.run_id
+                or compiled_artifact.stage_id != "COMPILATION"
+                or generated_artifact.stage_id != "COMPILATION"
+                or compiled_artifact.attempt_id != generated_artifact.attempt_id
+                or compiled_plan.generated_sql_id != sql.generated_sql_id
+                or compiled_plan.generated_sql_hash != sql.sql_hash
+                or compiled_plan.plan_id != sql.plan_id
+                or compiled_plan.plan_content_hash != sql.plan_content_hash
+            ):
+                unresolved.append(compiled_plan.compiled_plan_id)
+                continue
+            matching_targets = [
+                (target_artifact, target)
+                for target_artifact, target in targets
+                if target_artifact.run_id == compiled_artifact.run_id
+                and target_artifact.stage_id == "COMPILATION"
+                and target_artifact.attempt_id == compiled_artifact.attempt_id
+                and compiled_plan.target_config_fingerprint == target.config_fingerprint
+            ]
+            if not matching_targets:
+                unresolved.append(compiled_plan.compiled_plan_id)
+                continue
+            for _target_artifact, target in matching_targets:
+                # ReviewPolicyService remains the semantic authority.  The
+                # transport hashes are independently checked above and by
+                # _read_verified; they are deliberately not substituted for
+                # the builder's semantic review hash.
                 contexts.append(self.review_policy.materialization_context(compiled_plan, sql, target))
         return ReviewSubjectDerivation(
             contexts=self._unique_contexts(contexts),

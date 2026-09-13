@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Iterable
 
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
+from dirty_data_to_olap.application.platform import ArtifactStorePort, ControlStorePort
 from dirty_data_to_olap.domain.contracts.analytical import (
     AnalyticalCell,
     AnalyticalInputBinding,
@@ -31,11 +33,64 @@ from dirty_data_to_olap.domain.contracts.analytical import (
     compiled_plan_id,
     deterministic_warehouse_key,
 )
+from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, ArtifactRef
 from dirty_data_to_olap.domain.contracts.source import stable_digest, stable_id
 
 
 class AnalyticalCompilationError(ValueError):
     """The approved analytical plan cannot be translated safely."""
+
+
+@dataclass(frozen=True)
+class CompilationOutputRefs:
+    """Registered immutable outputs of one COMPILATION attempt."""
+
+    compiled_plan: ArtifactRef
+    generated_sql: ArtifactRef
+    target_config: ArtifactRef
+
+
+class CompilationArtifactPublisher:
+    """Publish the exact compiler inputs and outputs used by materialization."""
+
+    def __init__(self, artifact_store: ArtifactStorePort, control_store: ControlStorePort) -> None:
+        self.artifact_store = artifact_store
+        self.control_store = control_store
+
+    def publish(
+        self,
+        *,
+        run_id: str,
+        attempt_id: str,
+        compiled_plan: CompiledPlan,
+        generated_sql: GeneratedSQL,
+        target_config: TargetConfig,
+    ) -> CompilationOutputRefs:
+        if compiled_plan.generated_sql_id != generated_sql.generated_sql_id or compiled_plan.generated_sql_hash != generated_sql.sql_hash:
+            raise AnalyticalCompilationError("compiler outputs are not bound to the same GeneratedSQL")
+        if compiled_plan.target_config_fingerprint != target_config.config_fingerprint:
+            raise AnalyticalCompilationError("compiler output is not bound to the exact TargetConfig")
+        values = (
+            (compiled_plan.compiled_plan_id, "CompiledPlan", compiled_plan, (generated_sql.generated_sql_id,)),
+            (generated_sql.generated_sql_id, "GeneratedSQL", generated_sql, (compiled_plan.compiled_plan_id,)),
+            (stable_id("target-config", {"run_id": run_id, "attempt_id": attempt_id, "compiled_plan_id": compiled_plan.compiled_plan_id, "config": target_config.config_fingerprint}), "TargetConfig", target_config, (compiled_plan.compiled_plan_id, generated_sql.generated_sql_id)),
+        )
+        refs: list[ArtifactRef] = []
+        for artifact_id, artifact_kind, value, provenance in values:
+            manifest = ArtifactManifest(
+                artifact_id=artifact_id,
+                run_id=run_id,
+                stage_id="COMPILATION",
+                attempt_id=attempt_id,
+                artifact_kind=artifact_kind,
+                media_type="application/json",
+                producer="application.compiler",
+                logical_key=f"runs/{run_id}/artifacts/{artifact_id}.json",
+                provenance_refs=tuple(str(item) for item in provenance),
+            )
+            ref = self.artifact_store.publish(manifest, value.model_dump_json().encode("utf-8"))
+            refs.append(self.control_store.register_artifact(ref))
+        return CompilationOutputRefs(compiled_plan=refs[0], generated_sql=refs[1], target_config=refs[2])
 
 
 _LOGICAL_TYPES = {
