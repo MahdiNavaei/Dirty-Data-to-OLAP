@@ -63,7 +63,7 @@ specialist_execution:
   last_completed_step: 28
   last_completed_role: "distributed_job_processing_engineer"
   last_completed_specialist: "Step28 - Distributed Job Processing Engineer"
-  last_completed_content_commit: "684856cf36f8398ac3c4146b27b8453fe09715b1"
+  last_completed_content_commit: "af80a16add349988b0678f9bea1b0f61d56a87b2"
   next_step: "Step29 - Frontend Engineer"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
@@ -220,6 +220,30 @@ specialist_execution:
     g7_status: "PENDING"
     step29_started: false
     step29_status: "NOT_STARTED"
+  step28_fresh_run_bootstrap_closure:
+    status: "PASS"
+    scope: "Final Step28 fresh-run bootstrap, phased authority, runtime artifact ownership and project-owner closure; Step29 not started"
+    receipt: "docs/execution/STEP28_FRESH_RUN_BOOTSTRAP_CLOSURE.md"
+    content_commit: "af80a16add349988b0678f9bea1b0f61d56a87b2"
+    validator: "tools/validate_step28_job_processing.py"
+    validator_scenarios: 75
+    documentation_checks: 1
+    focused_tests: "50 passed Step28; 23 passed Step20; 21 passed Step22 serial; 22 passed Step23; 31 passed Step24; 18 passed Step27"
+    full_regression: "458 passed, 2 skipped, 41 warnings under Python 3.10"
+    repository_validators: "28/28 PASS"
+    sqlite_schema_version: 6
+    planning_lifecycle: "BOOTSTRAP -> SOURCE_RESOLVED -> COMPLETE; same stable plan identity; CAS revision"
+    runtime_ownership: "PLANNING ARTIFACT MUST BELONG TO SUCCEEDED OWNING STAGE ATTEMPT RESULT SET"
+    source_selection: "MULTI_SOURCE SCHEMA_MATCHING=true; SINGLE_SOURCE EXPLICITLY EXCLUDED"
+    entity_selection: "ER_REQUIRED=true; ER_NOT_REQUIRED=false; downstream guards preserved"
+    fresh_run_variants: "MULTI_SOURCE_REQUIRED; SINGLE_SOURCE_NOT_REQUIRED; RESTART; MISSING/CORRUPT SOURCE OR HYPOTHESIS FAIL_CLOSED"
+    review_materialization_g6: "PRESERVED AND REGRESSION-TESTED"
+    self_review: "PERFORMED; FINDINGS REPAIRED BEFORE PASS"
+    compileall: "PASS"
+    yaml_json_parse: "26 non-protected files; 19 protected files excluded"
+    openapi_determinism: "PASS"
+    g7_status: "PENDING"
+    step29_started: false
   step22_content_commit: "f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2"
   step22_validation_report: "docs/execution/STEP22_DATA_CORRECTNESS_REVIEW.md"
   step22_blocking_reason: ""
@@ -252,7 +276,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "684856cf36f8398ac3c4146b27b8453fe09715b1"
+  last_verified_commit: "af80a16add349988b0678f9bea1b0f61d56a87b2"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   commit_recording_note: "last_verified_commit identifies the latest verified content commit, not a later metadata-only commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content or surgical repair commit; Step18 v5 is the corrected G5 PASS in review-only validated mode, v4 is superseded historical evidence, Step19 canonical artifacts are handed off to Step20 only after both critical review-binding/identity-membership repairs, Step20 analytical artifacts are handed off to Step21 only after exact child-spec package binding and generic runtime closure, Step21 semantic artifacts are handed off to Step22 only after exact Step20 binding and generic read-only query validation, Step22 G6 is PASS only after independent source-to-canonical-to-OLAP evidence and all required checks pass, Step23 local platform primitives are integrity-closed by the SQLite/filesystem reference path, Step24 bounded partitioned-local execution is accepted only for G7A semantic equivalence, Step25 UX design contracts are handed off to Step26 without claiming G7B or G7, Step26 visualization projections are handed off to Step27 with G7B PASS but G7 still PENDING, Step27 backend/control-plane API plus its integrity repair are handed off to Step28 without claiming durable execution or G7 completion, and Step28 durable SQLite job processing with lease/fencing, bounded retries, cancellation/review resume, explicit run-specific plan preparation/selection, typed review-checkpoint derivation and safe job queries is handed off to Step29 without claiming G7 completion."
 filesystem_boundary:

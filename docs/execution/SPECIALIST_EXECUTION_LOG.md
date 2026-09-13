@@ -1544,3 +1544,30 @@ handoff_to:
 - content_commit: `684856cf36f8398ac3c4146b27b8453fe09715b1` (`fix: close Step28 authority and materialization boundary`)
 - receipt: `docs/execution/STEP28_FINAL_AUTHORITY_AND_MATERIALIZATION_CLOSURE.md`
 - final_state: `last_completed_step=28`, `last_completed_role=distributed_job_processing_engineer`, `current_step=29`, `current_role=frontend_engineer`, `step29_started=false`, `step29_status=NOT_STARTED`
+
+## FINAL STEP28 FRESH-RUN BOOTSTRAP AND PROJECT-OWNER CLOSURE
+
+- execution_step: `28`
+- role_id: `distributed_job_processing_engineer`
+- status: `PASS` for fresh-run bootstrap, phased authority, runtime artifact ownership and project-owner closure
+- starting_baseline: expected `HEAD=f718a4744785c9e56d5c91665eabd7a0a82a0d7e`; latest prior Step28 content `684856cf36f8398ac3c4146b27b8453fe09715b1`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- root_cause: `ExecutionPlanService.prepare()` required future-stage source and hypothesis artifacts before creating a plan, and earlier product-path tests hid that cycle by pre-seeding them
+- architecture: SQLite v6 phased lifecycle `BOOTSTRAP -> SOURCE_RESOLVED -> COMPLETE`; the same stable plan identity advances by compare-and-swap revision; bootstrap schedules only `SOURCE_DISCOVERY`, source truth authorizes source/evidence stages, and canonical hypothesis truth authorizes the conditional entity branch
+- fresh_run_evidence: public `POST /runs` and bounded intent preparation began with an empty artifact set; controlled runtime handlers published planning artifacts only from their owning succeeded stage attempts; multi-source required schema matching, single-source explicit exclusion, restart, missing/corrupt truth and unowned future-artifact negative controls all passed
+- authority_boundary: public API accepts bounded `ExecutionPlanIntent` only; server-owned typed source scope, evidence review subjects and canonical hypotheses determine selection; planning artifacts require succeeded owning stage job, matching attempt and result reference
+- selection_results: `SCHEMA_MATCHING=true` for multi-source and `false` for single-source; `ENTITY_RESOLUTION=true` for `ER_REQUIRED` and `false` for `ER_NOT_REQUIRED`; unresolved or corrupt truth fails closed
+- restart_durability: stable plan identity, selection hash and decision cardinality survived reopen; source discovery was not re-executed; stale CAS writer was rejected
+- review_checkpoint_regression: Step27-compatible typed review derivation, API `ACCEPTED` review, durable resume, shared subject identity, leases, fencing, retry and cancellation remained passing
+- materialization_regression: same-run/stage/attempt `CompiledPlan`, `GeneratedSQL` and `TargetConfig` binding remained required; no materializer call occurred before compatible review
+- g6_regression: exact typed `GateEvidence` and verified `ValidationReport` success guard remained required; G6 stayed `PASS`
+- project_owner_self_review: independently traced empty run -> API -> bootstrap -> worker -> source discovery -> source selection -> evidence review -> canonical hypothesis -> entity selection -> analytical/materialization/G6 guards
+- self_review_repairs: phase-aware pending scheduling; succeeded-owning-stage/attempt/result-reference trust guard; corrupt-hypothesis `BLOCKED` handling; fresh validator path and synchronized architecture documentation/manifest
+- validator: `tools/validate_step28_job_processing.py` -> `75` behavioral scenarios and `1` documentation check PASS
+- focused_tests: `50 passed` Step28; `23 passed` Step20; `21 passed` Step22 serial; `22 passed` Step23; `31 passed` Step24; `18 passed` Step27
+- full_regression: `458 passed, 2 skipped, 41 warnings` under Python 3.10 with `tests/quality_unit_artifacts/` ignored; optional official Splink and Valentine integrations were skipped because runtimes are not installed; the existing non-fatal dlt/SQLite cursor-cleanup traceback occurred after pytest completion
+- validators: all `28/28` repository validators PASS; `compileall`, YAML/JSON parsing, OpenAPI determinism and `git diff --check` PASS
+- gate_state: `G5=PASS`, `G6=PASS`, `G7A=PASS`, `G7B=PASS`, `G7=PENDING`, `blocked=false`
+- content_commit: `af80a16add349988b0678f9bea1b0f61d56a87b2` (`fix: close Step28 fresh-run bootstrap`)
+- receipt: `docs/execution/STEP28_FRESH_RUN_BOOTSTRAP_CLOSURE.md`
+- final_state: `last_completed_step=28`, `last_completed_role=distributed_job_processing_engineer`, `current_step=29`, `current_role=frontend_engineer`, `step29_started=false`, `step29_status=NOT_STARTED`
+- limitations: local SQLite/filesystem reference path only; no broker/HA/multi-node execution, production authentication, frontend/browser usability, deployment, full observability, production capacity, physical distributed execution or G7 completion claim
