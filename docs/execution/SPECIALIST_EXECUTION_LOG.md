@@ -1451,3 +1451,31 @@ handoff_to:
 - content_commit_sha: `e840a11dfa128fb7a62afead783b0f25b72b8060` (`fix: close Step27 backend trust boundaries`)
 - receipt: `docs/execution/STEP27_BACKEND_API_INTEGRITY_REPAIR.md`
 - handoff_to: `Step28 - Distributed Job Processing Engineer`; Step28 remains `NOT_STARTED`; G7 remains `PENDING`; `blocked=false`
+
+## Specialist Step28 - Distributed Systems / Job Processing Engineer
+
+- execution_step: `28`
+- role_id: `distributed_job_processing_engineer`
+- specialist_file: `19_DISTRIBUTED_JOB_PROCESSING_ENGINEER.md`
+- status: `PASS` for the bounded local durable job-processing substrate; Step29 was not started
+- starting_baseline: branch `main`; `HEAD=origin/main=42e7b90962cc56f0518b785971e8aaabfb951834`; latest Step27 integrity-repair content `e840a11dfa128fb7a62afead783b0f25b72b8060`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- inputs_reviewed: Step28 playbook, governance/invariants, runtime topology, engine interfaces, authoritative stage graph, Step23 platform contracts, Step24 synchronous boundary, Step25 review contracts, Step26 visualization contracts, Step27 backend and integrity-repair receipts, existing review-policy/context builders, artifact contracts, source and tests
+- implementation: project-owned `ExecutionCommand`/job/attempt contracts; durable SQLite v5 command and stage queue; command dedup/conflict; transactional claim, heartbeat, lease expiry and monotonic fencing; authoritative DAG projection; bounded retry/backpressure; cancellation and review-compatible resume; safe job query projections; explicit handler registry; final-validation guard; artifact verification; deterministic worker fault-injection hooks
+- identity_evidence: command ID, command/job/stage/request/attempt/artifact/run identities are distinct; same command replay returns the same job; changed semantic reuse is rejected
+- multi_worker_evidence: two-worker claim exclusion, expiry reclaim to generation N+1, stale generation finalization rejection and restart recovery passed
+- failure_evidence: claim crash, stage-start crash, post-publication crash and pre-finalization crash were injected deterministically; unregistered output and unknown side effects failed closed without raw exception leakage
+- retry_evidence: typed transient failure, bounded backoff, retry exhaustion and new attempt identity passed; unknown side-effect outcomes are not blindly retried
+- cancellation_review_evidence: queued/running cancellation and cancel/completion race passed; review checkpoint pause, compatible accepted resume and new attempt identity passed; Step24 remains synchronous
+- stage_coverage: missing handler is `BLOCKED`, not fake success; required final validation is mandatory before run `SUCCEEDED`; `PARTIAL` is forbidden
+- backpressure: bounded local worker pool limits are explicit; no unbounded task creation or provider-native queue contract
+- sqlite_evidence: explicit v4-to-v5 migration, reopen, durable command/job/plan/attempt/lease/failure/cancellation state and safe projections passed
+- artifact_safety: registered run/stage/attempt binding, publication and content-hash verification are required; incomplete or mismatched output is non-consumable
+- oss_decision: no third-party queue dependency or copied OSS implementation; existing project-owned SQLite ControlStore is the semantic authority
+- validator: `tools/validate_step28_job_processing.py` -> `10` scenarios PASS
+- tests: final focused cross-step suite `127 passed`; full feasible regression `408 passed, 2 skipped, 41 warnings`; optional Splink/Valentine skips and non-fatal dlt/SQLite cursor-cleanup traceback remain documented
+- validators: all `28/28` repository validators PASS; compileall and diff-check PASS; YAML/JSON/OpenAPI checks were run where applicable
+- gate_state: `G5=PASS`, `G6=PASS`, `G7A=PASS`, `G7B=PASS`, `G7=PENDING`, `blocked=false`
+- limitations: local SQLite reference path only; no broker/HA/multi-node production claim, frontend/browser, deployment, full observability, production auth or G7 completion; explicit handlers not wired remain blocked; unknown external side effects require reconciliation
+- content_commit_sha: `578bd4458def77608e36aba25709de8e5f8f43b1` plus fault-boundary repair `98555bbf2ac9d80b8274197f7e470c5b22cfc3c5` and handoff-validator compatibility `37cf6ec0690f176258560f0ddd83c1f90e211854`
+- report: `docs/execution/STEP28_DISTRIBUTED_JOB_PROCESSING_REVIEW.md`
+- handoff_to: `Step29 - Frontend Engineer`; Step29 remains `NOT_STARTED`
