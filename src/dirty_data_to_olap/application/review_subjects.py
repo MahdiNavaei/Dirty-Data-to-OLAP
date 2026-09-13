@@ -72,7 +72,7 @@ class ReviewCheckpointSubjectResolver:
         if checkpoint is ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS:
             return self._evidence_contexts(verified, unresolved)
         if checkpoint is ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY:
-            return self._identity_contexts(verified, unresolved)
+            return self._identity_contexts(run_id, verified, unresolved)
         if checkpoint is ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN:
             contexts = tuple(
                 self.review_policy.analytical_plan_context(payload)
@@ -115,6 +115,7 @@ class ReviewCheckpointSubjectResolver:
 
     def _identity_contexts(
         self,
+        run_id: str,
         verified: list[tuple[ArtifactRef, object]],
         unresolved: list[str],
     ) -> ReviewSubjectDerivation:
@@ -136,6 +137,19 @@ class ReviewCheckpointSubjectResolver:
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, proposal in proposals:
             hypothesis = hypotheses.get(proposal.hypothesis_artifact_id)
+            if hypothesis is None:
+                # The graph names the proposal as the direct dependency, while
+                # the proposal explicitly binds the hypothesis it was derived
+                # from. Resolve that typed reference by identity and verify it
+                # through the same control/artifact boundary before use.
+                hypothesis_artifact = self.control_store.get_artifact(proposal.hypothesis_artifact_id)
+                if hypothesis_artifact is not None:
+                    try:
+                        candidate_artifact, candidate = self._read_verified(run_id, hypothesis_artifact)
+                        if candidate_artifact.artifact_kind == "CanonicalModelHypothesis" and isinstance(candidate, CanonicalModelHypothesis) and candidate.artifact_id == candidate_artifact.artifact_id:
+                            hypothesis = candidate
+                    except (KeyError, OSError, PlatformError, ValueError):
+                        pass
             if hypothesis is None:
                 unresolved.append(artifact.artifact_id)
                 continue

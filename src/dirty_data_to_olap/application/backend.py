@@ -7,6 +7,7 @@ does not run data engines, execute SQL, or decide domain semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 import re
 from typing import Any, Mapping, Protocol
@@ -19,6 +20,7 @@ from dirty_data_to_olap.application.platform import (
     PlatformError,
 )
 from dirty_data_to_olap.application.execution_plan import ExecutionPlanService
+from dirty_data_to_olap.application.product_sources import ProductSourceError, ProductSourceService
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.application.visualization import VisualizationInputError, VisualizationService
 from dirty_data_to_olap.domain.contracts.api import (
@@ -55,6 +57,27 @@ from dirty_data_to_olap.domain.contracts.visualization import (
     VisualizationScope,
 )
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
+from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SelectionScope, SourceSelection
+from dirty_data_to_olap.domain.contracts.product import (
+    ProductAnalyticalView,
+    ProductCanonicalView,
+    ProductConfiguration,
+    ProductDataConditionView,
+    ProductMaterializationView,
+    ProductOutputView,
+    ProductRelationshipView,
+    ProductReviewView,
+    ProductSourceBinding,
+    ProductSourceView,
+    ProductStageView,
+    ProductSummary,
+    ProductValidationView,
+)
+from dirty_data_to_olap.domain.contracts.analytical import AnalyticalPlan, MaterializationArtifact
+from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityProposal, CanonicalModel, CanonicalModelHypothesis
+from dirty_data_to_olap.domain.contracts.evidence_fusion import RelationshipDecision
+from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSnapshotResult
+from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
 @dataclass(frozen=True)
@@ -155,6 +178,7 @@ class BackendService:
         max_projection_bytes: int = 4_000_000,
         review_subject_resolver: ReviewSubjectResolverPort | None = None,
         execution_plan_service: ExecutionPlanService | None = None,
+        source_service: ProductSourceService | None = None,
     ) -> None:
         if max_page_size < 1 or max_page_size > 1000:
             raise ValueError("max_page_size must be between 1 and 1000")
@@ -169,6 +193,7 @@ class BackendService:
         self.review_policy = ReviewPolicyService()
         self.review_subject_resolver = review_subject_resolver or ControlStoreReviewSubjectResolver(control_store)
         self.execution_plan_service = execution_plan_service
+        self.source_service = source_service
 
     def _require_scope(self, principal: Principal, scope: str) -> None:
         if not principal.subject or scope not in principal.scopes:
@@ -304,6 +329,321 @@ class BackendService:
         if job is None or job.run_id != run_id:
             raise BackendError("JOB_NOT_FOUND", "job was not found", status=404)
         return job
+
+    @staticmethod
+    def _product_source_view(record) -> ProductSourceView:
+        return ProductSourceView(
+            registry_id=record.registry_id,
+            source_id=record.source_id,
+            display_name=record.display_name,
+            source_type=record.source_type.value,
+            adapter_name=record.adapter_name,
+            read_only=record.read_only,
+        )
+
+    def list_product_sources(self, *, principal: Principal) -> tuple[ProductSourceView, ...]:
+        self._require_scope(principal, "runs:read")
+        if self.source_service is None:
+            return ()
+        return tuple(self._product_source_view(item) for item in self.source_service.list())
+
+    def product_configuration(self, *, principal: Principal) -> ProductConfiguration:
+        self._require_scope(principal, "runs:read")
+        return ProductConfiguration(configuration_fingerprint=self.configuration_fingerprint or "unconfigured")
+
+    def import_product_source(
+        self,
+        *,
+        filename: str,
+        payload: bytes,
+        principal: Principal,
+        idempotency_key: str,
+    ) -> tuple[ProductSourceView, bool]:
+        self._require_scope(principal, "runs:write")
+        if self.source_service is None:
+            raise BackendError("SOURCE_PRODUCT_UNAVAILABLE", "managed source import is not configured", status=503, retryable=True)
+        key = _safe_key(idempotency_key)
+        payload_hash = hashlib.sha256(payload).hexdigest()
+        request = {"filename": filename, "payload_sha256": payload_hash, "byte_size": len(payload)}
+        scope = f"source-import:{principal.subject}"
+        fingerprint = idempotency_fingerprint(request)
+        existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
+        if existing is not None:
+            registry_id = existing.resource_id
+            if not registry_id:
+                raise BackendError("SOURCE_IMPORT_REPLAY_INVALID", "source import replay metadata is incomplete", status=409)
+            try:
+                return self._product_source_view(self.source_service.get(registry_id)), True
+            except ProductSourceError as exc:
+                raise BackendError("SOURCE_IMPORT_REPLAY_INVALID", "source import replay cannot be reconciled", status=409) from exc
+        registry_id = stable_id("registry", {"principal": principal.subject, "key": key, "request": request})
+        try:
+            record = self.source_service.import_csv(registry_id=registry_id, filename=filename, payload=payload)
+            idempotency = IdempotencyRecord(
+                scope=scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=201,
+                response_body={"registry_id": record.registry_id},
+                resource_id=record.registry_id,
+            )
+            self.control_store.record_idempotency(idempotency)
+            return self._product_source_view(record), False
+        except ProductSourceError as exc:
+            raise BackendError("SOURCE_IMPORT_REJECTED", str(exc), status=422) from exc
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different source import", status=409) from exc
+
+    def bind_product_source(
+        self,
+        *,
+        run_id: str,
+        registry_id: str,
+        scope: SelectionScope,
+        extraction: ExtractionPolicy,
+        execution_context_id: str,
+        principal: Principal,
+        idempotency_key: str,
+    ) -> tuple[ProductSourceBinding, bool]:
+        self._require_scope(principal, "runs:write")
+        if self.source_service is None:
+            raise BackendError("SOURCE_PRODUCT_UNAVAILABLE", "managed source selection is not configured", status=503, retryable=True)
+        run = self.get_run(run_id)
+        key = _safe_key(idempotency_key)
+        request = {
+            "run_id": run_id,
+            "registry_id": registry_id,
+            "scope": scope.model_dump(mode="json"),
+            "extraction": extraction.model_dump(mode="json"),
+            "execution_context_id": execution_context_id,
+        }
+        fingerprint = idempotency_fingerprint(request)
+        idempotency_scope = f"source-bind:{run_id}:{principal.subject}"
+        existing = self._existing_idempotency(scope=idempotency_scope, key=key, fingerprint=fingerprint)
+        if existing is not None:
+            body = self._idempotent_response(existing).get("binding")
+            if not isinstance(body, dict):
+                raise BackendError("SOURCE_BIND_REPLAY_INVALID", "source binding replay metadata is incomplete", status=409)
+            return ProductSourceBinding.model_validate(body), True
+        try:
+            record = self.source_service.get(registry_id)
+            selection = self.source_service.selection(
+                registry_id=registry_id,
+                scope=scope,
+                extraction=extraction,
+                execution_context_id=execution_context_id,
+            )
+        except (ProductSourceError, ValueError) as exc:
+            raise BackendError("SOURCE_SELECTION_REJECTED", str(exc), status=422) from exc
+        artifact_id = stable_id("source-selection", {"run_id": run_id, "selection": selection.model_dump(mode="json")})
+        existing_root = next((ref for ref in run.root_artifact_refs if ref == artifact_id), None)
+        if run.root_artifact_refs and existing_root is None:
+            raise BackendError("SOURCE_ALREADY_BOUND", "this run already has a different source binding", status=409)
+        try:
+            artifact = self.control_store.get_artifact(artifact_id)
+            if artifact is None:
+                from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest
+
+                artifact = self.artifact_store.publish(
+                    ArtifactManifest(
+                        artifact_id=artifact_id,
+                        run_id=run_id,
+                        stage_id="SOURCE_SETUP",
+                        attempt_id="source-input",
+                        artifact_kind="SourceSelection",
+                        media_type="application/json",
+                        producer="step29-product-source",
+                        logical_key=f"runs/{run_id}/source-selection/{artifact_id}.json",
+                        provenance_refs=("step29-product-source", "managed-csv-import"),
+                    ),
+                    selection.model_dump_json().encode("utf-8"),
+                )
+                artifact = self.control_store.register_artifact(artifact)
+            elif artifact.run_id != run_id or artifact.artifact_kind != "SourceSelection":
+                raise BackendError("SOURCE_BINDING_CONFLICT", "source selection artifact is not scoped to this run", status=409)
+            if artifact_id not in run.root_artifact_refs:
+                self.control_store.update_run(
+                    run.model_copy(update={"root_artifact_refs": tuple((*run.root_artifact_refs, artifact_id))}),
+                    expected_revision=run.revision,
+                )
+            binding = ProductSourceBinding(
+                run_id=run_id,
+                registry_id=record.registry_id,
+                source_id=record.source_id,
+                source_display_name=record.display_name,
+                selection_artifact_id=artifact_id,
+                extraction_max_rows=extraction.max_rows,
+                extraction_chunk_size=extraction.chunk_size,
+            )
+            idempotency = IdempotencyRecord(
+                scope=idempotency_scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=200,
+                response_body={"binding": binding.model_dump(mode="json")},
+                resource_id=artifact_id,
+            )
+            self.control_store.record_idempotency(idempotency)
+            return binding, False
+        except BackendError:
+            raise
+        except ConcurrencyConflictError as exc:
+            raise BackendError("SOURCE_BINDING_CONFLICT", "run changed while source binding was being persisted", status=409) from exc
+        except PlatformError as exc:
+            raise BackendError("SOURCE_BINDING_REJECTED", "source binding could not be durably persisted", status=409) from exc
+
+    def product_summary(self, *, run_id: str, principal: Principal) -> ProductSummary:
+        self._require_scope(principal, "runs:read")
+        run = self.get_run(run_id)
+        plan = self.control_store.get_execution_plan(run_id)
+        jobs = self.control_store.list_jobs(run_id=run_id, limit=10000)
+        artifacts = self.control_store.list_artifacts(run_id=run_id, limit=10000)
+        verified: list[tuple[Any, dict[str, Any]]] = []
+        for artifact in artifacts:
+            try:
+                _ref, payload = self._read_verified_json(run_id=run_id, artifact_id=artifact.artifact_id)
+            except BackendError:
+                continue
+            verified.append((artifact, payload))
+
+        def typed(kind: str, model):
+            for artifact, payload in reversed(verified):
+                if artifact.artifact_kind == kind:
+                    try:
+                        return artifact, model.model_validate(payload)
+                    except ValueError:
+                        continue
+            return None, None
+
+        catalog_artifact, catalog = typed("SourceCatalog", SourceCatalog)
+        snapshot_artifact, snapshot = typed("SourceSnapshotResult", SourceSnapshotResult)
+        hypothesis_artifact, hypothesis = typed("CanonicalModelHypothesis", CanonicalModelHypothesis)
+        proposal_artifact, proposal = typed("CanonicalIdentityProposal", CanonicalIdentityProposal)
+        canonical_artifact, canonical = typed("CanonicalModel", CanonicalModel)
+        analytical_artifact, analytical = typed("AnalyticalPlan", AnalyticalPlan)
+        materialization_artifact, materialization = typed("MaterializationArtifact", MaterializationArtifact)
+        validation_artifact, validation = typed("ValidationReport", ValidationReport)
+
+        source_binding = None
+        if self.source_service is not None:
+            for artifact, payload in verified:
+                if artifact.artifact_kind != "SourceSelection":
+                    continue
+                try:
+                    selection = SourceSelection.model_validate(payload)
+                    record = self.source_service.get(selection.registry_id)
+                except (ValueError, ProductSourceError):
+                    continue
+                source_binding = ProductSourceBinding(
+                    run_id=run_id,
+                    registry_id=record.registry_id,
+                    source_id=record.source_id,
+                    source_display_name=record.display_name,
+                    selection_artifact_id=artifact.artifact_id,
+                    extraction_max_rows=selection.extraction.max_rows,
+                    extraction_chunk_size=selection.extraction.chunk_size,
+                )
+                break
+        source_view = None
+        if source_binding is not None and self.source_service is not None:
+            try:
+                source_view = self._product_source_view(self.source_service.get(source_binding.registry_id))
+            except ProductSourceError:
+                source_view = None
+        stages: list[ProductStageView] = []
+        if plan is not None:
+            jobs_by_stage = {job.stage_id: job for job in jobs if job.stage_id}
+            for stage in plan.stages:
+                job = jobs_by_stage.get(stage.stage_id)
+                refs = () if job is None else tuple(job.result_refs)
+                kinds = tuple(sorted({artifact.artifact_kind for artifact in artifacts if artifact.artifact_id in refs}))
+                stages.append(ProductStageView(stage_id=stage.stage_id, status="PENDING" if job is None else job.status.value, selected=stage.selected, required=stage.required, artifact_kinds=kinds, artifact_ids=refs))
+
+        pending_reviews: list[ProductReviewView] = []
+        for job in jobs:
+            if job.status.value != "NEEDS_REVIEW":
+                continue
+            contexts = job.review_contexts or ((job.review_context,) if job.review_context is not None else ())
+            for context in contexts:
+                subject = self.control_store.get_artifact(context.subject_artifact_id)
+                if subject is None or subject.run_id != run_id:
+                    continue
+                current = self.control_store.get_current_review(run_id=run_id, subject_key=review_subject_key(context))
+                decision = None if current is None else current.decision.decision.value
+                pending_reviews.append(ProductReviewView(
+                    checkpoint=context.review_checkpoint_id.value,
+                    subject_artifact_id=context.subject_artifact_id,
+                    subject_content_hash=subject.content_hash,
+                    subject_semantic_id=context.subject_semantic_id,
+                    state="REVIEW_REQUIRED" if decision is None else decision,
+                    decision=decision,
+                    revision=0 if current is None else current.revision,
+                    context=context,
+                ))
+
+        relationship_views: list[ProductRelationshipView] = []
+        for artifact, payload in verified:
+            if artifact.artifact_kind != "RelationshipDecision":
+                continue
+            try:
+                decision = RelationshipDecision.model_validate(payload)
+            except ValueError:
+                continue
+            relationship_views.append(ProductRelationshipView(
+                decision_id=decision.decision_id,
+                subject_id=decision.subject_id,
+                from_table=decision.from_table,
+                from_columns=decision.from_columns,
+                to_table=decision.to_table,
+                to_columns=decision.to_columns,
+                score_semantics=decision.score.score_semantics,
+                score_value=decision.score.value,
+                confidence_band=decision.confidence_band.value,
+                decision_state=decision.decision_state.value,
+                supporting_signal_count=len(decision.supporting_signal_refs),
+                missing_evidence_count=len(decision.missing_evidence_refs),
+            ))
+
+        source_rows = 0 if snapshot is None else snapshot.metrics.input_records_observed
+        staged_rows = 0 if snapshot is None else snapshot.metrics.staged_records
+        column_count = 0 if catalog is None else len(catalog.columns)
+        data_state = "NOT_EVALUATED" if snapshot is None else "OBSERVED"
+        materialization_view = ProductMaterializationView(
+            artifact_id=None if materialization_artifact is None else materialization_artifact.artifact_id,
+            status="NOT_EVALUATED" if materialization is None else materialization.status.value,
+            usable=False if materialization is None else materialization.usable,
+            table_names=() if materialization is None else materialization.table_names,
+            row_counts={} if materialization is None else materialization.row_counts,
+            target_type=None if materialization is None else materialization.target_type,
+        )
+        validation_view = ProductValidationView(
+            report_id=None if validation is None else validation.report_id,
+            g6_status="PENDING" if validation is None else validation.g6_status.value,
+            g6_eligible=False if validation is None else validation.g6_eligible,
+            overall_status="NOT_EVALUATED" if validation is None else validation.overall_status.value,
+            passed_check_count=0 if validation is None else sum(item.status.value == "PASS" for item in validation.checks),
+            failed_check_count=0 if validation is None else sum(item.status.value == "FAIL" for item in validation.checks),
+            not_evaluated_check_count=0 if validation is None else sum(item.status.value in {"NOT_EVALUATED", "REVIEW_REQUIRED"} for item in validation.checks),
+            validation_artifact_id=None if validation_artifact is None else validation_artifact.artifact_id,
+        )
+        return ProductSummary(
+            run_id=run_id,
+            project_id=run.project_id,
+            status=run.status.value,
+            planning_phase=None if plan is None else plan.planning_phase.value,
+            current_stage=next((item.stage_id for item in stages if item.status in {"RUNNING", "NEEDS_REVIEW", "BLOCKED", "FAILED"}), None),
+            source=source_view,
+            source_binding=source_binding,
+            stages=tuple(stages),
+            pending_reviews=tuple(pending_reviews),
+            relationships=tuple(sorted(relationship_views, key=lambda item: item.decision_id)),
+            data_condition=ProductDataConditionView(source_rows_observed=source_rows, staged_rows=staged_rows, column_count=column_count, observation_scope="BOUNDED_SOURCE_SNAPSHOT" if snapshot is not None and snapshot.snapshot.observation_scope.mode.value == "bounded" else "FULL_SOURCE_SNAPSHOT" if snapshot is not None else "unknown", state=data_state),
+            canonical=ProductCanonicalView(model_id=None if canonical is None else canonical.model_id, hypothesis_id=None if hypothesis is None else hypothesis.artifact_id, proposal_id=None if proposal is None else proposal.proposal_id, entity_type_ids=() if hypothesis is None else tuple(item.canonical_entity_type_id for item in hypothesis.entity_types), membership_count=0 if proposal is None else len(proposal.memberships), identity_basis=() if proposal is None else tuple(sorted({item.derivation_basis.value for item in proposal.memberships})), state="FINALIZED" if canonical is not None else "PROPOSAL_READY" if proposal is not None else "NOT_EVALUATED"),
+            analytical=ProductAnalyticalView(plan_id=None if analytical is None else analytical.plan_id, fact_ids=() if analytical is None else analytical.materialized_fact_ids, dimension_ids=() if analytical is None else analytical.materialized_dimension_ids, grain_ids=() if analytical is None else analytical.grain_spec_ids, measure_ids=() if analytical is None else analytical.measure_spec_ids, measure_semantics=() if analytical is None else tuple(analytical.measure_spec_content_hashes.keys()), state="REVIEW_REQUIRED" if analytical is not None and analytical.review_state.value == "REVIEW_REQUIRED" else "READY" if analytical is not None else "NOT_EVALUATED"),
+            materialization=materialization_view,
+            validation=validation_view,
+            output=ProductOutputView(materialization_artifact_id=materialization_view.artifact_id, table_names=materialization_view.table_names, row_counts=materialization_view.row_counts, validated=validation_view.g6_status == "PASS" and validation_view.g6_eligible and materialization_view.usable),
+        )
 
     def _resolve_review_subject(
         self,

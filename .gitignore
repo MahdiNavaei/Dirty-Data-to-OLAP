@@ -38,6 +38,12 @@ workspace/platform/
 workspace/runs/
 .venv*/
 
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+output/playwright/
+output/step29_frontend_validation.json
+
 # Research clones are disposable and must never be runtime dependencies.
 research/oss/*
 !research/oss/README.md

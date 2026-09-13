@@ -491,12 +491,13 @@ class JobWorker:
             raise
         except PlatformError:
             raise
-        except Exception:
+        except Exception as exc:
             result = StageExecutionResult(
                 status=StageResultStatus.FAILED,
                 failure_code="STAGE_OUTCOME_UNKNOWN",
                 failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT,
                 failure_reason="stage execution outcome is unknown after worker delivery",
+                metadata={"error_type": type(exc).__name__},
             )
         self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
         attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.RESULT_RECORDED.value})

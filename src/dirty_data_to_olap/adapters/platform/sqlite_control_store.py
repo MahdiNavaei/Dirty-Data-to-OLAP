@@ -1227,6 +1227,10 @@ class SQLiteControlStore(ControlStorePort):
                 raise PlatformError("stage is not in the execution plan")
             last = connection.execute("SELECT COALESCE(MAX(attempt_number), 0) FROM stage_attempts WHERE run_id = ? AND stage_id = ?", (row["run_id"], row["stage_id"])).fetchone()[0]
             input_refs: list[str] = []
+            if str(row["stage_id"]) == "SOURCE_DISCOVERY":
+                run_row = connection.execute("SELECT root_artifact_refs FROM runs WHERE run_id = ?", (row["run_id"],)).fetchone()
+                if run_row is not None:
+                    input_refs.extend(str(ref) for ref in _load_json(str(run_row["root_artifact_refs"]), []))
             for dependency_id in stage.dependencies:
                 dependency_row = connection.execute("SELECT result_refs FROM jobs WHERE run_id = ? AND stage_id = ?", (row["run_id"], dependency_id)).fetchone()
                 if dependency_row is not None:

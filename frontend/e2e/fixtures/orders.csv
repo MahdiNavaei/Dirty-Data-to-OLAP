@@ -1,0 +1,5 @@
+order_id,customer_id,customer_id_ref,order_date,quantity,unit_price
+ord-1001,cust-01,cust-01,2026-01-02,2,19.50
+ord-1002,cust-02,cust-02,2026-01-03,1,42.00
+ord-1003,cust-01,cust-01,2026-01-04,3,12.25
+ord-1004,cust-03,cust-03,2026-01-05,4,8.75

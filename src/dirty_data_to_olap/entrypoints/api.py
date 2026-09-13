@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import FastAPI, Header, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -25,6 +26,8 @@ from dirty_data_to_olap.domain.contracts.canonical import (
 from dirty_data_to_olap.domain.contracts.jobs import JobRecord
 from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import ArtifactRef, RunRecord, StageAttemptRecord
+from dirty_data_to_olap.domain.contracts.product import ProductConfiguration, ProductSourceBinding, ProductSourceView, ProductSummary
+from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SelectionScope
 
 
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
@@ -64,6 +67,13 @@ class CreateRunRequest(ApiModel):
 
 class PrepareExecutionPlanRequest(ApiModel):
     intent: ExecutionPlanIntent
+
+
+class BindSourceRequest(ApiModel):
+    registry_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
+    scope: SelectionScope = Field(default_factory=SelectionScope)
+    extraction: ExtractionPolicy = Field(default_factory=lambda: ExtractionPolicy(chunk_size=1000, max_rows=10000))
+    execution_context_id: str = Field(default="step29-browser", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
 class RegisterArtifactRequest(ApiModel):
@@ -239,6 +249,13 @@ def create_app(
         docs_url="/api/v1/docs",
         redoc_url=None,
     )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://127.0.0.1:4173", "http://localhost:4173"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Accept", "Content-Type", "Idempotency-Key", "X-Local-Principal", "X-Source-Filename"],
+    )
 
     def principal(request: Request) -> Principal:
         if auth_mode == "trusted_proxy":
@@ -292,6 +309,51 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok", "api_version": "v1"}
 
+    @app.get("/api/v1/sources", response_model=list[ProductSourceView], tags=["sources"])
+    async def list_product_sources(request: Request) -> list[ProductSourceView]:
+        return list(backend.list_product_sources(principal=read_principal(request, "runs:read")))
+
+    @app.get("/api/v1/product/configuration", response_model=ProductConfiguration, tags=["product"])
+    async def product_configuration(request: Request) -> ProductConfiguration:
+        return backend.product_configuration(principal=read_principal(request, "runs:read"))
+
+    @app.post("/api/v1/sources/import", response_model=ProductSourceView, status_code=201, tags=["sources"])
+    async def import_product_source(
+        request: Request,
+        source_filename: str = Header(default="", alias="X-Source-Filename"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> JSONResponse:
+        source = await request.body()
+        view, replayed = backend.import_product_source(
+            filename=source_filename,
+            payload=source,
+            principal=principal(request),
+            idempotency_key=key(idempotency_key),
+        )
+        response = JSONResponse(status_code=201, content=view.model_dump(mode="json"))
+        response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
+        return response
+
+    @app.post("/api/v1/runs/{run_id}/source-selection", response_model=ProductSourceBinding, tags=["sources"])
+    async def bind_product_source(
+        payload: BindSourceRequest,
+        request: Request,
+        run_id: str = Path(min_length=1, max_length=128),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> JSONResponse:
+        binding, replayed = backend.bind_product_source(
+            run_id=run_id,
+            registry_id=payload.registry_id,
+            scope=payload.scope,
+            extraction=payload.extraction,
+            execution_context_id=payload.execution_context_id,
+            principal=principal(request),
+            idempotency_key=key(idempotency_key),
+        )
+        response = JSONResponse(status_code=200, content=binding.model_dump(mode="json"))
+        response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
+        return response
+
     @app.post("/api/v1/runs", status_code=201, response_model=RunView, tags=["runs"])
     async def create_run(payload: CreateRunRequest, request: Request, idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
         run, replayed = backend.create_run(
@@ -327,6 +389,11 @@ def create_app(
     async def get_run(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> RunView:
         read_principal(request, "runs:read")
         return _run_view(backend.get_run(run_id))
+
+    @app.get("/api/v1/runs/{run_id}/product-summary", response_model=ProductSummary, tags=["product"])
+    async def product_summary(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> ProductSummary:
+        read_principal(request, "runs:read")
+        return backend.product_summary(run_id=run_id, principal=principal(request))
 
     @app.get("/api/v1/runs/{run_id}/attempts", response_model=PageResponse, tags=["attempts"])
     async def list_attempts(
@@ -472,6 +539,11 @@ __all__ = [
     "ErrorEnvelope",
     "PageResponse",
     "PrepareExecutionPlanRequest",
+    "BindSourceRequest",
+    "ProductSourceBinding",
+    "ProductSourceView",
+    "ProductConfiguration",
+    "ProductSummary",
     "RegisterArtifactRequest",
     "ReviewActionDecision",
     "RunView",
