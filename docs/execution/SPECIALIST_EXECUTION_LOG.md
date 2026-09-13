@@ -1413,3 +1413,27 @@ handoff_to:
 - content_commit_sha: `e4d578a42bc888b4ff35a7c21d8b1424d67f1719` (`fix: close Step26 visualization integrity repair 2`)
 - metadata_commit_sha: recorded in the final metadata-only commit
 - state: `last_completed_step=26`; `current_step=27`; `current_role=senior_backend_engineer`; `step27_started=false`; Step27 `NOT_STARTED`; `G7B=PASS`; `G7=PENDING`; `blocked=false`
+
+## Specialist Step27 - Senior Backend Engineer
+
+- execution_step: `27`
+- role_id: `senior_backend_engineer`
+- specialist_file: `18_SENIOR_BACKEND_ENGINEER.md`
+- status: `PASS` for bounded V1 backend/control-plane API delivery; Step28 was not started
+- starting_baseline: branch `main`; `HEAD=origin/main=83488a7e7b0d2bd066eaec1fbb13e09ceb061876`; Step26 Repair 2 content `e4d578a42bc888b4ff35a7c21d8b1424d67f1719`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- inputs_reviewed: Step27 request, backend playbook, protocol/invariants, base architecture/persistence/lifecycle/checkpoint specifications, existing Step23 ports/adapters, Step26 visualization and validation contracts, and actual repository implementation/tests
+- implementation: versioned FastAPI entrypoint; project-owned transport DTOs; BackendService; local composition wiring; bounded run/project/attempt/artifact/review/validation/visualization endpoints; stable errors; local/test principal integration; idempotency; review CAS/history; explicit execution submission port
+- control_store: reused SQLite `ControlStorePort`; added bounded listing, additive idempotency records, current review projection and append-only review history; no second database or raw data persistence
+- review_evidence: exact four checkpoint binding, registered published subject/hash check, `ReviewPolicyService` authority, actor injection rejection, rejected/deferred/invalidated non-authorizing states, stale conflict and deterministic two-thread race
+- artifact_evidence: control/artifact identity and content verification, run scoping, bounded metadata, no locator/path exposure, generic payload denial, traversal/cross-run/restricted/integrity negative controls
+- validation_visualization_evidence: verified registered `ValidationReport` uses the exact Step26 UI_PREVIEW projection without G6 recomputation; stored Step26 graph disclosure/accessibility/scope/content hash survive serialization
+- orchestration_evidence: no inline heavy work; missing executor returns `UNAVAILABLE`/503; no `QUEUED`; Step28 owns durable job processing
+- framework: FastAPI `0.128.0` with Pydantic `2.12.5`, added as optional `api` extra with Uvicorn; no copied OSS code or provider-native API contract
+- validator: `tools/validate_step27_backend.py` -> `STEP27_VALIDATOR=PASS scenarios=39`
+- tests: Step27 API/architecture `10 passed`; Step23 focused `25 passed`; final protected-boundary regression `385 passed, 2 skipped, 41 warnings`; optional Splink/Valentine skips and non-fatal dlt/SQLite cleanup traceback remain documented
+- validators: final sweep `27/27 PASS`; compileall over all non-protected source/tool/test paths, YAML parse and `git diff --check` passed
+- handoff_to: `Step28 - Distributed Job Processing Engineer`; Step28 remains `NOT_STARTED`; G7 remains `PENDING`; G5/G6/G7A/G7B remain `PASS`
+- known_limitations: local/reference API only; no production authentication, durable queue/workers, frontend/browser, deployment/CI, AppSec completion, live provider or production-capacity claim
+- content_commit_sha: `4c3fbd86f022fa640e86841ae4586e4489ab7b32` (`feat: add Step27 backend control plane API`)
+- metadata_commit_sha: recorded in the final metadata-only commit
+- state: `last_completed_step=27`; `current_step=28`; `current_role=distributed_job_processing_engineer`; `step27_started=true`; `step27_status=COMPLETED_BACKEND_API`; `step28_started=false`; `step28_status=NOT_STARTED`; `G7B=PASS`; `G7=PENDING`; `blocked=false`
