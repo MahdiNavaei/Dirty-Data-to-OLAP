@@ -1503,3 +1503,23 @@ handoff_to:
 - limitations: local SQLite reference path only; no broker/HA/multi-node production claim, frontend/browser, deployment, full observability or G7 completion; unknown external side effects require reconciliation
 - receipt: `docs/execution/STEP28_DISTRIBUTED_JOB_PROCESSING_INTEGRITY_REPAIR.md`
 - handoff_to: `Step29 - Frontend Engineer`; Step29 remains `NOT_STARTED`
+
+## FINAL POST-STEP28 REPAIR - Execution-Plan and Review-Checkpoint Wiring
+
+- execution_step: `28` final surgical repair only; Step29 was not started
+- role_id: `distributed_job_processing_engineer`
+- status: `PASS` for run-specific plan preparation and real review-checkpoint wiring
+- starting_baseline: expected `HEAD=82d71017d61111f1bf0bd0a77b996c7c27418b92`; prior Step28 integrity content `a41f2108951a4167684c8e3da2c8d86ffba0b725`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- implementation: project-owned `ReviewSubjectDerivationPort`/resolver derives contexts from registered verified typed artifacts through existing builders; explicit run-bound `ExecutionPlanSelection` replaces conditional-stage heuristics; selected conditional dependencies are readiness-gated; `ExecutionPlanService` prepares and persists authoritative plans through the public API product path
+- real_review_evidence: actual `EVIDENCE_FUSION` typed `RelationshipDecision` -> `REVIEW_EVIDENCE_DECISIONS` pause -> Step27 FastAPI `ACCEPTED` review -> durable `RESUME` -> checkpoint success -> guarded `CANONICAL_HYPOTHESES` queued; actual `AnalyticalPlan` -> `REVIEW_ANALYTICAL_PLAN` pause also passed; multi-subject contexts remain explicit
+- product_path: API-created run -> `/execution/prepare` with explicit selection -> durable submit -> worker command -> authoritative root stage job; unresolved selection and submit without plan are typed `BLOCKED`; no direct ControlStore plan registration is used by the product-path test
+- schema: SQLite `6`; semantic review context hashes remain builder-owned while artifact bytes receive independent store verification
+- validator: `tools/validate_step28_job_processing.py` -> `49` behavioral scenarios and `1` documentation check PASS
+- focused_tests: `129 passed` across Step20/22/23/24/27/28 and new wiring integration tests
+- full_regression: `445 passed, 2 skipped, 41 warnings` using Python 3.10; optional Splink/Valentine runtimes were not installed; known non-fatal dlt/SQLite cursor-cleanup traceback remained outside assertions
+- validators: all `28/28` repository validators PASS; Step27 validator `67` scenarios PASS; compileall PASS; YAML/JSON parse `3371` non-protected files PASS; OpenAPI determinism PASS; `git diff --check` PASS
+- gate_state: `G5=PASS`, `G6=PASS`, `G7A=PASS`, `G7B=PASS`, `G7=PENDING`, `blocked=false`
+- limitations: local SQLite/filesystem reference path only; no broker/HA/multi-node, production auth, frontend/browser, deployment, observability or G7 completion claim; unknown external effects still require reconciliation
+- content_commit: `6242fb094f8dce435b3d545ef6b5dac362625166`
+- receipt: `docs/execution/STEP28_EXECUTION_PLAN_AND_REVIEW_CHECKPOINT_REPAIR.md`
+- final_state: `last_completed_step=28`, `last_completed_role=distributed_job_processing_engineer`, `current_step=29`, `current_role=frontend_engineer`, `step29_started=false`, `step29_status=NOT_STARTED`
