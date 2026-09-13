@@ -36,6 +36,8 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StageAttemptRecord,
     StagedDatasetManifest,
 )
+from dirty_data_to_olap.domain.contracts.api import IdempotencyRecord, ReviewHistoryRecord, ReviewRecord
+from dirty_data_to_olap.domain.contracts.canonical import ReviewDecision
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
@@ -99,7 +101,7 @@ class ArtifactStorePort(Protocol):
     def stat(self, artifact: ArtifactRef | str) -> ArtifactRef:
         ...
 
-    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None) -> tuple[ArtifactRef, ...]:
+    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None, limit: int | None = None, offset: int = 0) -> tuple[ArtifactRef, ...]:
         ...
 
     def delete(self, artifact: ArtifactRef | str, permit: CleanupDeletionPermit) -> None:
@@ -120,6 +122,9 @@ class ControlStorePort(Protocol):
     def get_run(self, run_id: str) -> RunRecord | None:
         ...
 
+    def list_runs(self, *, project_id: str | None = None, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[RunRecord, ...]:
+        ...
+
     def update_run(self, run: RunRecord, *, expected_revision: int) -> RunRecord:
         ...
 
@@ -127,6 +132,9 @@ class ControlStorePort(Protocol):
         ...
 
     def get_stage_attempt(self, attempt_id: str) -> StageAttemptRecord | None:
+        ...
+
+    def list_stage_attempts(self, *, run_id: str, stage_id: str | None = None, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[StageAttemptRecord, ...]:
         ...
 
     def update_stage_attempt(self, attempt: StageAttemptRecord, *, expected_revision: int) -> StageAttemptRecord:
@@ -141,7 +149,22 @@ class ControlStorePort(Protocol):
     def get_artifact(self, artifact_id: str) -> ArtifactRef | None:
         ...
 
-    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None) -> tuple[ArtifactRef, ...]:
+    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None, limit: int | None = None, offset: int = 0) -> tuple[ArtifactRef, ...]:
+        ...
+
+    def get_current_review(self, *, run_id: str, subject_key: str) -> ReviewRecord | None:
+        ...
+
+    def record_review(self, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
+        ...
+
+    def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
+        ...
+
+    def get_idempotency(self, *, scope: str, key: str) -> IdempotencyRecord | None:
+        ...
+
+    def record_idempotency(self, record: IdempotencyRecord) -> IdempotencyRecord:
         ...
 
     def get_dependents(self, artifact_id: str) -> tuple[ArtifactRef, ...]:

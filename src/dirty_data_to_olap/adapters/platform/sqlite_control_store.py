@@ -36,6 +36,12 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StageStatus,
     StagedDatasetManifest,
 )
+from dirty_data_to_olap.domain.contracts.api import (
+    IdempotencyRecord,
+    ReviewHistoryRecord,
+    ReviewRecord,
+)
+from dirty_data_to_olap.domain.contracts.canonical import ReviewDecision
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
@@ -150,6 +156,10 @@ class SQLiteControlStore(ControlStorePort):
                     )
                     connection.commit()
                     version = next_version
+                # Step27 adds only control-plane metadata tables.  They are
+                # additive and remain compatible with the Step23 schema
+                # version so existing local stores do not require a reset.
+                self._ensure_step27_tables(connection)
                 return version
             finally:
                 connection.close()
@@ -176,6 +186,20 @@ class SQLiteControlStore(ControlStorePort):
             "CREATE INDEX IF NOT EXISTS idx_staged_dataset_scope ON staged_datasets(run_id, dataset_id, dataset_version)",
             "CREATE TABLE IF NOT EXISTS audit_events (event_id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, run_id TEXT, artifact_id TEXT, status TEXT NOT NULL, content_hash TEXT, recorded_at TEXT NOT NULL, detail TEXT NOT NULL)",
             "CREATE INDEX IF NOT EXISTS idx_audit_run ON audit_events(run_id, recorded_at)",
+        )
+        for statement in statements:
+            connection.execute(statement)
+        SQLiteControlStore._ensure_step27_tables(connection)
+
+    @staticmethod
+    def _ensure_step27_tables(connection: sqlite3.Connection) -> None:
+        """Create additive Step27 control metadata without changing Step23 IDs."""
+
+        statements = (
+            "CREATE TABLE IF NOT EXISTS api_idempotency (scope TEXT NOT NULL, idem_key TEXT NOT NULL, request_fingerprint TEXT NOT NULL, response_status INTEGER NOT NULL, response_body TEXT NOT NULL, resource_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY(scope, idem_key))",
+            "CREATE TABLE IF NOT EXISTS review_current (run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, decision_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, PRIMARY KEY(run_id, subject_key))",
+            "CREATE TABLE IF NOT EXISTS review_history (history_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, decision_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, UNIQUE(run_id, subject_key, revision))",
+            "CREATE INDEX IF NOT EXISTS idx_review_history_subject ON review_history(run_id, subject_key, revision)",
         )
         for statement in statements:
             connection.execute(statement)
@@ -300,6 +324,23 @@ class SQLiteControlStore(ControlStorePort):
             row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
             return None if row is None else self._run_from_row(row)
 
+    def list_runs(self, *, project_id: str | None = None, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[RunRecord, ...]:
+        if limit < 1 or offset < 0:
+            raise ValueError("run list limit must be positive and offset non-negative")
+        sql = "SELECT * FROM runs WHERE 1 = 1"
+        parameters: list[object] = []
+        if project_id is not None:
+            sql += " AND project_id = ?"
+            parameters.append(project_id)
+        if status is not None:
+            sql += " AND status = ?"
+            parameters.append(status)
+        sql += " ORDER BY created_at, run_id LIMIT ? OFFSET ?"
+        parameters.extend((limit, offset))
+        with self._connect() as connection:
+            rows = connection.execute(sql, tuple(parameters)).fetchall()
+            return tuple(self._run_from_row(row) for row in rows)
+
     def update_run(self, run: RunRecord, *, expected_revision: int) -> RunRecord:
         with self._transaction() as connection:
             cursor = connection.execute(
@@ -332,6 +373,23 @@ class SQLiteControlStore(ControlStorePort):
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM stage_attempts WHERE attempt_id = ?", (attempt_id,)).fetchone()
             return None if row is None else self._attempt_from_row(row)
+
+    def list_stage_attempts(self, *, run_id: str, stage_id: str | None = None, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[StageAttemptRecord, ...]:
+        if limit < 1 or offset < 0:
+            raise ValueError("attempt list limit must be positive and offset non-negative")
+        sql = "SELECT * FROM stage_attempts WHERE run_id = ?"
+        parameters: list[object] = [run_id]
+        if stage_id is not None:
+            sql += " AND stage_id = ?"
+            parameters.append(stage_id)
+        if status is not None:
+            sql += " AND status = ?"
+            parameters.append(status)
+        sql += " ORDER BY stage_id, attempt_number, attempt_id LIMIT ? OFFSET ?"
+        parameters.extend((limit, offset))
+        with self._connect() as connection:
+            rows = connection.execute(sql, tuple(parameters)).fetchall()
+            return tuple(self._attempt_from_row(row) for row in rows)
 
     def update_stage_attempt(self, attempt: StageAttemptRecord, *, expected_revision: int) -> StageAttemptRecord:
         with self._transaction() as connection:
@@ -404,7 +462,9 @@ class SQLiteControlStore(ControlStorePort):
             row = connection.execute("SELECT * FROM artifacts WHERE artifact_id = ?", (artifact_id,)).fetchone()
             return None if row is None else self._artifact_from_row(row)
 
-    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None) -> tuple[ArtifactRef, ...]:
+    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None, limit: int | None = None, offset: int = 0) -> tuple[ArtifactRef, ...]:
+        if offset < 0 or (limit is not None and limit < 1):
+            raise ValueError("artifact list limit must be positive and offset non-negative")
         sql = "SELECT * FROM artifacts WHERE 1 = 1"
         parameters: list[str] = []
         if run_id is not None:
@@ -417,9 +477,115 @@ class SQLiteControlStore(ControlStorePort):
             sql += " AND artifact_kind = ?"
             parameters.append(artifact_kind)
         sql += " ORDER BY artifact_id"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            parameters.extend((limit, offset))
+        elif offset:
+            sql += " LIMIT -1 OFFSET ?"
+            parameters.append(offset)
         with self._connect() as connection:
             rows = connection.execute(sql, tuple(parameters)).fetchall()
             return tuple(self._artifact_from_row(row) for row in rows)
+
+    @staticmethod
+    def _review_record_from_row(row: sqlite3.Row) -> ReviewRecord:
+        return ReviewRecord(
+            run_id=str(row["run_id"]),
+            subject_key=str(row["subject_key"]),
+            decision=ReviewDecision.model_validate(_load_json(str(row["decision_json"]), {})),
+            revision=int(row["revision"]),
+            recorded_at=_parse_datetime(str(row["recorded_at"])),
+        )
+
+    @staticmethod
+    def _review_history_from_row(row: sqlite3.Row) -> ReviewHistoryRecord:
+        return ReviewHistoryRecord(
+            history_id=str(row["history_id"]),
+            run_id=str(row["run_id"]),
+            subject_key=str(row["subject_key"]),
+            decision=ReviewDecision.model_validate(_load_json(str(row["decision_json"]), {})),
+            revision=int(row["revision"]),
+            recorded_at=_parse_datetime(str(row["recorded_at"])),
+        )
+
+    def get_current_review(self, *, run_id: str, subject_key: str) -> ReviewRecord | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM review_current WHERE run_id = ? AND subject_key = ?", (run_id, subject_key)).fetchone()
+            return None if row is None else self._review_record_from_row(row)
+
+    def record_review(self, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
+        if expected_revision < 0 or record.revision != expected_revision + 1:
+            raise ConcurrencyConflictError("review revision does not match the expected compare-and-swap revision")
+        with self._transaction() as connection:
+            if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (record.run_id,)).fetchone() is None:
+                raise PlatformError("review requires an existing run")
+            current = connection.execute("SELECT revision FROM review_current WHERE run_id = ? AND subject_key = ?", (record.run_id, record.subject_key)).fetchone()
+            current_revision = 0 if current is None else int(current["revision"])
+            if current_revision != expected_revision:
+                raise ConcurrencyConflictError("review revision changed before compare-and-swap update")
+            history_id = f"review-{record.decision.review_decision_id}-{record.revision}"
+            connection.execute(
+                "INSERT INTO review_history(history_id, run_id, subject_key, decision_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (history_id, record.run_id, record.subject_key, _dump(record.decision), record.revision, record.recorded_at.isoformat()),
+            )
+            if current is None:
+                connection.execute(
+                    "INSERT INTO review_current(run_id, subject_key, decision_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                    (record.run_id, record.subject_key, _dump(record.decision), record.revision, record.recorded_at.isoformat()),
+                )
+            else:
+                connection.execute(
+                    "UPDATE review_current SET decision_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
+                    (_dump(record.decision), record.revision, record.recorded_at.isoformat(), record.run_id, record.subject_key, expected_revision),
+                )
+            self._audit(connection, "review_recorded", run_id=record.run_id, status=record.decision.decision.value, detail=f"review revision {record.revision} recorded")
+            return record
+
+    def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
+        if limit < 1 or offset < 0:
+            raise ValueError("review history limit must be positive and offset non-negative")
+        sql = "SELECT * FROM review_history WHERE run_id = ?"
+        parameters: list[object] = [run_id]
+        if subject_key is not None:
+            sql += " AND subject_key = ?"
+            parameters.append(subject_key)
+        sql += " ORDER BY subject_key, revision LIMIT ? OFFSET ?"
+        parameters.extend((limit, offset))
+        with self._connect() as connection:
+            rows = connection.execute(sql, tuple(parameters)).fetchall()
+            return tuple(self._review_history_from_row(row) for row in rows)
+
+    @staticmethod
+    def _idempotency_from_row(row: sqlite3.Row) -> IdempotencyRecord:
+        return IdempotencyRecord(
+            scope=str(row["scope"]),
+            key=str(row["idem_key"]),
+            request_fingerprint=str(row["request_fingerprint"]),
+            response_status=int(row["response_status"]),
+            response_body=dict(_load_json(str(row["response_body"]), {})),
+            resource_id=row["resource_id"],
+            created_at=_parse_datetime(str(row["created_at"])),
+        )
+
+    def get_idempotency(self, *, scope: str, key: str) -> IdempotencyRecord | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (scope, key)).fetchone()
+            return None if row is None else self._idempotency_from_row(row)
+
+    def record_idempotency(self, record: IdempotencyRecord) -> IdempotencyRecord:
+        with self._transaction() as connection:
+            existing = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (record.scope, record.key)).fetchone()
+            if existing is not None:
+                stored = self._idempotency_from_row(existing)
+                if stored.request_fingerprint != record.request_fingerprint:
+                    raise ArtifactConflictError("idempotency key is already bound to a different semantic request")
+                return stored
+            connection.execute(
+                "INSERT INTO api_idempotency(scope, idem_key, request_fingerprint, response_status, response_body, resource_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (record.scope, record.key, record.request_fingerprint, record.response_status, _dump(record.response_body), record.resource_id, record.created_at.isoformat()),
+            )
+            self._audit(connection, "api_idempotency_recorded", status="RECORDED", detail=f"scope={record.scope}")
+            return record
 
     def get_dependents(self, artifact_id: str) -> tuple[ArtifactRef, ...]:
         with self._connect() as connection:

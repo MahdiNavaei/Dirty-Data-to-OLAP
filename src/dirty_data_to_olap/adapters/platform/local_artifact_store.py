@@ -441,9 +441,12 @@ class LocalArtifactStore(ArtifactStorePort):
             except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
                 raise ArtifactIntegrityError("artifact reference inventory contains unreadable metadata") from None
 
-    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None) -> tuple[ArtifactRef, ...]:
+    def list_artifacts(self, *, run_id: str | None = None, stage_id: str | None = None, artifact_kind: str | None = None, limit: int | None = None, offset: int = 0) -> tuple[ArtifactRef, ...]:
+        if offset < 0 or (limit is not None and limit < 1):
+            raise ValueError("artifact list limit must be positive and offset non-negative")
         values = [item for item in self._all_refs() if (run_id is None or item.run_id == run_id) and (stage_id is None or item.stage_id == stage_id) and (artifact_kind is None or item.artifact_kind == artifact_kind)]
-        return tuple(sorted(values, key=lambda item: item.artifact_id))
+        ordered = tuple(sorted(values, key=lambda item: item.artifact_id))
+        return ordered[offset:] if limit is None else ordered[offset : offset + limit]
 
     def delete(self, artifact: ArtifactRef | str, permit: CleanupDeletionPermit) -> None:
         if not isinstance(permit, CleanupDeletionPermit):
