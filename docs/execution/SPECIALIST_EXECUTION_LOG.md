@@ -1596,3 +1596,20 @@ handoff_to:
 - gate_state: `G7=PASS`; `G8-G15=PENDING`; `blocked=false`
 - final_state: `last_completed_step=29`, `last_completed_role=frontend_engineer`, `current_step=30`, `current_role=devops_engineer`, `step30_started=false`, `step30_status=NOT_STARTED`
 - limitations: bounded local SQLite/filesystem control state, local DuckDB target and explicit local-test authentication; no production auth, deployment, HA, multi-node, capacity, observability or release claim
+
+## POST-STEP29 REAL-PIPELINE INTEGRITY CLOSURE
+
+- execution_step: `29`; surgical repair only; Step30 was not started
+- starting_baseline: `d05092d6285c3b1fabcab435c7dff93b17e8e3bd`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- root_cause: the frontend product runtime had a parallel miniature downstream pipeline that reread CSV rows and bypassed the accepted typed service/provider boundaries
+- repair: the runtime now composes the real source snapshot, DataProfiler, staged quality, privacy-bound Desbordante dependency, evidence fusion, canonical, analytical planner/compiler, DuckDB materializer, semantic and G6 validation services; typed source truth and accounting are produced at the validation boundary
+- provider_evidence: actual bounded local DataProfiler and Desbordante Docker results are run-bound, staged-input-bound and provenance-checked; single-source `order_id` identity is an explicit product-policy projection of observed UCC evidence, not a fabricated cross-table dependency
+- focused_evidence: `3 passed`, including real artifact producer/hash provenance assertions, four ordered review checkpoints, three four-row materialized tables, eligible G6 PASS and duplicate-order negative control after upload at dependency discovery
+- regression: `461 passed, 2 skipped, 41 warnings` under Python 3.10 with the protected path ignored; optional official Splink and Valentine integrations remain skipped; known dlt/SQLite cursor cleanup remains non-fatal after pytest completion
+- validator: `tools/validate_step29_frontend.py` PASS with OpenAPI, compile, real pipeline provenance, negative controls, frontend checks and a fresh Playwright CLI browser run; repository validator sweep `29/29 PASS`
+- browser_evidence: visible `SUCCEEDED`, `G6 PASS - eligible`, validated OLAP output, four accepted checkpoints, zero console errors and no raw SQL/path/source-row/direct storage exposure
+- content_commit: `4ac963e4747cb7551dced5d1a09c428928efae27`
+- receipt: `docs/execution/STEP29_REAL_PIPELINE_G7_CLOSURE.md`; prior Step29 receipt preserved at `docs/execution/STEP29_FRONTEND_REVIEW.md`
+- gate_state: `G7_END_TO_END_PRODUCT=PASS`; `G8-G15=PENDING`; `blocked=false`
+- final_state: `last_completed_step=28`, `current_step=29`, `current_role=frontend_engineer`, `step30_started=false`, `step30_status=NOT_STARTED`
+- limitations: local SQLite/filesystem control state, local DuckDB and locally provisioned provider only; no production auth, HA/multi-node, capacity, observability, deployment, physical cross-source integration or release claim
