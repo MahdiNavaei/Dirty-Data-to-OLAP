@@ -9,11 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import re
-from threading import RLock
 from typing import Any, Mapping, Protocol
 
 from dirty_data_to_olap.application.platform import (
     ArtifactStorePort,
+    ArtifactConflictError,
     ConcurrencyConflictError,
     ControlStorePort,
     PlatformError,
@@ -21,6 +21,8 @@ from dirty_data_to_olap.application.platform import (
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
 from dirty_data_to_olap.application.visualization import VisualizationInputError, VisualizationService
 from dirty_data_to_olap.domain.contracts.api import (
+    ExecutionAction,
+    ExecutionCommand,
     IdempotencyRecord,
     ReviewHistoryRecord,
     ReviewRecord,
@@ -64,14 +66,30 @@ class Principal:
 class ExecutionSubmissionPort(Protocol):
     """The Step28 handoff; implementations own heavy execution elsewhere."""
 
-    def submit_run(self, *, run: RunRecord, principal: Principal) -> SubmissionResult:
+    def submit_command(self, *, command: ExecutionCommand, run: RunRecord) -> SubmissionResult:
         ...
 
-    def cancel_run(self, *, run: RunRecord, principal: Principal) -> SubmissionResult:
+
+class ReviewSubjectResolverPort(Protocol):
+    """Resolve review semantics from trusted project-owned contract state."""
+
+    def resolve_context(self, *, run_id: str, checkpoint: ReviewCheckpoint, subject: ArtifactRef) -> ReviewCompatibilityContext | None:
         ...
 
-    def resume_run(self, *, run: RunRecord, principal: Principal) -> SubmissionResult:
-        ...
+
+class ControlStoreReviewSubjectResolver:
+    """Reference resolver backed by trusted contexts registered in the control store."""
+
+    def __init__(self, control_store: ControlStorePort) -> None:
+        self.control_store = control_store
+
+    def resolve_context(self, *, run_id: str, checkpoint: ReviewCheckpoint, subject: ArtifactRef) -> ReviewCompatibilityContext | None:
+        context = self.control_store.get_review_subject_context(run_id=run_id, checkpoint=checkpoint.value, artifact_id=subject.artifact_id)
+        if context is None:
+            return None
+        if context.review_checkpoint_id is not checkpoint or context.subject_artifact_id != subject.artifact_id or context.subject_content_hash != subject.content_hash:
+            return None
+        return context
 
 
 class BackendError(RuntimeError):
@@ -88,18 +106,8 @@ class BackendError(RuntimeError):
 class UnavailableExecutionSubmission:
     """Explicit reference behavior until Step28 supplies a durable executor."""
 
-    @staticmethod
-    def _result(run: RunRecord, detail: str) -> SubmissionResult:
-        return SubmissionResult(run_id=run.run_id, status="UNAVAILABLE", detail=detail)
-
-    def submit_run(self, *, run: RunRecord, principal: Principal) -> SubmissionResult:
-        return self._result(run, "no execution backend is configured; Step28 owns durable execution")
-
-    def cancel_run(self, *, run: RunRecord, principal: Principal) -> SubmissionResult:
-        return self._result(run, "no execution backend is configured; cancellation is not accepted")
-
-    def resume_run(self, *, run: RunRecord, principal: Principal) -> SubmissionResult:
-        return self._result(run, "no execution backend is configured; resume is not accepted")
+    def submit_command(self, *, command: ExecutionCommand, run: RunRecord) -> SubmissionResult:
+        return SubmissionResult(run_id=run.run_id, command_id=command.command_id, status="UNAVAILABLE", detail="no execution backend is configured; Step28 owns durable execution")
 
 
 @dataclass(frozen=True)
@@ -142,6 +150,7 @@ class BackendService:
         configuration_fingerprint: str | None = None,
         max_page_size: int = 100,
         max_projection_bytes: int = 4_000_000,
+        review_subject_resolver: ReviewSubjectResolverPort | None = None,
     ) -> None:
         if max_page_size < 1 or max_page_size > 1000:
             raise ValueError("max_page_size must be between 1 and 1000")
@@ -154,11 +163,16 @@ class BackendService:
         self.max_page_size = max_page_size
         self.max_projection_bytes = max_projection_bytes
         self.review_policy = ReviewPolicyService()
-        self._mutation_lock = RLock()
+        self.review_subject_resolver = review_subject_resolver or ControlStoreReviewSubjectResolver(control_store)
 
     def _require_scope(self, principal: Principal, scope: str) -> None:
         if not principal.subject or scope not in principal.scopes:
             raise BackendError("FORBIDDEN", "caller is not authorized for this operation", status=403)
+
+    def authorize_read(self, principal: Principal, scope: str) -> None:
+        """Apply the explicit control-plane read policy at the API boundary."""
+
+        self._require_scope(principal, scope)
 
     def _page(self, items: tuple[Any, ...], *, page_size: int, offset: int, order_by: str) -> PageResult:
         if page_size < 1 or page_size > self.max_page_size or offset < 0:
@@ -207,39 +221,33 @@ class BackendService:
         }
         fingerprint = idempotency_fingerprint(request)
         scope = f"run-create:{principal.subject}"
-        with self._mutation_lock:
-            existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
-            if existing is not None:
-                body = self._idempotent_response(existing)
-                return RunRecord.model_validate(body["run"]), True
-            if self.configuration_fingerprint is not None and configuration_fingerprint != self.configuration_fingerprint:
-                raise BackendError("CONFIGURATION_CONFLICT", "run configuration does not match the configured local platform", status=409)
-            run = RunRecord(
-                # A distinct idempotency key represents a new run command;
-                # the key participates in resource identity but not in the
-                # semantic fingerprint used for changed-request detection.
-                run_id=stable_id("run", {"scope": scope, "key": key, "request": request}),
-                project_id=project_id,
-                configuration_fingerprint=configuration_fingerprint,
-                git_content_commit=git_content_commit,
-                metadata=safe,
+        if self.configuration_fingerprint is not None and configuration_fingerprint != self.configuration_fingerprint:
+            raise BackendError("CONFIGURATION_CONFLICT", "run configuration does not match the configured local platform", status=409)
+        run = RunRecord(
+            # A distinct idempotency key represents a new run command; the
+            # key participates in resource identity but not fingerprinting.
+            run_id=stable_id("run", {"scope": scope, "key": key, "request": request}),
+            project_id=project_id,
+            configuration_fingerprint=configuration_fingerprint,
+            git_content_commit=git_content_commit,
+            metadata=safe,
+        )
+        try:
+            stored = IdempotencyRecord(
+                scope=scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=201,
+                response_body={},
+                resource_id=run.run_id,
             )
-            try:
-                run = self.control_store.create_run(run)
-                stored = IdempotencyRecord(
-                    scope=scope,
-                    key=key,
-                    request_fingerprint=fingerprint,
-                    response_status=201,
-                    response_body={"run": run.model_dump(mode="json")},
-                    resource_id=run.run_id,
-                )
-                self.control_store.record_idempotency(stored)
-            except BackendError:
-                raise
-            except PlatformError as exc:
-                raise BackendError("RUN_CREATION_REJECTED", "run could not be persisted", status=409) from exc
-            return run, False
+            return self.control_store.create_run_with_idempotency(run, stored)
+        except BackendError:
+            raise
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
+        except PlatformError as exc:
+            raise BackendError("RUN_CREATION_REJECTED", "run could not be persisted", status=409) from exc
 
     def get_run(self, run_id: str) -> RunRecord:
         run = self.control_store.get_run(run_id)
@@ -285,34 +293,42 @@ class BackendService:
             )
         )
 
-    def _check_review_subject(self, *, run_id: str, context: ReviewCompatibilityContext) -> str:
-        subject = self.control_store.get_artifact(context.subject_artifact_id)
-        if subject is None:
-            raise BackendError("REVIEW_SUBJECT_NOT_REGISTERED", "review subject is not a registered project artifact", status=404)
-        if subject.run_id != run_id or subject.content_hash != context.subject_content_hash:
-            raise BackendError("REVIEW_SUBJECT_MISMATCH", "review subject is not bound to this run and content hash", status=409)
-        if subject.publication_state is not ArtifactPublicationState.PUBLISHED:
-            raise BackendError("REVIEW_SUBJECT_NOT_CONSUMABLE", "review subject is not a published artifact", status=409)
-        return self._subject_key(context)
-
-    def _record_review_idempotency(self, *, scope: str, key: str, fingerprint: str, record: ReviewRecord) -> None:
-        self.control_store.record_idempotency(
-            IdempotencyRecord(
-                scope=scope,
-                key=key,
-                request_fingerprint=fingerprint,
-                response_status=200,
-                response_body={"review": record.model_dump(mode="json")},
-                resource_id=record.decision.review_decision_id,
-            )
-        )
+    def _resolve_review_subject(
+        self,
+        *,
+        run_id: str,
+        checkpoint: ReviewCheckpoint,
+        subject_artifact_id: str | None,
+        subject_content_hash: str | None,
+        context_assertion: ReviewCompatibilityContext | None,
+    ) -> tuple[ArtifactRef, ReviewCompatibilityContext, str]:
+        selected_artifact_id = subject_artifact_id or (context_assertion.subject_artifact_id if context_assertion is not None else None)
+        if not selected_artifact_id:
+            raise BackendError("REVIEW_SUBJECT_REQUIRED", "review requires a subject artifact identity", status=422)
+        if context_assertion is not None and subject_artifact_id is not None and context_assertion.subject_artifact_id != subject_artifact_id:
+            raise BackendError("REVIEW_SUBJECT_MISMATCH", "subject artifact identity conflicts with the context assertion", status=422)
+        subject = self._verified_artifact(run_id=run_id, artifact_id=selected_artifact_id)
+        if subject_content_hash is not None and subject_content_hash != subject.content_hash:
+            raise BackendError("REVIEW_SUBJECT_MISMATCH", "review subject content hash is not current", status=409)
+        if context_assertion is not None and context_assertion.subject_content_hash != subject.content_hash:
+            raise BackendError("REVIEW_SUBJECT_MISMATCH", "review context assertion is not bound to the current artifact hash", status=409)
+        authoritative = self.review_subject_resolver.resolve_context(run_id=run_id, checkpoint=checkpoint, subject=subject)
+        if authoritative is None:
+            raise BackendError("REVIEW_CONTEXT_UNAVAILABLE", "authoritative review context is not registered for this subject", status=409)
+        if authoritative.review_checkpoint_id is not checkpoint or authoritative.subject_artifact_id != subject.artifact_id or authoritative.subject_content_hash != subject.content_hash:
+            raise BackendError("REVIEW_CONTEXT_INVALID", "server review context is not bound to the requested subject", status=409)
+        if context_assertion is not None and context_assertion.model_dump(mode="json") != authoritative.model_dump(mode="json"):
+            raise BackendError("REVIEW_CONTEXT_MISMATCH", "client context is only an expected binding assertion and did not match server truth", status=409)
+        return subject, authoritative, self._subject_key(authoritative)
 
     def review(
         self,
         *,
         run_id: str,
         checkpoint: ReviewCheckpoint,
-        context: ReviewCompatibilityContext,
+        context: ReviewCompatibilityContext | None = None,
+        subject_artifact_id: str | None = None,
+        subject_content_hash: str | None = None,
         decision: ReviewDecisionStatus,
         rationale: str,
         expected_revision: int,
@@ -320,91 +336,120 @@ class BackendService:
         idempotency_key: str,
     ) -> tuple[ReviewRecord, bool]:
         self._require_scope(principal, "reviews:write")
-        if context.review_checkpoint_id is not checkpoint:
-            raise BackendError("WRONG_REVIEW_CHECKPOINT", "review context checkpoint does not match the API resource", status=422)
+        decision = ReviewDecisionStatus(decision)
         if expected_revision < 0:
             raise BackendError("INVALID_REVIEW_REVISION", "expected_revision must be non-negative", status=422)
-        if decision in {ReviewDecisionStatus.INVALIDATED}:
-            raise BackendError("INVALID_REVIEW_ACTION", "invalidated is a lifecycle result, not a generic review action", status=422)
+        if decision in {ReviewDecisionStatus.INVALIDATED, ReviewDecisionStatus.SKIPPED}:
+            code = "REVIEW_SKIP_UNSUPPORTED" if decision is ReviewDecisionStatus.SKIPPED else "INVALID_REVIEW_ACTION"
+            message = "SKIPPED is not supported by the Step27 API until a server-owned skip authorization source exists" if decision is ReviewDecisionStatus.SKIPPED else "invalidated is a lifecycle result, not a generic review action"
+            raise BackendError(code, message, status=422)
+        if context is not None and context.review_checkpoint_id is not checkpoint:
+            raise BackendError("WRONG_REVIEW_CHECKPOINT", "review context checkpoint does not match the API resource", status=422)
         key = _safe_key(idempotency_key)
         run = self.get_run(run_id)
-        subject_key = self._check_review_subject(run_id=run_id, context=context)
+        _subject, authoritative, subject_key = self._resolve_review_subject(
+            run_id=run_id,
+            checkpoint=checkpoint,
+            subject_artifact_id=subject_artifact_id,
+            subject_content_hash=subject_content_hash,
+            context_assertion=context,
+        )
         scope = f"review:{run_id}:{subject_key}:{principal.subject}"
         request = {
             "run_id": run_id,
             "checkpoint": checkpoint.value,
-            "context": context.model_dump(mode="json"),
+            "context": authoritative.model_dump(mode="json"),
             "decision": decision.value,
             "rationale": rationale,
             "expected_revision": expected_revision,
         }
         fingerprint = idempotency_fingerprint(request)
-        with self._mutation_lock:
+        current = self.control_store.get_current_review(run_id=run_id, subject_key=subject_key)
+        actual_revision = 0 if current is None else current.revision
+        if actual_revision != expected_revision:
             existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
-            if existing is not None:
-                return ReviewRecord.model_validate(self._idempotent_response(existing)["review"]), True
-            current = self.control_store.get_current_review(run_id=run_id, subject_key=subject_key)
-            actual_revision = 0 if current is None else current.revision
-            if actual_revision != expected_revision:
+            if existing is None:
                 raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409)
-            try:
-                review_decision = self.review_policy.create_decision(
-                    context,
-                    decision=decision,
-                    actor=principal.subject,
-                    actor_source=principal.source,
-                    rationale=rationale,
-                )
-                record = ReviewRecord(run_id=run_id, subject_key=subject_key, decision=review_decision, revision=expected_revision + 1)
-                record = self.control_store.record_review(record, expected_revision=expected_revision)
-                self._record_review_idempotency(scope=scope, key=key, fingerprint=fingerprint, record=record)
-            except BackendError:
-                raise
-            except ConcurrencyConflictError as exc:
-                raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409) from exc
-            except (ValueError, PlatformError) as exc:
-                raise BackendError("REVIEW_REJECTED", "review action could not be recorded", status=422) from exc
-            return record, False
+        try:
+            review_decision = self.review_policy.create_decision(
+                authoritative,
+                decision=decision,
+                actor=principal.subject,
+                actor_source=principal.source,
+                rationale=rationale,
+            )
+            record = ReviewRecord(run_id=run_id, subject_key=subject_key, decision=review_decision, revision=expected_revision + 1)
+            stored = IdempotencyRecord(
+                scope=scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=200,
+                response_body={},
+                resource_id=record.decision.review_decision_id,
+            )
+            return self.control_store.record_review_with_idempotency(record, expected_revision=expected_revision, idempotency=stored)
+        except BackendError:
+            raise
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
+        except ConcurrencyConflictError as exc:
+            raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409) from exc
+        except (ValueError, PlatformError) as exc:
+            raise BackendError("REVIEW_REJECTED", "review action could not be recorded", status=422) from exc
 
     def invalidate_review(
         self,
         *,
         run_id: str,
         checkpoint: ReviewCheckpoint,
-        context: ReviewCompatibilityContext,
+        context: ReviewCompatibilityContext | None = None,
+        subject_artifact_id: str | None = None,
+        subject_content_hash: str | None = None,
         reason: str,
         expected_revision: int,
         principal: Principal,
         idempotency_key: str,
     ) -> tuple[ReviewRecord, bool]:
         self._require_scope(principal, "reviews:write")
-        if context.review_checkpoint_id is not checkpoint:
-            raise BackendError("WRONG_REVIEW_CHECKPOINT", "review context checkpoint does not match the API resource", status=422)
         key = _safe_key(idempotency_key)
-        subject_key = self._check_review_subject(run_id=run_id, context=context)
+        _subject, authoritative, subject_key = self._resolve_review_subject(
+            run_id=run_id,
+            checkpoint=checkpoint,
+            subject_artifact_id=subject_artifact_id,
+            subject_content_hash=subject_content_hash,
+            context_assertion=context,
+        )
         scope = f"review-invalidate:{run_id}:{subject_key}:{principal.subject}"
-        fingerprint = idempotency_fingerprint({"run_id": run_id, "checkpoint": checkpoint.value, "context": context.model_dump(mode="json"), "reason": reason, "expected_revision": expected_revision})
-        with self._mutation_lock:
+        fingerprint = idempotency_fingerprint({"run_id": run_id, "checkpoint": checkpoint.value, "context": authoritative.model_dump(mode="json"), "reason": reason, "expected_revision": expected_revision})
+        current = self.control_store.get_current_review(run_id=run_id, subject_key=subject_key)
+        if current is None:
             existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
-            if existing is not None:
-                return ReviewRecord.model_validate(self._idempotent_response(existing)["review"]), True
-            current = self.control_store.get_current_review(run_id=run_id, subject_key=subject_key)
-            if current is None:
+            if existing is None:
                 raise BackendError("REVIEW_NOT_FOUND", "review subject has no current decision", status=404)
-            if current.revision != expected_revision:
+        elif current.revision != expected_revision:
+            existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
+            if existing is None:
                 raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409)
-            if not reason.strip():
-                raise BackendError("INVALID_REVIEW_REASON", "review invalidation requires a reason", status=422)
-            try:
-                invalidated = self.review_policy.invalidate(current.decision, reason)
-                record = ReviewRecord(run_id=run_id, subject_key=subject_key, decision=invalidated, revision=expected_revision + 1)
-                record = self.control_store.record_review(record, expected_revision=expected_revision)
-                self._record_review_idempotency(scope=scope, key=key, fingerprint=fingerprint, record=record)
-            except ConcurrencyConflictError as exc:
-                raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409) from exc
-            except (ValueError, PlatformError) as exc:
-                raise BackendError("REVIEW_REJECTED", "review invalidation could not be recorded", status=422) from exc
-            return record, False
+        if not reason.strip():
+            raise BackendError("INVALID_REVIEW_REASON", "review invalidation requires a reason", status=422)
+        try:
+            invalidated = self.review_policy.invalidate(current.decision if current is not None else ReviewRecord.model_validate(self._idempotent_response(existing)["review"]).decision, reason)
+            record = ReviewRecord(run_id=run_id, subject_key=subject_key, decision=invalidated, revision=expected_revision + 1)
+            stored = IdempotencyRecord(
+                scope=scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=200,
+                response_body={},
+                resource_id=record.decision.review_decision_id,
+            )
+            return self.control_store.record_review_with_idempotency(record, expected_revision=expected_revision, idempotency=stored)
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
+        except ConcurrencyConflictError as exc:
+            raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409) from exc
+        except (ValueError, PlatformError) as exc:
+            raise BackendError("REVIEW_REJECTED", "review invalidation could not be recorded", status=422) from exc
 
     def list_reviews(self, *, run_id: str, subject_key: str | None, page_size: int, offset: int) -> PageResult:
         self.get_run(run_id)
@@ -531,32 +576,66 @@ class BackendService:
         run = self.get_run(run_id)
         scope = f"execution:{action}:{run_id}:{principal.subject}"
         fingerprint = idempotency_fingerprint({"action": action, "run_id": run_id})
-        with self._mutation_lock:
-            existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
-            if existing is not None:
-                return SubmissionResult.model_validate(self._idempotent_response(existing)["submission"]), True
+        command = ExecutionCommand(
+            command_id=stable_id("execution-command", {"scope": scope, "key": key, "fingerprint": fingerprint}),
+            run_id=run_id,
+            action=ExecutionAction(action),
+            idempotency_scope=scope,
+            idempotency_key=key,
+            request_fingerprint=fingerprint,
+            principal_subject=principal.subject,
+            principal_source=principal.source,
+        )
+        unknown = SubmissionResult(run_id=run_id, command_id=command.command_id, status="DELIVERY_UNKNOWN", detail="command delivery outcome is unknown; Step28 must reconcile the stable command identity")
+        reservation = IdempotencyRecord(
+            scope=scope,
+            key=key,
+            request_fingerprint=fingerprint,
+            state="RESERVED",
+            response_status=503,
+            response_body={"submission": unknown.model_dump(mode="json")},
+            resource_id=command.command_id,
+        )
+        try:
+            existing, reserved_by_caller = self.control_store.reserve_idempotency(reservation)
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
+        if not reserved_by_caller:
+            return SubmissionResult.model_validate(self._idempotent_response(existing)["submission"]), True
+        try:
+            result = self.execution.submit_command(command=command, run=run)
+            result = SubmissionResult.model_validate(result).model_copy(update={"command_id": command.command_id})
+        except BackendError:
+            raise
+        except Exception:
             try:
-                result = {
-                    "submit": self.execution.submit_run,
-                    "cancel": self.execution.cancel_run,
-                    "resume": self.execution.resume_run,
-                }[action](run=run, principal=principal)
-                result = SubmissionResult.model_validate(result)
-            except BackendError:
-                raise
-            except Exception as exc:
-                raise BackendError("EXECUTION_UNAVAILABLE", "execution backend did not accept the command", status=503, retryable=True) from exc
-            self.control_store.record_idempotency(
-                IdempotencyRecord(
-                    scope=scope,
-                    key=key,
-                    request_fingerprint=fingerprint,
-                    response_status=503 if result.status == "UNAVAILABLE" else 202,
-                    response_body={"submission": result.model_dump(mode="json")},
-                    resource_id=result.submission_id or run_id,
+                self.control_store.mark_idempotency_unknown(
+                    reservation.model_copy(update={"state": "UNKNOWN", "response_body": {"submission": unknown.model_dump(mode="json")}})
                 )
-            )
-            return result, False
+            except Exception:
+                # The RESERVED row remains the durable replay fence if the
+                # uncertainty update itself is unavailable.
+                pass
+            return unknown, False
+        completed = reservation.model_copy(
+            update={
+                "state": "COMPLETED",
+                "response_status": 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202,
+                "response_body": {"submission": result.model_dump(mode="json")},
+                "resource_id": command.command_id,
+            }
+        )
+        try:
+            self.control_store.complete_idempotency(completed)
+        except Exception:
+            try:
+                self.control_store.mark_idempotency_unknown(
+                    reservation.model_copy(update={"state": "UNKNOWN", "response_body": {"submission": unknown.model_dump(mode="json")}})
+                )
+            except Exception:
+                pass
+            return unknown, False
+        return result, False
 
     def submit(self, *, run_id: str, principal: Principal, idempotency_key: str) -> tuple[SubmissionResult, bool]:
         return self._submission(action="submit", run_id=run_id, principal=principal, idempotency_key=idempotency_key)
@@ -571,8 +650,10 @@ class BackendService:
 __all__ = [
     "BackendError",
     "BackendService",
+    "ControlStoreReviewSubjectResolver",
     "ExecutionSubmissionPort",
     "PageResult",
     "Principal",
+    "ReviewSubjectResolverPort",
     "UnavailableExecutionSubmission",
 ]

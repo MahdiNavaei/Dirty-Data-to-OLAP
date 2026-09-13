@@ -37,7 +37,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StagedDatasetManifest,
 )
 from dirty_data_to_olap.domain.contracts.api import IdempotencyRecord, ReviewHistoryRecord, ReviewRecord
-from dirty_data_to_olap.domain.contracts.canonical import ReviewDecision
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
@@ -119,6 +119,10 @@ class ControlStorePort(Protocol):
     def create_run(self, run: RunRecord) -> RunRecord:
         ...
 
+    def create_run_with_idempotency(self, run: RunRecord, idempotency: IdempotencyRecord) -> tuple[RunRecord, bool]:
+        """Atomically create a run and its completed replay record."""
+        ...
+
     def get_run(self, run_id: str) -> RunRecord | None:
         ...
 
@@ -158,6 +162,10 @@ class ControlStorePort(Protocol):
     def record_review(self, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
         ...
 
+    def record_review_with_idempotency(self, record: ReviewRecord, *, expected_revision: int, idempotency: IdempotencyRecord) -> tuple[ReviewRecord, bool]:
+        """Atomically apply a review CAS mutation and its replay record."""
+        ...
+
     def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
         ...
 
@@ -165,6 +173,23 @@ class ControlStorePort(Protocol):
         ...
 
     def record_idempotency(self, record: IdempotencyRecord) -> IdempotencyRecord:
+        ...
+
+    def reserve_idempotency(self, record: IdempotencyRecord) -> tuple[IdempotencyRecord, bool]:
+        """Durably reserve a replay key before an external command delivery."""
+        ...
+
+    def complete_idempotency(self, record: IdempotencyRecord) -> IdempotencyRecord:
+        ...
+
+    def mark_idempotency_unknown(self, record: IdempotencyRecord) -> IdempotencyRecord:
+        ...
+
+    def register_review_subject_context(self, *, run_id: str, context: ReviewCompatibilityContext) -> ReviewCompatibilityContext:
+        """Register context created by trusted project contract producers."""
+        ...
+
+    def get_review_subject_context(self, *, run_id: str, checkpoint: str, artifact_id: str) -> ReviewCompatibilityContext | None:
         ...
 
     def get_dependents(self, artifact_id: str) -> tuple[ArtifactRef, ...]:

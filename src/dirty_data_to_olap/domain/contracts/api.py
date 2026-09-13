@@ -8,6 +8,7 @@ the control store and an execution submission port.
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 import re
 from typing import Any, Mapping
 
@@ -33,6 +34,7 @@ class IdempotencyRecord(_SourceModel):
     scope: str = Field(min_length=1, max_length=256)
     key: str = Field(min_length=1, max_length=128)
     request_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    state: str = Field(default="COMPLETED", pattern=r"^(RESERVED|COMPLETED|UNKNOWN)$")
     response_status: int = Field(ge=100, le=599)
     response_body: Mapping[str, Any] = Field(default_factory=dict)
     resource_id: str | None = None
@@ -43,6 +45,26 @@ class IdempotencyRecord(_SourceModel):
     @property
     def identity(self) -> str:
         return f"{self.scope}:{self.key}"
+
+
+class ExecutionAction(str, Enum):
+    SUBMIT = "submit"
+    CANCEL = "cancel"
+    RESUME = "resume"
+
+
+class ExecutionCommand(_SourceModel):
+    """Stable, secret-free command envelope handed to Step28."""
+
+    command_id: str = Field(min_length=1, max_length=256)
+    run_id: str = Field(min_length=1, max_length=128)
+    action: ExecutionAction
+    idempotency_scope: str = Field(min_length=1, max_length=256)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    request_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    principal_subject: str = Field(min_length=1, max_length=256)
+    principal_source: str = Field(min_length=1, max_length=128)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class ReviewRecord(_SourceModel):
@@ -70,7 +92,8 @@ class SubmissionResult(_SourceModel):
     """Truthful handoff result; QUEUED is intentionally not a V1 state."""
 
     run_id: str = Field(min_length=1)
-    status: str = Field(pattern=r"^(ACCEPTED|REJECTED|UNAVAILABLE|CONFLICT|REVIEW_REQUIRED|BLOCKED)$")
+    status: str = Field(pattern=r"^(ACCEPTED|REJECTED|UNAVAILABLE|CONFLICT|REVIEW_REQUIRED|BLOCKED|DELIVERY_UNKNOWN)$")
+    command_id: str = Field(min_length=1)
     submission_id: str | None = None
     detail: str = Field(min_length=1)
     accepted_by: str | None = None
@@ -94,6 +117,8 @@ def safe_metadata(metadata: Mapping[str, str]) -> dict[str, str]:
 
 
 __all__ = [
+    "ExecutionAction",
+    "ExecutionCommand",
     "IdempotencyRecord",
     "ReviewHistoryRecord",
     "ReviewRecord",

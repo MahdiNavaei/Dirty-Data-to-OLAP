@@ -863,6 +863,12 @@ def check_state() -> None:
         require(execution.get("current_role") == "senior_backend_engineer", "post-Step 26 state must hand off to Step27")
         require("Senior Backend" in str(execution.get("current_specialist")), "current specialist must be Step27")
         require("Senior Backend" in str(execution.get("next_step")), "next step must be Step27")
+    elif execution.get("current_step") == 28:
+        require(execution.get("last_completed_step") == 27, "post-Step 27 state must record completed Step 27")
+        require(execution.get("last_completed_role") == "senior_backend_engineer", "post-Step 27 role must be senior_backend_engineer")
+        require(execution.get("current_role") == "distributed_job_processing_engineer", "post-Step 27 state must hand off to Step28")
+        require("Distributed Job Processing" in str(execution.get("current_specialist")), "current specialist must be Step28")
+        require("Distributed Job Processing" in str(execution.get("next_step")), "next step must be Step28")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")

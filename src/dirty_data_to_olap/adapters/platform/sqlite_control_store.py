@@ -41,11 +41,11 @@ from dirty_data_to_olap.domain.contracts.api import (
     ReviewHistoryRecord,
     ReviewRecord,
 )
-from dirty_data_to_olap.domain.contracts.canonical import ReviewDecision
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 def _dump(value: object) -> str:
@@ -146,6 +146,10 @@ class SQLiteControlStore(ControlStorePort):
                         self._migrate_v2_to_v3(connection)
                         next_version = 3
                         detail = "typed ValidationReport gate provenance"
+                    elif version == 3:
+                        self._migrate_v3_to_v4(connection)
+                        next_version = 4
+                        detail = "Step27 control-plane idempotency, review context and command capabilities"
                     else:
                         connection.rollback()
                         raise UnsupportedSchemaVersionError(f"unsupported control database schema {version}")
@@ -156,9 +160,8 @@ class SQLiteControlStore(ControlStorePort):
                     )
                     connection.commit()
                     version = next_version
-                # Step27 adds only control-plane metadata tables.  They are
-                # additive and remain compatible with the Step23 schema
-                # version so existing local stores do not require a reset.
+                # Repeated opens repair a partial capability installation
+                # without changing the already-recorded schema version.
                 self._ensure_step27_tables(connection)
                 return version
             finally:
@@ -193,16 +196,20 @@ class SQLiteControlStore(ControlStorePort):
 
     @staticmethod
     def _ensure_step27_tables(connection: sqlite3.Connection) -> None:
-        """Create additive Step27 control metadata without changing Step23 IDs."""
+        """Ensure the version-4 Step27 control-plane capability is complete."""
 
         statements = (
-            "CREATE TABLE IF NOT EXISTS api_idempotency (scope TEXT NOT NULL, idem_key TEXT NOT NULL, request_fingerprint TEXT NOT NULL, response_status INTEGER NOT NULL, response_body TEXT NOT NULL, resource_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY(scope, idem_key))",
+            "CREATE TABLE IF NOT EXISTS api_idempotency (scope TEXT NOT NULL, idem_key TEXT NOT NULL, request_fingerprint TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'COMPLETED', response_status INTEGER NOT NULL, response_body TEXT NOT NULL, resource_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY(scope, idem_key))",
             "CREATE TABLE IF NOT EXISTS review_current (run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, decision_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, PRIMARY KEY(run_id, subject_key))",
             "CREATE TABLE IF NOT EXISTS review_history (history_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, decision_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, UNIQUE(run_id, subject_key, revision))",
             "CREATE INDEX IF NOT EXISTS idx_review_history_subject ON review_history(run_id, subject_key, revision)",
+            "CREATE TABLE IF NOT EXISTS review_subject_contexts (run_id TEXT NOT NULL REFERENCES runs(run_id), checkpoint TEXT NOT NULL, artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), context_json TEXT NOT NULL, recorded_at TEXT NOT NULL, PRIMARY KEY(run_id, checkpoint, artifact_id))",
         )
         for statement in statements:
             connection.execute(statement)
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(api_idempotency)").fetchall()}
+        if "state" not in columns:
+            connection.execute("ALTER TABLE api_idempotency ADD COLUMN state TEXT NOT NULL DEFAULT 'COMPLETED'")
 
     @staticmethod
     def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
@@ -243,6 +250,12 @@ class SQLiteControlStore(ControlStorePort):
                 "UPDATE gate_evidence SET validation_report_run_id = ?, validation_report_id = ?, provenance_refs = ? WHERE gate_id = ? AND run_id = ?",
                 (report_run_id, f"legacy:{row[2]}", _dump(refs), row[0], row[1]),
             )
+
+    @staticmethod
+    def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
+        """Install Step27 capabilities through the normal migration chain."""
+
+        SQLiteControlStore._ensure_step27_tables(connection)
 
     @staticmethod
     def _artifact_from_row(row: sqlite3.Row) -> ArtifactRef:
@@ -304,20 +317,67 @@ class SQLiteControlStore(ControlStorePort):
             revision=int(row["revision"]),
         )
 
+    @staticmethod
+    def _insert_run(connection: sqlite3.Connection, run: RunRecord) -> RunRecord:
+        existing = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run.run_id,)).fetchone()
+        if existing:
+            stored = SQLiteControlStore._run_from_row(existing)
+            if stored.model_copy(update={"revision": run.revision}) != run:
+                raise ArtifactConflictError("run identity is already bound to different metadata")
+            return stored
+        connection.execute(
+            "INSERT INTO runs(run_id, project_id, created_at, status, configuration_fingerprint, git_content_commit, root_artifact_refs, source_snapshot_refs, gate_refs, latest_stage_refs, revision, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (run.run_id, run.project_id, run.created_at.isoformat(), run.status.value, run.configuration_fingerprint, run.git_content_commit, _dump(run.root_artifact_refs), _dump(run.source_snapshot_refs), _dump(run.gate_refs), _dump(run.latest_stage_refs), run.revision, _dump(run.metadata)),
+        )
+        SQLiteControlStore._audit(connection, "run_created", run_id=run.run_id, status=run.status.value, detail="run metadata persisted")
+        return run
+
+    @staticmethod
+    def _idempotency_from_connection(row: sqlite3.Row) -> IdempotencyRecord:
+        return IdempotencyRecord(
+            scope=str(row["scope"]),
+            key=str(row["idem_key"]),
+            request_fingerprint=str(row["request_fingerprint"]),
+            state=str(row["state"] if "state" in row.keys() else "COMPLETED"),
+            response_status=int(row["response_status"]),
+            response_body=dict(_load_json(str(row["response_body"]), {})),
+            resource_id=row["resource_id"],
+            created_at=_parse_datetime(str(row["created_at"])),
+        )
+
+    @staticmethod
+    def _assert_idempotency_match(existing: IdempotencyRecord, requested: IdempotencyRecord) -> None:
+        if existing.request_fingerprint != requested.request_fingerprint:
+            raise ArtifactConflictError("idempotency key is already bound to a different semantic request")
+
+    @staticmethod
+    def _insert_idempotency(connection: sqlite3.Connection, record: IdempotencyRecord) -> IdempotencyRecord:
+        connection.execute(
+            "INSERT INTO api_idempotency(scope, idem_key, request_fingerprint, state, response_status, response_body, resource_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (record.scope, record.key, record.request_fingerprint, record.state, record.response_status, _dump(record.response_body), record.resource_id, record.created_at.isoformat()),
+        )
+        SQLiteControlStore._audit(connection, "api_idempotency_recorded", status=record.state, detail=f"scope={record.scope}")
+        return record
+
     def create_run(self, run: RunRecord) -> RunRecord:
         with self._transaction() as connection:
-            existing = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run.run_id,)).fetchone()
-            if existing:
-                stored = self._run_from_row(existing)
-                if stored.model_copy(update={"revision": run.revision}) != run:
-                    raise ArtifactConflictError("run identity is already bound to different metadata")
-                return stored
-            connection.execute(
-                "INSERT INTO runs(run_id, project_id, created_at, status, configuration_fingerprint, git_content_commit, root_artifact_refs, source_snapshot_refs, gate_refs, latest_stage_refs, revision, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (run.run_id, run.project_id, run.created_at.isoformat(), run.status.value, run.configuration_fingerprint, run.git_content_commit, _dump(run.root_artifact_refs), _dump(run.source_snapshot_refs), _dump(run.gate_refs), _dump(run.latest_stage_refs), run.revision, _dump(run.metadata)),
-            )
-            self._audit(connection, "run_created", run_id=run.run_id, status=run.status.value, detail="run metadata persisted")
-            return run
+            return self._insert_run(connection, run)
+
+    def create_run_with_idempotency(self, run: RunRecord, idempotency: IdempotencyRecord) -> tuple[RunRecord, bool]:
+        if idempotency.state != "COMPLETED":
+            raise ValueError("run creation idempotency must be completed")
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (idempotency.scope, idempotency.key)).fetchone()
+            if existing_row is not None:
+                existing = self._idempotency_from_connection(existing_row)
+                self._assert_idempotency_match(existing, idempotency)
+                row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (existing.resource_id,)).fetchone()
+                if row is None:
+                    raise PlatformError("idempotency record does not reference a persisted run")
+                return self._run_from_row(row), True
+            stored = self._insert_run(connection, run)
+            self._insert_idempotency(connection, idempotency.model_copy(update={"resource_id": stored.run_id, "response_body": {"run": stored.model_dump(mode="json")}}))
+            return stored, False
 
     def get_run(self, run_id: str) -> RunRecord | None:
         with self._connect() as connection:
@@ -513,33 +573,84 @@ class SQLiteControlStore(ControlStorePort):
             row = connection.execute("SELECT * FROM review_current WHERE run_id = ? AND subject_key = ?", (run_id, subject_key)).fetchone()
             return None if row is None else self._review_record_from_row(row)
 
-    def record_review(self, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
+    def register_review_subject_context(self, *, run_id: str, context: ReviewCompatibilityContext) -> ReviewCompatibilityContext:
+        with self._transaction() as connection:
+            artifact = connection.execute("SELECT run_id, content_hash FROM artifacts WHERE artifact_id = ?", (context.subject_artifact_id,)).fetchone()
+            if artifact is None or str(artifact["run_id"]) != run_id or str(artifact["content_hash"]) != context.subject_content_hash:
+                raise PlatformError("review context must bind an existing artifact in the requested run")
+            existing = connection.execute(
+                "SELECT context_json FROM review_subject_contexts WHERE run_id = ? AND checkpoint = ? AND artifact_id = ?",
+                (run_id, context.review_checkpoint_id.value, context.subject_artifact_id),
+            ).fetchone()
+            if existing is not None:
+                stored = ReviewCompatibilityContext.model_validate(_load_json(str(existing["context_json"]), {}))
+                if stored != context:
+                    raise ArtifactConflictError("review subject context is already bound to different authoritative semantics")
+                return stored
+            connection.execute(
+                "INSERT INTO review_subject_contexts(run_id, checkpoint, artifact_id, context_json, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                (run_id, context.review_checkpoint_id.value, context.subject_artifact_id, _dump(context), datetime.now().astimezone().isoformat()),
+            )
+            self._audit(connection, "review_subject_context_registered", run_id=run_id, artifact_id=context.subject_artifact_id, status=context.review_checkpoint_id.value, content_hash=context.subject_content_hash, detail="trusted review context persisted")
+            return context
+
+    def get_review_subject_context(self, *, run_id: str, checkpoint: str, artifact_id: str) -> ReviewCompatibilityContext | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT context_json FROM review_subject_contexts WHERE run_id = ? AND checkpoint = ? AND artifact_id = ?",
+                (run_id, checkpoint, artifact_id),
+            ).fetchone()
+            return None if row is None else ReviewCompatibilityContext.model_validate(_load_json(str(row["context_json"]), {}))
+
+    @staticmethod
+    def _record_review_in_connection(connection: sqlite3.Connection, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
         if expected_revision < 0 or record.revision != expected_revision + 1:
             raise ConcurrencyConflictError("review revision does not match the expected compare-and-swap revision")
-        with self._transaction() as connection:
-            if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (record.run_id,)).fetchone() is None:
-                raise PlatformError("review requires an existing run")
-            current = connection.execute("SELECT revision FROM review_current WHERE run_id = ? AND subject_key = ?", (record.run_id, record.subject_key)).fetchone()
-            current_revision = 0 if current is None else int(current["revision"])
-            if current_revision != expected_revision:
-                raise ConcurrencyConflictError("review revision changed before compare-and-swap update")
-            history_id = f"review-{record.decision.review_decision_id}-{record.revision}"
+        if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (record.run_id,)).fetchone() is None:
+            raise PlatformError("review requires an existing run")
+        current = connection.execute("SELECT revision FROM review_current WHERE run_id = ? AND subject_key = ?", (record.run_id, record.subject_key)).fetchone()
+        current_revision = 0 if current is None else int(current["revision"])
+        if current_revision != expected_revision:
+            raise ConcurrencyConflictError("review revision changed before compare-and-swap update")
+        history_id = f"review-{record.decision.review_decision_id}-{record.revision}"
+        connection.execute(
+            "INSERT INTO review_history(history_id, run_id, subject_key, decision_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (history_id, record.run_id, record.subject_key, _dump(record.decision), record.revision, record.recorded_at.isoformat()),
+        )
+        if current is None:
             connection.execute(
-                "INSERT INTO review_history(history_id, run_id, subject_key, decision_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (history_id, record.run_id, record.subject_key, _dump(record.decision), record.revision, record.recorded_at.isoformat()),
+                "INSERT INTO review_current(run_id, subject_key, decision_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                (record.run_id, record.subject_key, _dump(record.decision), record.revision, record.recorded_at.isoformat()),
             )
-            if current is None:
-                connection.execute(
-                    "INSERT INTO review_current(run_id, subject_key, decision_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
-                    (record.run_id, record.subject_key, _dump(record.decision), record.revision, record.recorded_at.isoformat()),
-                )
-            else:
-                connection.execute(
-                    "UPDATE review_current SET decision_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
-                    (_dump(record.decision), record.revision, record.recorded_at.isoformat(), record.run_id, record.subject_key, expected_revision),
-                )
-            self._audit(connection, "review_recorded", run_id=record.run_id, status=record.decision.decision.value, detail=f"review revision {record.revision} recorded")
-            return record
+        else:
+            cursor = connection.execute(
+                "UPDATE review_current SET decision_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
+                (_dump(record.decision), record.revision, record.recorded_at.isoformat(), record.run_id, record.subject_key, expected_revision),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("review revision changed before compare-and-swap update")
+        SQLiteControlStore._audit(connection, "review_recorded", run_id=record.run_id, status=record.decision.decision.value, detail=f"review revision {record.revision} recorded")
+        return record
+
+    def record_review(self, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
+        with self._transaction() as connection:
+            return self._record_review_in_connection(connection, record, expected_revision=expected_revision)
+
+    def record_review_with_idempotency(self, record: ReviewRecord, *, expected_revision: int, idempotency: IdempotencyRecord) -> tuple[ReviewRecord, bool]:
+        if idempotency.state != "COMPLETED":
+            raise ValueError("review idempotency must be completed")
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (idempotency.scope, idempotency.key)).fetchone()
+            if existing_row is not None:
+                existing = self._idempotency_from_connection(existing_row)
+                self._assert_idempotency_match(existing, idempotency)
+                body = existing.response_body.get("review")
+                if not isinstance(body, dict):
+                    raise PlatformError("review idempotency record does not contain a replayable result")
+                return ReviewRecord.model_validate(body), True
+            stored = self._record_review_in_connection(connection, record, expected_revision=expected_revision)
+            self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": {"review": stored.model_dump(mode="json")}, "resource_id": stored.decision.review_decision_id}))
+            return stored, False
 
     def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
         if limit < 1 or offset < 0:
@@ -557,15 +668,7 @@ class SQLiteControlStore(ControlStorePort):
 
     @staticmethod
     def _idempotency_from_row(row: sqlite3.Row) -> IdempotencyRecord:
-        return IdempotencyRecord(
-            scope=str(row["scope"]),
-            key=str(row["idem_key"]),
-            request_fingerprint=str(row["request_fingerprint"]),
-            response_status=int(row["response_status"]),
-            response_body=dict(_load_json(str(row["response_body"]), {})),
-            resource_id=row["resource_id"],
-            created_at=_parse_datetime(str(row["created_at"])),
-        )
+        return SQLiteControlStore._idempotency_from_connection(row)
 
     def get_idempotency(self, *, scope: str, key: str) -> IdempotencyRecord | None:
         with self._connect() as connection:
@@ -577,15 +680,40 @@ class SQLiteControlStore(ControlStorePort):
             existing = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (record.scope, record.key)).fetchone()
             if existing is not None:
                 stored = self._idempotency_from_row(existing)
-                if stored.request_fingerprint != record.request_fingerprint:
-                    raise ArtifactConflictError("idempotency key is already bound to a different semantic request")
+                self._assert_idempotency_match(stored, record)
                 return stored
+            return self._insert_idempotency(connection, record)
+
+    def reserve_idempotency(self, record: IdempotencyRecord) -> tuple[IdempotencyRecord, bool]:
+        if record.state != "RESERVED":
+            raise ValueError("idempotency reservation must use RESERVED state")
+        with self._transaction() as connection:
+            existing = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (record.scope, record.key)).fetchone()
+            if existing is not None:
+                stored = self._idempotency_from_row(existing)
+                self._assert_idempotency_match(stored, record)
+                return stored, False
+            return self._insert_idempotency(connection, record), True
+
+    def _update_idempotency(self, record: IdempotencyRecord, *, state: str) -> IdempotencyRecord:
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (record.scope, record.key)).fetchone()
+            if existing_row is None:
+                raise PlatformError("idempotency record is not reserved")
+            existing = self._idempotency_from_row(existing_row)
+            self._assert_idempotency_match(existing, record)
             connection.execute(
-                "INSERT INTO api_idempotency(scope, idem_key, request_fingerprint, response_status, response_body, resource_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (record.scope, record.key, record.request_fingerprint, record.response_status, _dump(record.response_body), record.resource_id, record.created_at.isoformat()),
+                "UPDATE api_idempotency SET state = ?, response_status = ?, response_body = ?, resource_id = ? WHERE scope = ? AND idem_key = ?",
+                (state, record.response_status, _dump(record.response_body), record.resource_id or existing.resource_id, record.scope, record.key),
             )
-            self._audit(connection, "api_idempotency_recorded", status="RECORDED", detail=f"scope={record.scope}")
-            return record
+            self._audit(connection, "api_idempotency_updated", status=state, detail=f"scope={record.scope}")
+            return record.model_copy(update={"state": state, "resource_id": record.resource_id or existing.resource_id})
+
+    def complete_idempotency(self, record: IdempotencyRecord) -> IdempotencyRecord:
+        return self._update_idempotency(record, state="COMPLETED")
+
+    def mark_idempotency_unknown(self, record: IdempotencyRecord) -> IdempotencyRecord:
+        return self._update_idempotency(record, state="UNKNOWN")
 
     def get_dependents(self, artifact_id: str) -> tuple[ArtifactRef, ...]:
         with self._connect() as connection:

@@ -7,6 +7,7 @@ SQLite, artifact paths, providers, SQL, or data-processing engines directly.
 from __future__ import annotations
 
 from collections.abc import Callable
+from enum import Enum
 import re
 from typing import Any
 
@@ -20,7 +21,6 @@ from dirty_data_to_olap.application.backend import BackendError, BackendService,
 from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewCheckpoint,
     ReviewCompatibilityContext,
-    ReviewDecisionStatus,
 )
 from dirty_data_to_olap.domain.contracts.platform import ArtifactRef, RunRecord, StageAttemptRecord
 
@@ -64,11 +64,33 @@ class RegisterArtifactRequest(ApiModel):
     artifact_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
+class ReviewActionDecision(str, Enum):
+    """Step27 actions; SKIPPED is not exposed without server authorization."""
+
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    DEFERRED = "DEFERRED"
+
+
 class ReviewActionRequest(ApiModel):
-    context: ReviewCompatibilityContext
-    decision: ReviewDecisionStatus
+    subject_artifact_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+    subject_content_hash: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[a-fA-F0-9]{64}$")
+    context: ReviewCompatibilityContext | None = None
+    decision: ReviewActionDecision
     rationale: str = Field(min_length=1, max_length=2000)
     expected_revision: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def subject_identity_is_complete(self) -> "ReviewActionRequest":
+        if self.context is None and (self.subject_artifact_id is None or self.subject_content_hash is None):
+            raise ValueError("subject_artifact_id and subject_content_hash are required when context is omitted")
+        if (self.subject_artifact_id is None) != (self.subject_content_hash is None):
+            raise ValueError("subject artifact identity and content hash must be supplied together")
+        if self.context is not None and self.subject_artifact_id is not None and self.context.subject_artifact_id != self.subject_artifact_id:
+            raise ValueError("subject_artifact_id must match the context assertion")
+        if self.context is not None and self.subject_content_hash is not None and self.context.subject_content_hash != self.subject_content_hash:
+            raise ValueError("subject_content_hash must match the context assertion")
+        return self
 
     @field_validator("rationale")
     @classmethod
@@ -123,9 +145,23 @@ class ArtifactView(ApiModel):
 
 
 class InvalidateReviewRequest(ApiModel):
-    context: ReviewCompatibilityContext
+    subject_artifact_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+    subject_content_hash: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[a-fA-F0-9]{64}$")
+    context: ReviewCompatibilityContext | None = None
     reason: str = Field(min_length=1, max_length=1000)
     expected_revision: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def subject_identity_is_complete(self) -> "InvalidateReviewRequest":
+        if self.context is None and (self.subject_artifact_id is None or self.subject_content_hash is None):
+            raise ValueError("subject_artifact_id and subject_content_hash are required when context is omitted")
+        if (self.subject_artifact_id is None) != (self.subject_content_hash is None):
+            raise ValueError("subject artifact identity and content hash must be supplied together")
+        if self.context is not None and self.subject_artifact_id is not None and self.context.subject_artifact_id != self.subject_artifact_id:
+            raise ValueError("subject_artifact_id must match the context assertion")
+        if self.context is not None and self.subject_content_hash is not None and self.context.subject_content_hash != self.subject_content_hash:
+            raise ValueError("subject_content_hash must match the context assertion")
+        return self
 
 
 def _artifact_view(artifact: ArtifactRef) -> ArtifactView:
@@ -209,9 +245,14 @@ def create_app(
             raise BackendError("UNAUTHENTICATED", "local test authentication requires X-Local-Principal", status=401)
         return Principal(
             subject=subject,
-            scopes=frozenset({"runs:write", "reviews:write", "artifacts:write", "artifacts:read"}),
+            scopes=frozenset({"runs:read", "runs:write", "attempts:read", "reviews:read", "reviews:write", "artifacts:read", "artifacts:write", "validation:read", "visualizations:read"}),
             source="LOCAL_TEST_AUTH",
         )
+
+    def read_principal(request: Request, scope: str) -> Principal:
+        caller = principal(request)
+        backend.authorize_read(caller, scope)
+        return caller
 
     def key(value: str | None) -> str:
         if value is None:
@@ -262,47 +303,57 @@ def create_app(
 
     @app.get("/api/v1/runs", response_model=PageResponse, tags=["runs"])
     async def list_runs(
+        request: Request,
         project_id: str | None = Query(default=None, max_length=128),
         status: str | None = Query(default=None, max_length=32),
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
+        read_principal(request, "runs:read")
         return _model_page(backend.list_runs(project_id=project_id, status=status, page_size=page_size, offset=offset), _run_view)
 
     @app.get("/api/v1/projects/{project_id}/runs", response_model=PageResponse, tags=["projects"])
-    async def list_project_runs(project_id: str = Path(min_length=1, max_length=128), status: str | None = Query(default=None, max_length=32), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
+    async def list_project_runs(request: Request, project_id: str = Path(min_length=1, max_length=128), status: str | None = Query(default=None, max_length=32), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
+        read_principal(request, "runs:read")
         return _model_page(backend.list_runs(project_id=project_id, status=status, page_size=page_size, offset=offset), _run_view)
 
     @app.get("/api/v1/runs/{run_id}", response_model=RunView, tags=["runs"])
-    async def get_run(run_id: str = Path(min_length=1, max_length=128)) -> RunView:
+    async def get_run(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> RunView:
+        read_principal(request, "runs:read")
         return _run_view(backend.get_run(run_id))
 
     @app.get("/api/v1/runs/{run_id}/attempts", response_model=PageResponse, tags=["attempts"])
     async def list_attempts(
+        request: Request,
         run_id: str = Path(min_length=1, max_length=128),
         stage_id: str | None = Query(default=None, max_length=128),
         status: str | None = Query(default=None, max_length=32),
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
+        read_principal(request, "attempts:read")
         return _model_page(backend.list_attempts(run_id=run_id, stage_id=stage_id, status=status, page_size=page_size, offset=offset))
 
     @app.get("/api/v1/runs/{run_id}/attempts/{attempt_id}", response_model=StageAttemptRecord, tags=["attempts"])
-    async def get_attempt(run_id: str = Path(min_length=1, max_length=128), attempt_id: str = Path(min_length=1, max_length=128)) -> StageAttemptRecord:
+    async def get_attempt(request: Request, run_id: str = Path(min_length=1, max_length=128), attempt_id: str = Path(min_length=1, max_length=128)) -> StageAttemptRecord:
+        read_principal(request, "attempts:read")
         return backend.get_attempt(run_id=run_id, attempt_id=attempt_id)
 
     @app.get("/api/v1/runs/{run_id}/artifacts", response_model=PageResponse, tags=["artifacts"])
     async def list_artifacts(
+        request: Request,
         run_id: str = Path(min_length=1, max_length=128),
         stage_id: str | None = Query(default=None, max_length=128),
         artifact_kind: str | None = Query(default=None, max_length=128),
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
+        read_principal(request, "artifacts:read")
         return _model_page(backend.list_artifacts(run_id=run_id, stage_id=stage_id, artifact_kind=artifact_kind, page_size=page_size, offset=offset), _artifact_view)
 
     @app.get("/api/v1/artifacts/{artifact_id}", response_model=ArtifactView, tags=["artifacts"])
-    async def get_artifact(artifact_id: str = Path(min_length=1, max_length=128), run_id: str = Query(min_length=1, max_length=128)) -> ArtifactView:
+    async def get_artifact(request: Request, artifact_id: str = Path(min_length=1, max_length=128), run_id: str = Query(min_length=1, max_length=128)) -> ArtifactView:
+        read_principal(request, "artifacts:read")
         return _artifact_view(backend.artifact(run_id=run_id, artifact_id=artifact_id))
 
     @app.post("/api/v1/runs/{run_id}/artifacts/register", response_model=ArtifactView, status_code=201, tags=["artifacts"])
@@ -314,12 +365,13 @@ def create_app(
         return backend.artifact_payload(run_id=run_id, artifact_id=artifact_id, principal=principal(request))
 
     @app.get("/api/v1/runs/{run_id}/reviews", response_model=PageResponse, tags=["reviews"])
-    async def list_reviews(run_id: str = Path(min_length=1, max_length=128), subject_key: str | None = Query(default=None, max_length=512), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
+    async def list_reviews(request: Request, run_id: str = Path(min_length=1, max_length=128), subject_key: str | None = Query(default=None, max_length=512), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
+        read_principal(request, "reviews:read")
         return _model_page(backend.list_reviews(run_id=run_id, subject_key=subject_key, page_size=page_size, offset=offset))
 
     @app.post("/api/v1/runs/{run_id}/reviews/{checkpoint}", tags=["reviews"])
     async def record_review(payload: ReviewActionRequest, request: Request, checkpoint: ReviewCheckpoint = Path(...), run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
-        record, replayed = backend.review(run_id=run_id, checkpoint=checkpoint, context=payload.context, decision=payload.decision, rationale=payload.rationale, expected_revision=payload.expected_revision, principal=principal(request), idempotency_key=key(idempotency_key))
+        record, replayed = backend.review(run_id=run_id, checkpoint=checkpoint, context=payload.context, subject_artifact_id=payload.subject_artifact_id, subject_content_hash=payload.subject_content_hash, decision=payload.decision.value, rationale=payload.rationale, expected_revision=payload.expected_revision, principal=principal(request), idempotency_key=key(idempotency_key))
         response = JSONResponse(status_code=200, content=record.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         response.headers["ETag"] = f'"{record.revision}"'
@@ -327,24 +379,26 @@ def create_app(
 
     @app.post("/api/v1/runs/{run_id}/reviews/{checkpoint}/invalidate", tags=["reviews"])
     async def invalidate_review(payload: InvalidateReviewRequest, request: Request, checkpoint: ReviewCheckpoint = Path(...), run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
-        record, replayed = backend.invalidate_review(run_id=run_id, checkpoint=checkpoint, context=payload.context, reason=payload.reason, expected_revision=payload.expected_revision, principal=principal(request), idempotency_key=key(idempotency_key))
+        record, replayed = backend.invalidate_review(run_id=run_id, checkpoint=checkpoint, context=payload.context, subject_artifact_id=payload.subject_artifact_id, subject_content_hash=payload.subject_content_hash, reason=payload.reason, expected_revision=payload.expected_revision, principal=principal(request), idempotency_key=key(idempotency_key))
         response = JSONResponse(status_code=200, content=record.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         response.headers["ETag"] = f'"{record.revision}"'
         return response
 
     @app.get("/api/v1/runs/{run_id}/validation/{artifact_id}", tags=["validation"])
-    async def validation_view(run_id: str = Path(min_length=1, max_length=128), artifact_id: str = Path(min_length=1, max_length=128), visualization_id: str = Query(default="validation-preview", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")) -> dict[str, Any]:
+    async def validation_view(request: Request, run_id: str = Path(min_length=1, max_length=128), artifact_id: str = Path(min_length=1, max_length=128), visualization_id: str = Query(default="validation-preview", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")) -> dict[str, Any]:
+        read_principal(request, "validation:read")
         return backend.validation_view(run_id=run_id, artifact_id=artifact_id, visualization_id=visualization_id).model_dump(mode="json")
 
     @app.get("/api/v1/runs/{run_id}/visualizations/{artifact_id}", tags=["visualization"])
-    async def visualization_view(run_id: str = Path(min_length=1, max_length=128), artifact_id: str = Path(min_length=1, max_length=128)) -> dict[str, Any]:
+    async def visualization_view(request: Request, run_id: str = Path(min_length=1, max_length=128), artifact_id: str = Path(min_length=1, max_length=128)) -> dict[str, Any]:
+        read_principal(request, "visualizations:read")
         return backend.visualization_graph(run_id=run_id, artifact_id=artifact_id).model_dump(mode="json")
 
     @app.post("/api/v1/runs/{run_id}/execution", tags=["execution"])
     async def submit_execution(request: Request, run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
         result, replayed = backend.submit(run_id=run_id, principal=principal(request), idempotency_key=key(idempotency_key))
-        status = 503 if result.status == "UNAVAILABLE" else 202 if result.status == "ACCEPTED" else 409 if result.status == "CONFLICT" else 422
+        status = 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202 if result.status == "ACCEPTED" else 409 if result.status == "CONFLICT" else 422
         response = JSONResponse(status_code=status, content=result.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         return response
@@ -352,7 +406,7 @@ def create_app(
     @app.post("/api/v1/runs/{run_id}/cancel", tags=["execution"])
     async def cancel_execution(request: Request, run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
         result, replayed = backend.cancel(run_id=run_id, principal=principal(request), idempotency_key=key(idempotency_key))
-        status = 503 if result.status == "UNAVAILABLE" else 202 if result.status == "ACCEPTED" else 409
+        status = 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202 if result.status == "ACCEPTED" else 409
         response = JSONResponse(status_code=status, content=result.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         return response
@@ -360,7 +414,7 @@ def create_app(
     @app.post("/api/v1/runs/{run_id}/resume", tags=["execution"])
     async def resume_execution(request: Request, run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
         result, replayed = backend.resume(run_id=run_id, principal=principal(request), idempotency_key=key(idempotency_key))
-        status = 503 if result.status == "UNAVAILABLE" else 202 if result.status == "ACCEPTED" else 409
+        status = 503 if result.status in {"UNAVAILABLE", "DELIVERY_UNKNOWN"} else 202 if result.status == "ACCEPTED" else 409
         response = JSONResponse(status_code=status, content=result.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         return response
@@ -374,6 +428,7 @@ __all__ = [
     "ErrorEnvelope",
     "PageResponse",
     "RegisterArtifactRequest",
+    "ReviewActionDecision",
     "RunView",
     "ReviewActionRequest",
     "create_app",

@@ -89,12 +89,12 @@ def test_run_control_is_idempotent_bounded_and_status_is_not_patchable(api_bundl
     )
     assert changed.status_code == 409
     assert changed.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
-    assert client.get("/api/v1/runs/unknown").status_code == 404
-    listed = client.get("/api/v1/runs", params={"page_size": 1})
+    assert client.get("/api/v1/runs/unknown", headers=AUTH).status_code == 404
+    listed = client.get("/api/v1/runs", headers=AUTH, params={"page_size": 1})
     assert listed.status_code == 200
     assert len(listed.json()["items"]) == 1
     assert client.patch(f"/api/v1/runs/{run['run_id']}", json={"status": "SUCCEEDED"}).status_code == 405
-    assert client.get("/api/v1/runs", params={"project_id": "../foreign"}).status_code == 400
+    assert client.get("/api/v1/runs", headers=AUTH, params={"project_id": "../foreign"}).status_code == 400
 
 
 def test_attempt_states_are_preserved_and_cross_run_attempts_are_hidden(api_bundle) -> None:
@@ -111,10 +111,10 @@ def test_attempt_states_are_preserved_and_cross_run_attempts_are_hidden(api_bund
                 policy_config_fingerprint="policy-v1",
             )
         )
-    response = client.get(f"/api/v1/runs/{run['run_id']}/attempts", params={"page_size": 100})
+    response = client.get(f"/api/v1/runs/{run['run_id']}/attempts", headers=AUTH, params={"page_size": 100})
     assert response.status_code == 200
     assert {item["status"] for item in response.json()["items"]} == {status.value for status in StageStatus}
-    assert client.get(f"/api/v1/runs/{run['run_id']}/attempts/unknown").status_code == 404
+    assert client.get(f"/api/v1/runs/{run['run_id']}/attempts/unknown", headers=AUTH).status_code == 404
 
 
 def test_artifacts_are_scoped_verified_and_payloads_are_not_generic(api_bundle) -> None:
@@ -126,17 +126,17 @@ def test_artifacts_are_scoped_verified_and_payloads_are_not_generic(api_bundle) 
         json={"project_id": "project", "configuration_fingerprint": platform.config.configuration_fingerprint},
     ).json()
     ref = publish_artifact(api_bundle, first["run_id"], "artifact-1")
-    listed = client.get(f"/api/v1/runs/{first['run_id']}/artifacts", params={"page_size": 1})
+    listed = client.get(f"/api/v1/runs/{first['run_id']}/artifacts", headers=AUTH, params={"page_size": 1})
     assert listed.status_code == 200
     assert listed.json()["items"][0]["artifact_id"] == ref.artifact_id
     assert "storage_key" not in listed.json()["items"][0]
-    assert client.get(f"/api/v1/artifacts/{ref.artifact_id}", params={"run_id": second["run_id"]}).status_code == 404
+    assert client.get(f"/api/v1/artifacts/{ref.artifact_id}", headers=AUTH, params={"run_id": second["run_id"]}).status_code == 404
     assert client.get(f"/api/v1/runs/{first['run_id']}/artifacts/{ref.artifact_id}/content", headers=AUTH).status_code == 403
     assert client.post(f"/api/v1/runs/{first['run_id']}/artifacts/register", headers=AUTH, json={"artifact_id": "../escape"}).status_code == 422
 
     blob = platform.artifact_store._blob_path(ref.content_hash)
     blob.write_bytes(b"tampered")
-    corrupted = client.get(f"/api/v1/artifacts/{ref.artifact_id}", params={"run_id": first["run_id"]})
+    corrupted = client.get(f"/api/v1/artifacts/{ref.artifact_id}", headers=AUTH, params={"run_id": first["run_id"]})
     assert corrupted.status_code == 409
     assert corrupted.json()["error"]["code"] == "ARTIFACT_INTEGRITY_FAILED"
 
@@ -146,6 +146,7 @@ def test_review_exact_binding_idempotency_concurrency_and_actor_boundary(api_bun
     run = create_run(api_bundle)
     ref = publish_artifact(api_bundle, run["run_id"], "review-subject")
     context = review_context(ref)
+    platform.control_store.register_review_subject_context(run_id=run["run_id"], context=context)
     body = {"context": context.model_dump(mode="json"), "decision": "ACCEPTED", "rationale": "reviewed exact evidence", "expected_revision": 0}
     first = client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}", headers={**AUTH, "Idempotency-Key": "review-key"}, json=body)
     assert first.status_code == 200
@@ -160,7 +161,7 @@ def test_review_exact_binding_idempotency_concurrency_and_actor_boundary(api_bun
     assert client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}", headers={**AUTH, "Idempotency-Key": "review-key-3"}, json=spoof).status_code == 422
     assert client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY.value}", headers={**AUTH, "Idempotency-Key": "review-key-4"}, json=body).status_code == 422
     assert client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}", json=body).status_code == 401
-    history = client.get(f"/api/v1/runs/{run['run_id']}/reviews")
+    history = client.get(f"/api/v1/runs/{run['run_id']}/reviews", headers=AUTH)
     assert history.status_code == 200 and len(history.json()["items"]) == 1
 
 
@@ -181,7 +182,7 @@ def test_submission_is_explicitly_unavailable_and_errors_are_sanitized(api_bundl
         raise RuntimeError("C:\\private\\secret\\database.sqlite")
 
     monkeypatch.setattr(backend, "get_run", explode)
-    internal = client.get("/api/v1/runs/anything")
+    internal = client.get("/api/v1/runs/anything", headers=AUTH)
     assert internal.status_code == 500
     assert "database.sqlite" not in internal.text
     assert "traceback" not in internal.text.lower()
@@ -231,6 +232,6 @@ def test_control_metadata_and_idempotency_survive_store_reopen(tmp_path: Path) -
         assert replay.status_code == 201
         assert replay.json() == run
         assert "metadata" not in replay.json()
-        assert client2.get(f"/api/v1/runs/{run['run_id']}").json()["run_id"] == run["run_id"]
+        assert client2.get(f"/api/v1/runs/{run['run_id']}", headers=AUTH).json()["run_id"] == run["run_id"]
     finally:
         reopened.close()

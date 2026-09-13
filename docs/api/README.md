@@ -10,9 +10,30 @@ the parsed documents, while checking that examples and schemas contain no
 machine-specific paths, credentials, or raw values.
 
 The `local_test` auth mode uses an explicit `X-Local-Principal` integration
-point for mutations.  It is a local/reference mode, not production
-authentication.  A trusted resolver can be injected by a deployment boundary;
-password, JWT, and credential-store behavior are outside Step27.
+point.  Protected reads require typed `*:read` scopes and mutations require
+separate `*:write` scopes.  It is a local/reference mode, not production
+authentication.  In `trusted_proxy` mode every protected read and mutation
+must receive a principal from the trusted resolver; password, JWT, and
+credential-store behavior are outside Step27.  Health and OpenAPI remain
+public system endpoints.
+
+Review requests select a registered subject artifact and may include a context
+only as an expected binding assertion.  The backend resolves the authoritative
+`ReviewCompatibilityContext` from trusted project-owned control metadata and
+passes that context to `ReviewPolicyService`.  `SKIPPED` is intentionally not
+part of the Step27 API action enum until a server-owned skip authorization
+source exists.
+
+Run and review mutations persist their idempotency response in the same
+SQLite transaction as the local mutation.  Execution commands first reserve a
+stable secret-free command identity.  If delivery or response finalization is
+uncertain, the API returns `DELIVERY_UNKNOWN` and retries replay that command
+identity without claiming exactly-once distributed execution.  Step28 owns
+durable processing.
+
+The control store schema is version `4`.  Opening a supported Step23 version
+`3` database applies the explicit Step27 migration for idempotency, review
+history/current state and trusted review-subject contexts.
 
 Generic artifact payload serving is denied.  Validation reports are projected
 through the trusted Step26 `ValidationReport -> UI_PREVIEW` path, and stored
