@@ -57,14 +57,14 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 29
-  current_role: "frontend_engineer"
-  current_specialist: "Step29 - Frontend Engineer"
-  last_completed_step: 28
-  last_completed_role: "distributed_job_processing_engineer"
-  last_completed_specialist: "Step28 - Distributed Job Processing Engineer"
-  last_completed_content_commit: "af80a16add349988b0678f9bea1b0f61d56a87b2"
-  next_step: "Step29 - Frontend Engineer"
+  current_step: 30
+  current_role: "devops_engineer"
+  current_specialist: "Step30 - DevOps Engineer"
+  last_completed_step: 29
+  last_completed_role: "frontend_engineer"
+  last_completed_specialist: "Step29 - Frontend Engineer"
+  last_completed_content_commit: "36071d6057f5bfc7176260ac4832de62424e0475"
+  next_step: "Step30 - DevOps Engineer"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
   step23_started: true
@@ -244,6 +244,30 @@ specialist_execution:
     openapi_determinism: "PASS"
     g7_status: "PENDING"
     step29_started: false
+  step29_frontend:
+    step29_started: true
+    status: "PASS"
+    scope: "Real frontend product path and G7 browser closure; Step30 not started"
+    receipt: "docs/execution/STEP29_FRONTEND_REVIEW.md"
+    gate_receipt: "docs/execution/gates/G7_END_TO_END_PRODUCT.md"
+    content_commit: "36071d6057f5bfc7176260ac4832de62424e0475"
+    validator: "tools/validate_step29_frontend.py"
+    frontend_stack: "React 18 + TypeScript + Vite + generated OpenAPI client + React Router + Vitest"
+    product_path: "managed CSV import -> source binding -> server-owned plan -> durable worker -> four typed reviews -> materialization -> validation -> browser output"
+    source_fixture: "frontend/e2e/fixtures/orders.csv; 4 real data rows"
+    review_checkpoints: "REVIEW_EVIDENCE_DECISIONS; REVIEW_CANONICAL_IDENTITY; REVIEW_ANALYTICAL_PLAN; REVIEW_MATERIALIZATION_PLAN"
+    browser_result: "REAL_PLAYWRIGHT_CLI_PASS; SUCCEEDED; visible G6 PASS and eligible; validated OLAP output available"
+    browser_console_errors: 0
+    negative_controls: "raw SQL/path/locator/fixture row content absent; no direct SQLite/DuckDB browser request"
+    accessibility_controls: "labelled inputs; navigation landmark; headings; table caption"
+    frontend_tests: "typecheck PASS; lint PASS; 3 tests PASS; build PASS"
+    focused_backend_test: "1 passed"
+    full_regression: "459 passed, 2 skipped, 41 warnings under Python 3.10 with protected path ignored"
+    all_validators: "29/29 PASS"
+    self_review: "PERFORMED; transport, mount, schema, lifecycle, validator and visible-gate findings repaired and rerun"
+    g7_status: "PASS"
+    step30_started: false
+    step30_status: "NOT_STARTED"
   step22_content_commit: "f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2"
   step22_validation_report: "docs/execution/STEP22_DATA_CORRECTNESS_REVIEW.md"
   step22_blocking_reason: ""
@@ -255,7 +279,7 @@ gates:
   G4_BOUNDED_INTELLIGENCE: "PASS"
   G5_INFERENCE_VALIDITY: "PASS"
   G6_DATA_CORRECTNESS: "PASS"
-  G7_END_TO_END_PRODUCT: "PENDING"
+  G7_END_TO_END_PRODUCT: "PASS"
   G8_REPRODUCIBLE_BUILD: "PENDING"
   G9_FUNCTIONAL_SUPPORT: "PENDING"
   G10_APPLICATION_SECURITY: "PENDING"
@@ -276,7 +300,7 @@ repository:
   remote_name: "origin"
   remote_url: "https://github.com/MahdiNavaei/Dirty-Data-to-OLAP.git"
   initial_remote_head: "9a73eb90cbc0e6c77829863b87a055bfdf692391"
-  last_verified_commit: "af80a16add349988b0678f9bea1b0f61d56a87b2"
+  last_verified_commit: "36071d6057f5bfc7176260ac4832de62424e0475"
   integrity_closure_commit: "b93a502a5fa07d2667f1f61d2ec7f9bba6f3a0f1"
   commit_recording_note: "last_verified_commit identifies the latest verified content commit, not a later metadata-only commit; integrity_closure_commit preserves the historical Step12 closure source commit; last_completed_content_commit records the latest completed specialist content or surgical repair commit; Step18 v5 is the corrected G5 PASS in review-only validated mode, v4 is superseded historical evidence, Step19 canonical artifacts are handed off to Step20 only after both critical review-binding/identity-membership repairs, Step20 analytical artifacts are handed off to Step21 only after exact child-spec package binding and generic runtime closure, Step21 semantic artifacts are handed off to Step22 only after exact Step20 binding and generic read-only query validation, Step22 G6 is PASS only after independent source-to-canonical-to-OLAP evidence and all required checks pass, Step23 local platform primitives are integrity-closed by the SQLite/filesystem reference path, Step24 bounded partitioned-local execution is accepted only for G7A semantic equivalence, Step25 UX design contracts are handed off to Step26 without claiming G7B or G7, Step26 visualization projections are handed off to Step27 with G7B PASS but G7 still PENDING, Step27 backend/control-plane API plus its integrity repair are handed off to Step28 without claiming durable execution or G7 completion, and Step28 durable SQLite job processing with lease/fencing, bounded retries, cancellation/review resume, explicit run-specific plan preparation/selection, typed review-checkpoint derivation and safe job queries is handed off to Step29 without claiming G7 completion."
 filesystem_boundary:

@@ -1571,3 +1571,28 @@ handoff_to:
 - receipt: `docs/execution/STEP28_FRESH_RUN_BOOTSTRAP_CLOSURE.md`
 - final_state: `last_completed_step=28`, `last_completed_role=distributed_job_processing_engineer`, `current_step=29`, `current_role=frontend_engineer`, `step29_started=false`, `step29_status=NOT_STARTED`
 - limitations: local SQLite/filesystem reference path only; no broker/HA/multi-node execution, production authentication, frontend/browser usability, deployment, full observability, production capacity, physical distributed execution or G7 completion claim
+
+## PRIMARY PROMPT 29/41 - Frontend Engineer
+
+- execution_step: `29`; Step30 was not started
+- role_id: `frontend_engineer`
+- starting_baseline: `HEAD=origin/main=1cf7af5ed2fd20574d1370fb699901ca8522006b`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- status: `PASS`; real local product path and G7 browser gate completed
+- frontend_stack: React 18, TypeScript, Vite, generated OpenAPI client, React Router, Vitest/Testing Library
+- implementation: managed CSV import and source selection; real run workspace; durable status polling; four review checkpoints; canonical/analytical/materialization/validation projections; uncertainty coverage; responsive accessible UI; privacy-safe aggregate output
+- source_to_discovery: browser upload -> managed `ProductSourceService`/`DurableSourceRegistry` -> run-bound `SourceSelection` -> `SOURCE_DISCOVERY` -> actual snapshot/catalog/evidence and downstream project-owned handlers
+- api_contract: OpenAPI generated from executable FastAPI app; product routes are typed; generic artifact payload access remains denied; browser uses no direct storage path
+- browser_evidence: Playwright CLI used a running Vite frontend and local FastAPI API, uploaded `frontend/e2e/fixtures/orders.csv`, created a run, accepted `REVIEW_EVIDENCE_DECISIONS`, `REVIEW_CANONICAL_IDENTITY`, `REVIEW_ANALYTICAL_PLAN` and `REVIEW_MATERIALIZATION_PLAN`, and ended with visible `SUCCEEDED`, `G6 PASS - eligible` and `Validated OLAP output available`
+- g7_negative_controls: raw SQL, file locator, target path, direct SQLite/DuckDB request and fixture row values were absent; browser console errors were `0`; accessible labels, landmarks, headings and table caption were verified
+- project_owner_self_review: independently traced source upload -> API CORS/JSON transport -> durable worker -> review/resume -> materialization -> G6 -> browser output, then reran after repairs
+- self_review_repairs: React mount, local CORS, JSON content type, DuckDB schema/query consistency, worker shutdown ordering, Windows UTF-8 subprocess capture, browser-state parsing and visible G6/output assertions
+- validator: `tools/validate_step29_frontend.py` PASS; OpenAPI, compile, focused backend, frontend checks and real browser G7 included
+- frontend_tests: typecheck PASS; lint PASS; 3 tests PASS across 2 files; production build PASS
+- focused_backend: `1 passed` real CSV product-path test; exactly four unique review checkpoints and G6/output assertions
+- full_regression: `459 passed, 2 skipped, 41 warnings` under Python 3.10 using `--ignore=tests/quality_unit_artifacts`; optional official Splink and Valentine runtimes skipped; known non-fatal dlt/SQLite cursor-cleanup traceback remained outside assertions
+- all_validators: `29/29 PASS`, including the final Step29 validator
+- content_commit: `36071d6057f5bfc7176260ac4832de62424e0475` (`feat: deliver step29 frontend product path`)
+- receipts: `docs/execution/STEP29_FRONTEND_REVIEW.md`; `docs/execution/gates/G7_END_TO_END_PRODUCT.md`
+- gate_state: `G7=PASS`; `G8-G15=PENDING`; `blocked=false`
+- final_state: `last_completed_step=29`, `last_completed_role=frontend_engineer`, `current_step=30`, `current_role=devops_engineer`, `step30_started=false`, `step30_status=NOT_STARTED`
+- limitations: bounded local SQLite/filesystem control state, local DuckDB target and explicit local-test authentication; no production auth, deployment, HA, multi-node, capacity, observability or release claim
