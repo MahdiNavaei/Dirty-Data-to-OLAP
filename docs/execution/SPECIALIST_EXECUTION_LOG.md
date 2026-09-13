@@ -1523,3 +1523,24 @@ handoff_to:
 - content_commit: `6242fb094f8dce435b3d545ef6b5dac362625166`
 - receipt: `docs/execution/STEP28_EXECUTION_PLAN_AND_REVIEW_CHECKPOINT_REPAIR.md`
 - final_state: `last_completed_step=28`, `last_completed_role=distributed_job_processing_engineer`, `current_step=29`, `current_role=frontend_engineer`, `step29_started=false`, `step29_status=NOT_STARTED`
+
+## FINAL STEP28 AUTHORITY AND MATERIALIZATION CHECKPOINT CLOSURE
+
+- execution_step: `28` final surgical authority/materialization closure; Step29 was not started
+- role_id: `distributed_job_processing_engineer`
+- status: `PASS` for server-owned execution-plan authority, compilation TargetConfig provenance, materialization review binding and durable product-path execution
+- starting_baseline: expected `HEAD=43026cc0ff5dc2dd04a77bd2fd0a81ba9e127f96`; prior Step28 content `6242fb094f8dce435b3d545ef6b5dac362625166`; the three prior Step28 receipts were preserved; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- authority_boundary: public preparation accepts bounded `ExecutionPlanIntent` only; client stage selection/policy/evidence/scope authority fields are rejected; the server resolves decisions from exact registered published verified typed `SourceCatalog`, `SourceSnapshotResult` and `CanonicalModelHypothesis` artifacts in the current run
+- selection_evidence: trusted multi-source scope forced `SCHEMA_MATCHING` despite client false; `ER_REQUIRED` forced `ENTITY_RESOLUTION` despite client false; trusted single-source `ER_NOT_REQUIRED` allowed bounded exclusions; missing/conflicting planning inputs returned typed `BLOCKED` without guessing
+- compilation_boundary: one project-owned publisher emitted and registered exact run/stage/attempt-bound `CompiledPlan`, `GeneratedSQL` and `TargetConfig`; generated-SQL semantic hash and target configuration fingerprint were checked before publication
+- materialization_review_evidence: exact compiled-plan/SQL/target IDs, semantic hashes, run/stage/attempt identity, target fingerprint and independent transport verification were required; real worker pause at `REVIEW_MATERIALIZATION_PLAN`, no pre-review materializer call, FastAPI `ACCEPTED` review, durable resume with a new attempt, and handler receipt containing `TargetConfig` all passed
+- negative_evidence: missing target, wrong target fingerprint, wrong SQL, wrong compiled plan, cross-run target and mutated compiled bytes produced no review context and no materialization authorization
+- validator: `tools/validate_step28_job_processing.py` -> `49` behavioral scenarios and `1` documentation check PASS
+- focused_tests: `42 passed` Step28; `18 passed` Step20 contract/runtime/security; `27 passed` Step27/Step23 API, architecture and security; new authority/materialization coverage included `5 passed`
+- full_regression: `450 passed, 2 skipped, 41 warnings` using Python 3.10; official Splink and Valentine integrations remain skipped because those optional runtimes are not installed; dedicated Valentine v4 import-path test passed after removing the eager PyYAML dependency from the base application import path; the existing non-fatal dlt/SQLite cursor-cleanup traceback was emitted after pytest completion
+- validators: all `28/28` repository validators PASS after the content commit; `compileall` and `git diff --check` PASS
+- gate_state: `G5=PASS`, `G6=PASS`, `G7A=PASS`, `G7B=PASS`, `G7=PENDING`, `blocked=false`
+- limitations: local SQLite/filesystem reference path only; no broker/HA/multi-node execution, production authentication, frontend/browser usability, deployment, observability completion, physical distributed execution, production capacity or G7 completion claim; unknown external side effects still require reconciliation
+- content_commit: `684856cf36f8398ac3c4146b27b8453fe09715b1` (`fix: close Step28 authority and materialization boundary`)
+- receipt: `docs/execution/STEP28_FINAL_AUTHORITY_AND_MATERIALIZATION_CLOSURE.md`
+- final_state: `last_completed_step=28`, `last_completed_role=distributed_job_processing_engineer`, `current_step=29`, `current_role=frontend_engineer`, `step29_started=false`, `step29_status=NOT_STARTED`
