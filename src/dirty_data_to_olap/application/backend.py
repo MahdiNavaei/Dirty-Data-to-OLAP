@@ -35,6 +35,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewCompatibilityContext,
     ReviewDecisionStatus,
 )
+from dirty_data_to_olap.domain.contracts.jobs import JobRecord, JobStatus
 from dirty_data_to_olap.domain.contracts.platform import (
     ArtifactIntegrityState,
     ArtifactPublicationState,
@@ -281,6 +282,24 @@ class BackendService:
         if attempt is None or attempt.run_id != run_id:
             raise BackendError("ATTEMPT_NOT_FOUND", "stage attempt was not found", status=404)
         return attempt
+
+    def list_jobs(self, *, run_id: str, status: str | None, page_size: int, offset: int) -> PageResult:
+        """Expose only the safe durable job projection; no queue payloads."""
+
+        self.get_run(run_id)
+        if status is not None:
+            try:
+                JobStatus(status)
+            except ValueError as exc:
+                raise BackendError("INVALID_JOB_STATUS", "status filter is not a supported job status", status=400) from exc
+        rows = self.control_store.list_jobs(run_id=run_id, status=status, limit=page_size + 1, offset=offset)
+        return self._page(rows, page_size=page_size, offset=offset, order_by="created_at,job_id")
+
+    def get_job(self, *, run_id: str, job_id: str) -> JobRecord:
+        job = self.control_store.get_job(job_id)
+        if job is None or job.run_id != run_id:
+            raise BackendError("JOB_NOT_FOUND", "job was not found", status=404)
+        return job
 
     def _subject_key(self, context: ReviewCompatibilityContext) -> str:
         return "|".join(

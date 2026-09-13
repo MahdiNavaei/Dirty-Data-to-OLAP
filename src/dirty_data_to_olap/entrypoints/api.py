@@ -22,6 +22,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     ReviewCheckpoint,
     ReviewCompatibilityContext,
 )
+from dirty_data_to_olap.domain.contracts.jobs import JobRecord
 from dirty_data_to_olap.domain.contracts.platform import ArtifactRef, RunRecord, StageAttemptRecord
 
 
@@ -245,7 +246,7 @@ def create_app(
             raise BackendError("UNAUTHENTICATED", "local test authentication requires X-Local-Principal", status=401)
         return Principal(
             subject=subject,
-            scopes=frozenset({"runs:read", "runs:write", "attempts:read", "reviews:read", "reviews:write", "artifacts:read", "artifacts:write", "validation:read", "visualizations:read"}),
+            scopes=frozenset({"runs:read", "runs:write", "attempts:read", "jobs:read", "reviews:read", "reviews:write", "artifacts:read", "artifacts:write", "validation:read", "visualizations:read"}),
             source="LOCAL_TEST_AUTH",
         )
 
@@ -338,6 +339,27 @@ def create_app(
     async def get_attempt(request: Request, run_id: str = Path(min_length=1, max_length=128), attempt_id: str = Path(min_length=1, max_length=128)) -> StageAttemptRecord:
         read_principal(request, "attempts:read")
         return backend.get_attempt(run_id=run_id, attempt_id=attempt_id)
+
+    @app.get("/api/v1/runs/{run_id}/jobs", response_model=PageResponse, tags=["jobs"])
+    async def list_jobs(
+        request: Request,
+        run_id: str = Path(min_length=1, max_length=128),
+        status: str | None = Query(default=None, max_length=32),
+        page_size: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        read_principal(request, "jobs:read")
+        return _model_page(backend.list_jobs(run_id=run_id, status=status, page_size=page_size, offset=offset))
+
+    @app.get("/api/v1/runs/{run_id}/jobs/{job_id}", response_model=JobRecord, tags=["jobs"])
+    async def get_run_job(request: Request, run_id: str = Path(min_length=1, max_length=128), job_id: str = Path(min_length=1, max_length=128)) -> JobRecord:
+        read_principal(request, "jobs:read")
+        return backend.get_job(run_id=run_id, job_id=job_id)
+
+    @app.get("/api/v1/jobs/{job_id}", response_model=JobRecord, tags=["jobs"])
+    async def get_job(request: Request, job_id: str = Path(min_length=1, max_length=128), run_id: str = Query(min_length=1, max_length=128)) -> JobRecord:
+        read_principal(request, "jobs:read")
+        return backend.get_job(run_id=run_id, job_id=job_id)
 
     @app.get("/api/v1/runs/{run_id}/artifacts", response_model=PageResponse, tags=["artifacts"])
     async def list_artifacts(

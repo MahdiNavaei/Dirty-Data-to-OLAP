@@ -165,14 +165,17 @@ def test_review_exact_binding_idempotency_concurrency_and_actor_boundary(api_bun
     assert history.status_code == 200 and len(history.json()["items"]) == 1
 
 
-def test_submission_is_explicitly_unavailable_and_errors_are_sanitized(api_bundle, monkeypatch) -> None:
+def test_submission_is_durably_accepted_and_errors_are_sanitized(api_bundle, monkeypatch) -> None:
     _platform, backend, client = api_bundle
     run = create_run(api_bundle)
     unavailable = client.post(f"/api/v1/runs/{run['run_id']}/execution", headers={**AUTH, "Idempotency-Key": "submit-key"})
-    assert unavailable.status_code == 503
-    assert unavailable.json()["status"] == "UNAVAILABLE"
+    assert unavailable.status_code == 202
+    assert unavailable.json()["status"] == "ACCEPTED"
+    assert unavailable.json()["submission_id"]
     replay = client.post(f"/api/v1/runs/{run['run_id']}/execution", headers={**AUTH, "Idempotency-Key": "submit-key"})
-    assert replay.status_code == 503 and replay.json() == unavailable.json()
+    assert replay.status_code == 202 and replay.json() == unavailable.json()
+    jobs = client.get(f"/api/v1/runs/{run['run_id']}/jobs", headers=AUTH)
+    assert jobs.status_code == 200 and jobs.json()["items"][0]["job_id"] == unavailable.json()["submission_id"]
     malformed = client.post("/api/v1/runs", headers={**AUTH, "Idempotency-Key": "bad-payload"}, json={"project_id": "project"})
     assert malformed.status_code == 422
     assert set(malformed.json()) == {"error"}

@@ -180,7 +180,10 @@ is a transport contract.
 - Idempotency: executor never overwrites prior attempts.
 - Optionality: required for heavy stages.
 - Failure: preserves item/stage/run failure semantics and cancellation evidence.
-- Forbidden: queue/distributed implementation is not required in V1.
+- Step28 implementation: `application.jobs.JobWorker` consumes durable SQLite
+  jobs with leases and fencing; the executor remains the project-owned typed
+  boundary and the queue adapter is not allowed to become semantic authority.
+- Forbidden: provider-native queue payloads, raw rows, or exactly-once claims.
 # Step11 source security boundary
 
 Database security is a cross-cutting enforcement boundary around `SourceAdapter`.

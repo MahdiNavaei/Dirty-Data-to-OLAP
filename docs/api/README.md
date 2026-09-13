@@ -31,15 +31,19 @@ uncertain, the API returns `DELIVERY_UNKNOWN` and retries replay that command
 identity without claiming exactly-once distributed execution.  Step28 owns
 durable processing.
 
-The control store schema is version `4`.  Opening a supported Step23 version
-`3` database applies the explicit Step27 migration for idempotency, review
-history/current state and trusted review-subject contexts.
+The control store schema is version `5`.  Opening a supported Step23 version
+`3` or Step27 version `4` database applies ordered forward migrations. Version
+5 adds the durable execution-plan and job tables without moving raw data into
+the control store.
 
 Generic artifact payload serving is denied.  Validation reports are projected
 through the trusted Step26 `ValidationReport -> UI_PREVIEW` path, and stored
 visualization graphs are returned only after project/run scope and artifact
 integrity verification.
 
-Step27 does not own durable job processing.  Without an injected
-`ExecutionSubmissionPort`, submit/cancel/resume return `UNAVAILABLE`; no
-`QUEUED` state is claimed.  Step28 owns the durable executor.
+Step28 owns durable job processing. The local composition wires
+`DurableExecutionSubmission` to SQLite; submit/cancel/resume return a stable
+accepted command/job identity, while a worker later records the authoritative
+outcome. `GET /api/v1/runs/{run_id}/jobs` and scoped job detail expose the
+project-owned safe query contract. No exactly-once or live-production queue
+claim is made.

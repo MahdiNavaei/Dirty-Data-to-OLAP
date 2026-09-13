@@ -6,7 +6,7 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
@@ -32,20 +32,31 @@ from dirty_data_to_olap.domain.contracts.platform import (
     LocalPlatformConfig,
     ReproducibilityManifest,
     RunRecord,
+    RunStatus,
     StageAttemptRecord,
     StageStatus,
     StagedDatasetManifest,
 )
 from dirty_data_to_olap.domain.contracts.api import (
+    ExecutionCommand,
     IdempotencyRecord,
     ReviewHistoryRecord,
     ReviewRecord,
 )
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision
+from dirty_data_to_olap.domain.contracts.jobs import (
+    ExecutionPlan,
+    FailureClassification,
+    JobKind,
+    JobRecord,
+    JobStatus,
+    StageExecutionResult,
+)
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
+from dirty_data_to_olap.domain.contracts.source import stable_id
 
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 def _dump(value: object) -> str:
@@ -150,6 +161,10 @@ class SQLiteControlStore(ControlStorePort):
                         self._migrate_v3_to_v4(connection)
                         next_version = 4
                         detail = "Step27 control-plane idempotency, review context and command capabilities"
+                    elif version == 4:
+                        self._migrate_v4_to_v5(connection)
+                        next_version = 5
+                        detail = "Step28 durable jobs, execution plans, leases and fencing"
                     else:
                         connection.rollback()
                         raise UnsupportedSchemaVersionError(f"unsupported control database schema {version}")
@@ -163,6 +178,7 @@ class SQLiteControlStore(ControlStorePort):
                 # Repeated opens repair a partial capability installation
                 # without changing the already-recorded schema version.
                 self._ensure_step27_tables(connection)
+                self._ensure_step28_tables(connection)
                 return version
             finally:
                 connection.close()
@@ -193,6 +209,7 @@ class SQLiteControlStore(ControlStorePort):
         for statement in statements:
             connection.execute(statement)
         SQLiteControlStore._ensure_step27_tables(connection)
+        SQLiteControlStore._ensure_step28_tables(connection)
 
     @staticmethod
     def _ensure_step27_tables(connection: sqlite3.Connection) -> None:
@@ -210,6 +227,21 @@ class SQLiteControlStore(ControlStorePort):
         columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(api_idempotency)").fetchall()}
         if "state" not in columns:
             connection.execute("ALTER TABLE api_idempotency ADD COLUMN state TEXT NOT NULL DEFAULT 'COMPLETED'")
+
+    @staticmethod
+    def _ensure_step28_tables(connection: sqlite3.Connection) -> None:
+        """Install only the durable Step28 capability, not an in-memory queue."""
+
+        statements = (
+            "CREATE TABLE IF NOT EXISTS execution_plans (plan_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), graph_source TEXT NOT NULL, graph_version TEXT NOT NULL, content_hash TEXT NOT NULL, plan_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(run_id))",
+            "CREATE INDEX IF NOT EXISTS idx_execution_plans_run ON execution_plans(run_id)",
+            "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), job_kind TEXT NOT NULL, command_id TEXT UNIQUE, action TEXT, stage_id TEXT, parent_job_id TEXT, plan_id TEXT REFERENCES execution_plans(plan_id), attempt_id TEXT REFERENCES stage_attempts(attempt_id), status TEXT NOT NULL, priority INTEGER NOT NULL, created_at TEXT NOT NULL, available_at TEXT NOT NULL, lease_owner TEXT, lease_generation INTEGER NOT NULL DEFAULT 0, lease_expires_at TEXT, heartbeat_at TEXT, delivery_count INTEGER NOT NULL DEFAULT 0, retry_count INTEGER NOT NULL DEFAULT 0, failure_code TEXT, failure_classification TEXT, failure_reason TEXT, cancellation_requested INTEGER NOT NULL DEFAULT 0, cancellation_requested_at TEXT, result_refs TEXT NOT NULL DEFAULT '[]', review_context_json TEXT, metadata TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 0, UNIQUE(run_id, stage_id))",
+            "CREATE INDEX IF NOT EXISTS idx_jobs_claimable ON jobs(status, available_at, priority, created_at, job_id)",
+            "CREATE INDEX IF NOT EXISTS idx_jobs_run_status ON jobs(run_id, status, stage_id)",
+            "CREATE INDEX IF NOT EXISTS idx_jobs_command ON jobs(command_id)",
+        )
+        for statement in statements:
+            connection.execute(statement)
 
     @staticmethod
     def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
@@ -256,6 +288,12 @@ class SQLiteControlStore(ControlStorePort):
         """Install Step27 capabilities through the normal migration chain."""
 
         SQLiteControlStore._ensure_step27_tables(connection)
+
+    @staticmethod
+    def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
+        """Install Step28 through an explicit forward migration."""
+
+        SQLiteControlStore._ensure_step28_tables(connection)
 
     @staticmethod
     def _artifact_from_row(row: sqlite3.Row) -> ArtifactRef:
@@ -892,6 +930,334 @@ class SQLiteControlStore(ControlStorePort):
         with self._connect() as connection:
             row = connection.execute("SELECT manifest FROM staged_datasets WHERE run_id = ? AND dataset_id = ? AND dataset_version = ?", (run_id, dataset_id, dataset_version)).fetchone()
             return None if row is None else StagedDatasetManifest.model_validate(_load_json(row["manifest"], {}))
+
+    # ------------------------------------------------------------------
+    # Step28 durable job substrate
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _plan_from_row(row: sqlite3.Row) -> ExecutionPlan:
+        plan = ExecutionPlan.model_validate(_load_json(str(row["plan_json"]), {}))
+        if str(row["content_hash"]) != plan.content_hash:
+            raise PlatformError("execution plan content hash is corrupt")
+        return plan
+
+    @staticmethod
+    def _job_from_row(row: sqlite3.Row) -> JobRecord:
+        context = None
+        if row["review_context_json"]:
+            context = ReviewCompatibilityContext.model_validate(_load_json(str(row["review_context_json"]), {}))
+        return JobRecord(
+            job_id=str(row["job_id"]),
+            run_id=str(row["run_id"]),
+            job_kind=JobKind(str(row["job_kind"])),
+            command_id=row["command_id"],
+            action=row["action"],
+            stage_id=row["stage_id"],
+            parent_job_id=row["parent_job_id"],
+            plan_id=row["plan_id"],
+            attempt_id=row["attempt_id"],
+            status=JobStatus(str(row["status"])),
+            priority=int(row["priority"]),
+            created_at=_parse_datetime(str(row["created_at"])),
+            available_at=_parse_datetime(str(row["available_at"])),
+            lease_owner=row["lease_owner"],
+            lease_generation=int(row["lease_generation"]),
+            lease_expires_at=_parse_datetime(str(row["lease_expires_at"])) if row["lease_expires_at"] else None,
+            heartbeat_at=_parse_datetime(str(row["heartbeat_at"])) if row["heartbeat_at"] else None,
+            delivery_count=int(row["delivery_count"]),
+            retry_count=int(row["retry_count"]),
+            failure_code=row["failure_code"],
+            failure_classification=FailureClassification(str(row["failure_classification"])) if row["failure_classification"] else None,
+            failure_reason=row["failure_reason"],
+            cancellation_requested=bool(row["cancellation_requested"]),
+            cancellation_requested_at=_parse_datetime(str(row["cancellation_requested_at"])) if row["cancellation_requested_at"] else None,
+            result_refs=tuple(_load_json(str(row["result_refs"]), [])),
+            review_context=context,
+            metadata=dict(_load_json(str(row["metadata"]), {})),
+            revision=int(row["revision"]),
+        )
+
+    def register_execution_plan(self, plan: ExecutionPlan) -> ExecutionPlan:
+        with self._transaction() as connection:
+            if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (plan.run_id,)).fetchone() is None:
+                raise PlatformError("execution plan requires an existing run")
+            existing = connection.execute("SELECT * FROM execution_plans WHERE run_id = ?", (plan.run_id,)).fetchone()
+            if existing is not None:
+                stored = self._plan_from_row(existing)
+                if stored != plan:
+                    raise ArtifactConflictError("run already has a different execution plan")
+                return stored
+            connection.execute(
+                "INSERT INTO execution_plans(plan_id, run_id, graph_source, graph_version, content_hash, plan_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (plan.plan_id, plan.run_id, plan.graph_source, plan.graph_version, plan.content_hash, _dump(plan), plan.created_at.isoformat()),
+            )
+            self._audit(connection, "execution_plan_registered", run_id=plan.run_id, status="REGISTERED", detail=f"plan={plan.plan_id}; source={plan.graph_source}")
+            return plan
+
+    def get_execution_plan(self, run_id: str) -> ExecutionPlan | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM execution_plans WHERE run_id = ?", (run_id,)).fetchone()
+            return None if row is None else self._plan_from_row(row)
+
+    @staticmethod
+    def _command_job_id(command: ExecutionCommand) -> str:
+        return stable_id("job", {"command_id": command.command_id})
+
+    def enqueue_execution_command(self, command: ExecutionCommand, run: RunRecord) -> tuple[JobRecord, bool]:
+        now = command.created_at
+        with self._transaction() as connection:
+            if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (run.run_id,)).fetchone() is None:
+                raise PlatformError("execution command requires an existing run")
+            existing = connection.execute("SELECT * FROM jobs WHERE command_id = ?", (command.command_id,)).fetchone()
+            if existing is not None:
+                stored = self._job_from_row(existing)
+                if (stored.run_id, stored.action) != (command.run_id, command.action.value) or stored.metadata.get("command_fingerprint") not in {None, command.request_fingerprint}:
+                    raise ArtifactConflictError("command_id is already bound to a different command")
+                return stored, True
+            job = JobRecord(
+                job_id=self._command_job_id(command),
+                run_id=command.run_id,
+                job_kind=JobKind.COMMAND,
+                command_id=command.command_id,
+                action=command.action.value,
+                status=JobStatus.QUEUED,
+                created_at=now,
+                available_at=now,
+                metadata={"principal_source": command.principal_source, "command_fingerprint": command.request_fingerprint},
+            )
+            connection.execute(
+                "INSERT INTO jobs(job_id, run_id, job_kind, command_id, action, stage_id, parent_job_id, plan_id, attempt_id, status, priority, created_at, available_at, lease_owner, lease_generation, lease_expires_at, heartbeat_at, delivery_count, retry_count, failure_code, failure_classification, failure_reason, cancellation_requested, cancellation_requested_at, result_refs, review_context_json, metadata, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (job.job_id, job.run_id, job.job_kind.value, job.command_id, job.action, None, None, None, None, job.status.value, job.priority, job.created_at.isoformat(), job.available_at.isoformat(), None, 0, None, None, 0, 0, None, None, None, 0, None, _dump(job.result_refs), None, _dump(job.metadata), 0),
+            )
+            self._audit(connection, "job_enqueued", run_id=job.run_id, status=job.status.value, detail=f"job={job.job_id}; command={command.command_id}")
+            return job, False
+
+    def enqueue_stage_job(self, *, run_id: str, plan_id: str, stage_id: str, parent_job_id: str | None = None, available_at: datetime | None = None) -> JobRecord:
+        now = available_at or datetime.now(timezone.utc)
+        with self._transaction() as connection:
+            plan_row = connection.execute("SELECT * FROM execution_plans WHERE plan_id = ? AND run_id = ?", (plan_id, run_id)).fetchone()
+            if plan_row is None:
+                raise PlatformError("stage job requires a registered run plan")
+            plan = self._plan_from_row(plan_row)
+            stage = plan.stage(stage_id)
+            if stage is None:
+                raise PlatformError("stage job is not present in the authoritative execution plan")
+            existing = connection.execute("SELECT * FROM jobs WHERE run_id = ? AND stage_id = ?", (run_id, stage_id)).fetchone()
+            if existing is not None:
+                return self._job_from_row(existing)
+            job = JobRecord(
+                job_id=stable_id("stage-job", {"run_id": run_id, "plan_id": plan_id, "stage_id": stage_id}),
+                run_id=run_id,
+                job_kind=JobKind.STAGE,
+                stage_id=stage_id,
+                plan_id=plan_id,
+                parent_job_id=parent_job_id,
+                status=JobStatus.QUEUED,
+                created_at=now,
+                available_at=now,
+                metadata=dict(stage.metadata),
+            )
+            connection.execute(
+                "INSERT INTO jobs(job_id, run_id, job_kind, command_id, action, stage_id, parent_job_id, plan_id, attempt_id, status, priority, created_at, available_at, lease_owner, lease_generation, lease_expires_at, heartbeat_at, delivery_count, retry_count, failure_code, failure_classification, failure_reason, cancellation_requested, cancellation_requested_at, result_refs, review_context_json, metadata, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (job.job_id, job.run_id, job.job_kind.value, None, None, job.stage_id, job.parent_job_id, job.plan_id, None, job.status.value, job.priority, job.created_at.isoformat(), job.available_at.isoformat(), None, 0, None, None, 0, 0, None, None, None, 0, None, _dump(job.result_refs), None, _dump(job.metadata), 0),
+            )
+            self._audit(connection, "stage_job_enqueued", run_id=run_id, status=job.status.value, detail=f"job={job.job_id}; stage={stage_id}")
+            return job
+
+    def get_job(self, job_id: str) -> JobRecord | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            return None if row is None else self._job_from_row(row)
+
+    def get_stage_job(self, *, run_id: str, stage_id: str) -> JobRecord | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM jobs WHERE run_id = ? AND stage_id = ?", (run_id, stage_id)).fetchone()
+            return None if row is None else self._job_from_row(row)
+
+    def list_jobs(self, *, run_id: str, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[JobRecord, ...]:
+        if limit < 1 or offset < 0:
+            raise ValueError("job list limit must be positive and offset non-negative")
+        sql = "SELECT * FROM jobs WHERE run_id = ?"
+        params: list[object] = [run_id]
+        if status is not None:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY created_at, job_id LIMIT ? OFFSET ?"
+        params.extend((limit, offset))
+        with self._connect() as connection:
+            return tuple(self._job_from_row(row) for row in connection.execute(sql, tuple(params)).fetchall())
+
+    def claim_next_job(self, *, worker_id: str, now: datetime, lease_seconds: int = 30) -> JobRecord | None:
+        if not worker_id or lease_seconds < 1:
+            raise ValueError("worker_id and a positive lease are required")
+        expires = now + timedelta(seconds=lease_seconds)
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM jobs WHERE (status IN ('QUEUED', 'RETRY_WAIT') AND available_at <= ? AND cancellation_requested = 0) OR (status = 'RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?) ORDER BY priority DESC, available_at, created_at, job_id LIMIT 1",
+                (now.isoformat(), now.isoformat()),
+            ).fetchone()
+            if row is None:
+                return None
+            generation = int(row["lease_generation"]) + 1
+            cursor = connection.execute(
+                "UPDATE jobs SET status = ?, lease_owner = ?, lease_generation = ?, lease_expires_at = ?, heartbeat_at = ?, delivery_count = delivery_count + 1, revision = revision + 1 WHERE job_id = ? AND ((status IN ('QUEUED', 'RETRY_WAIT') AND available_at <= ? AND cancellation_requested = 0) OR (status = 'RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?))",
+                (JobStatus.RUNNING.value, worker_id, generation, expires.isoformat(), now.isoformat(), row["job_id"], now.isoformat(), now.isoformat()),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("job claim lost its compare-and-swap race")
+            claimed = self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (row["job_id"],)).fetchone())
+            self._audit(connection, "job_claimed", run_id=claimed.run_id, status=claimed.status.value, detail=f"job={claimed.job_id}; worker={worker_id}; generation={generation}")
+            return claimed
+
+    def heartbeat_job(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime, lease_seconds: int = 30) -> JobRecord:
+        expires = now + timedelta(seconds=lease_seconds)
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE jobs SET lease_expires_at = ?, heartbeat_at = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ? AND lease_expires_at > ?",
+                (expires.isoformat(), now.isoformat(), job_id, JobStatus.RUNNING.value, worker_id, lease_generation, now.isoformat()),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("heartbeat rejected by the current lease fence")
+            return self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
+
+    def ensure_stage_attempt(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime) -> StageAttemptRecord:
+        with self._transaction() as connection:
+            row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise PlatformError("job was not found")
+            if row["job_kind"] != JobKind.STAGE.value or row["status"] != JobStatus.RUNNING.value or row["lease_owner"] != worker_id or int(row["lease_generation"]) != lease_generation:
+                raise ConcurrencyConflictError("stage start rejected by the current lease fence")
+            if row["lease_expires_at"] is None or _parse_datetime(str(row["lease_expires_at"])) <= now:
+                raise ConcurrencyConflictError("stage start rejected after lease expiry")
+            if row["attempt_id"]:
+                attempt_row = connection.execute("SELECT * FROM stage_attempts WHERE attempt_id = ?", (row["attempt_id"],)).fetchone()
+                if attempt_row is None:
+                    raise PlatformError("job references a missing stage attempt")
+                return self._attempt_from_row(attempt_row)
+            plan = self._plan_from_row(connection.execute("SELECT * FROM execution_plans WHERE plan_id = ?", (row["plan_id"],)).fetchone())
+            stage = plan.stage(str(row["stage_id"]))
+            if stage is None:
+                raise PlatformError("stage is not in the execution plan")
+            last = connection.execute("SELECT COALESCE(MAX(attempt_number), 0) FROM stage_attempts WHERE run_id = ? AND stage_id = ?", (row["run_id"], row["stage_id"])).fetchone()[0]
+            input_refs: list[str] = []
+            for dependency_id in stage.dependencies:
+                dependency_row = connection.execute("SELECT result_refs FROM jobs WHERE run_id = ? AND stage_id = ?", (row["run_id"], dependency_id)).fetchone()
+                if dependency_row is not None:
+                    input_refs.extend(str(ref) for ref in _load_json(str(dependency_row["result_refs"]), []))
+            attempt = StageAttemptRecord(
+                attempt_id=stable_id("stage-attempt", {"job_id": job_id, "stage_id": row["stage_id"], "attempt_number": int(last) + 1}),
+                run_id=str(row["run_id"]),
+                stage_id=str(row["stage_id"]),
+                attempt_number=int(last) + 1,
+                status=StageStatus.RUNNING,
+                started_at=now,
+                input_artifact_refs=tuple(input_refs),
+                policy_config_fingerprint=stage.policy_config_fingerprint,
+                revision=0,
+            )
+            connection.execute(
+                "INSERT INTO stage_attempts(attempt_id, run_id, stage_id, attempt_number, status, started_at, finished_at, input_artifact_refs, output_artifact_refs, failure_code, failure_reason, policy_config_fingerprint, resource_budget_ref, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (attempt.attempt_id, attempt.run_id, attempt.stage_id, attempt.attempt_number, attempt.status.value, attempt.started_at.isoformat(), None, _dump(attempt.input_artifact_refs), _dump(attempt.output_artifact_refs), None, None, attempt.policy_config_fingerprint, None, 0),
+            )
+            cursor = connection.execute("UPDATE jobs SET attempt_id = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ? AND attempt_id IS NULL", (attempt.attempt_id, job_id, JobStatus.RUNNING.value, worker_id, lease_generation))
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("stage attempt start lost its compare-and-swap race")
+            self._audit(connection, "stage_attempt_started", run_id=attempt.run_id, status=attempt.status.value, detail=f"job={job_id}; attempt={attempt.attempt_id}; generation={lease_generation}")
+            return attempt
+
+    def _lease_row(self, connection: sqlite3.Connection, *, job_id: str, worker_id: str, lease_generation: int, now: datetime | None = None) -> sqlite3.Row:
+        row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise PlatformError("job was not found")
+        if row["status"] != JobStatus.RUNNING.value or row["lease_owner"] != worker_id or int(row["lease_generation"]) != lease_generation:
+            raise ConcurrencyConflictError("job mutation rejected by the lease fence")
+        if now is not None and (row["lease_expires_at"] is None or _parse_datetime(str(row["lease_expires_at"])) <= now):
+            raise ConcurrencyConflictError("job mutation rejected after lease expiry")
+        return row
+
+    def finalize_stage_job(self, *, job_id: str, worker_id: str, lease_generation: int, attempt: StageAttemptRecord, result: StageExecutionResult, status: str, now: datetime, retry_count: int = 0, available_at: datetime | None = None) -> JobRecord:
+        with self._transaction() as connection:
+            row = self._lease_row(connection, job_id=job_id, worker_id=worker_id, lease_generation=lease_generation, now=now)
+            requested_status = JobStatus(status)
+            run_row = connection.execute("SELECT status FROM runs WHERE run_id = ?", (row["run_id"],)).fetchone()
+            cancelled = bool(row["cancellation_requested"]) or (run_row is not None and run_row["status"] == "CANCELLED")
+            effective_attempt = attempt
+            effective_status = requested_status
+            failure_code = result.failure_code
+            failure_classification = result.failure_classification
+            failure_reason = result.failure_reason
+            if cancelled and requested_status in {JobStatus.SUCCEEDED, JobStatus.NEEDS_REVIEW, JobStatus.BLOCKED, JobStatus.RETRY_WAIT}:
+                effective_status = JobStatus.CANCELLED
+                effective_attempt = attempt.model_copy(update={"status": StageStatus.CANCELLED, "finished_at": now, "output_artifact_refs": ()})
+                failure_code = "CANCELLATION_REQUESTED"
+                failure_classification = FailureClassification.CANCELLED
+                failure_reason = "stage completion lost the cancellation race"
+            if effective_attempt.attempt_id != row["attempt_id"]:
+                raise ConcurrencyConflictError("finalization attempt does not match the fenced job")
+            updated_attempt = effective_attempt.model_copy(update={"finished_at": effective_attempt.finished_at or now})
+            attempt_cursor = connection.execute(
+                "UPDATE stage_attempts SET status = ?, started_at = ?, finished_at = ?, input_artifact_refs = ?, output_artifact_refs = ?, failure_code = ?, failure_reason = ?, policy_config_fingerprint = ?, resource_budget_ref = ?, revision = revision + 1 WHERE attempt_id = ? AND revision = ?",
+                (updated_attempt.status.value, updated_attempt.started_at.isoformat() if updated_attempt.started_at else None, updated_attempt.finished_at.isoformat() if updated_attempt.finished_at else None, _dump(updated_attempt.input_artifact_refs), _dump(updated_attempt.output_artifact_refs), updated_attempt.failure_code, updated_attempt.failure_reason, updated_attempt.policy_config_fingerprint, updated_attempt.resource_budget_ref, updated_attempt.attempt_id, updated_attempt.revision),
+            )
+            if attempt_cursor.rowcount != 1:
+                raise ConcurrencyConflictError("stage attempt finalization changed before its job")
+            if effective_status is JobStatus.RETRY_WAIT:
+                next_attempt_id = None
+            else:
+                next_attempt_id = updated_attempt.attempt_id
+            cursor = connection.execute(
+                "UPDATE jobs SET status = ?, attempt_id = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, retry_count = ?, failure_code = ?, failure_classification = ?, failure_reason = ?, result_refs = ?, review_context_json = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
+                (effective_status.value, next_attempt_id, (available_at or now).isoformat(), retry_count, failure_code, failure_classification.value if isinstance(failure_classification, FailureClassification) else failure_classification, failure_reason, _dump(result.output_artifact_refs if effective_status is not JobStatus.CANCELLED else ()), _dump(result.review_context) if result.review_context is not None else None, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("stage finalization lost its compare-and-swap race")
+            self._audit(connection, "stage_job_finalized", run_id=str(row["run_id"]), status=effective_status.value, detail=f"job={job_id}; attempt={updated_attempt.attempt_id}; generation={lease_generation}")
+            return self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
+
+    def finalize_command_job(self, *, job_id: str, worker_id: str, lease_generation: int, status: str, now: datetime, detail: str, failure_code: str | None = None, failure_classification: str | None = None) -> JobRecord:
+        if len(detail) > 512 or "\n" in detail or "\r" in detail:
+            raise ValueError("command result detail must be safe metadata")
+        with self._transaction() as connection:
+            row = self._lease_row(connection, job_id=job_id, worker_id=worker_id, lease_generation=lease_generation, now=now)
+            cursor = connection.execute(
+                "UPDATE jobs SET status = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, failure_code = ?, failure_classification = ?, failure_reason = ?, revision = revision + 1 WHERE job_id = ? AND status = ? AND lease_owner = ? AND lease_generation = ?",
+                (JobStatus(status).value, failure_code, failure_classification, detail, job_id, JobStatus.RUNNING.value, worker_id, lease_generation),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("command finalization lost its lease fence")
+            self._audit(connection, "command_job_finalized", run_id=str(row["run_id"]), status=status, detail=f"job={job_id}; {detail}")
+            return self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
+
+    def request_run_cancellation(self, *, run_id: str, now: datetime) -> RunRecord:
+        with self._transaction() as connection:
+            run_row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            if run_row is None:
+                raise PlatformError("run was not found")
+            if run_row["status"] not in {RunStatus.SUCCEEDED.value, RunStatus.CANCELLED.value}:
+                connection.execute("UPDATE runs SET status = ?, revision = revision + 1 WHERE run_id = ? AND revision = ?", (RunStatus.CANCELLED.value, run_id, int(run_row["revision"])))
+            connection.execute(
+                "UPDATE jobs SET status = CASE WHEN status IN ('QUEUED', 'RETRY_WAIT', 'NEEDS_REVIEW', 'BLOCKED') THEN 'CANCELLED' ELSE status END, cancellation_requested = 1, cancellation_requested_at = ?, lease_owner = CASE WHEN status IN ('QUEUED', 'RETRY_WAIT', 'NEEDS_REVIEW', 'BLOCKED') THEN NULL ELSE lease_owner END, lease_expires_at = CASE WHEN status IN ('QUEUED', 'RETRY_WAIT', 'NEEDS_REVIEW', 'BLOCKED') THEN NULL ELSE lease_expires_at END, heartbeat_at = CASE WHEN status IN ('QUEUED', 'RETRY_WAIT', 'NEEDS_REVIEW', 'BLOCKED') THEN NULL ELSE heartbeat_at END, revision = revision + 1 WHERE run_id = ? AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')",
+                (now.isoformat(), run_id),
+            )
+            self._audit(connection, "run_cancellation_requested", run_id=run_id, status=RunStatus.CANCELLED.value, detail="queued work cancelled; running work fenced at finalization")
+            return self._run_from_row(connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone())
+
+    def resume_job(self, *, job_id: str, now: datetime) -> JobRecord:
+        with self._transaction() as connection:
+            row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise PlatformError("job was not found")
+            if row["status"] not in {JobStatus.NEEDS_REVIEW.value, JobStatus.BLOCKED.value, JobStatus.FAILED.value}:
+                raise PlatformError("only review, blocked or failed jobs can be resumed")
+            cursor = connection.execute(
+                "UPDATE jobs SET status = ?, attempt_id = NULL, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, cancellation_requested = 0, cancellation_requested_at = NULL, failure_code = NULL, failure_classification = NULL, failure_reason = NULL, revision = revision + 1 WHERE job_id = ? AND status = ?",
+                (JobStatus.QUEUED.value, now.isoformat(), job_id, row["status"]),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrencyConflictError("job resume lost its state compare-and-swap")
+            self._audit(connection, "job_resumed", run_id=str(row["run_id"]), status=JobStatus.QUEUED.value, detail=f"job={job_id}")
+            return self._job_from_row(connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
 
     def mark_artifact_tombstoned(self, artifact_id: str, *, plan_id: str, reason: str) -> None:
         with self._transaction() as connection:

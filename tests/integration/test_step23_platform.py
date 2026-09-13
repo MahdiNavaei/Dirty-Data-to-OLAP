@@ -251,7 +251,7 @@ def test_sqlite_migrates_legacy_staging_and_gate_rows_without_reset(tmp_path: Pa
     migrated = SQLiteControlStore(control.path, project_root=control.project_root)
     recovered_manifest = migrated.get_staged_dataset(run.run_id, "dataset", "v1")
     recovered_gate = migrated.get_gate_evidence("G6_DATA_CORRECTNESS", run_id=run.run_id)
-    assert migrated.schema_version == 4
+    assert migrated.schema_version == 5
     assert recovered_manifest.identity_version == "legacy-v1"
     assert recovered_manifest.parts[0].artifact_ref.artifact_id == staged_ref.artifact_id
     assert recovered_gate.validation_report_run_id == run.run_id

@@ -14,12 +14,31 @@ The reference runtime is one local checkout with:
 
 Step23 does not execute heavy stages. It persists run/stage metadata and
 provides the local artifact, staging, capability and lifecycle primitives that
-the future executor will consume. Cheap control operations such as reading run
-metadata and listing artifacts may be synchronous.
+Step28 consumes. Cheap control operations such as reading run metadata and
+listing artifacts may be synchronous.
 
 ## Heavy versus control execution
 
-Profiling, dependency discovery, schema matching, entity resolution, materialization and validation use StageExecutor. Control operations do not invoke engines directly. No Celery, Kafka, Kubernetes or distributed worker implementation is introduced by Step 04.
+Profiling, dependency discovery, schema matching, entity resolution, materialization and validation use StageExecutor. Control operations do not invoke engines directly. Step28 adds a bounded local worker over the SQLite control store; it does not introduce a second DAG or require Celery, Kafka, Kubernetes or a hosted broker.
+
+## Step28 durable job boundary
+
+`ExecutionCommand.command_id`, durable `JobRecord.job_id`,
+`StageExecutionRequest.request_id`, `StageAttemptRecord.attempt_id`, artifact
+IDs and the run ID are distinct identities. Delivery is at-least-once
+compatible. SQLite transactions claim jobs with leases and monotonically
+increasing fencing generations; stale workers cannot finalize reclaimed work.
+Retries create new stage attempts and never claim exactly-once execution.
+Queued cancellation is immediate, running cancellation is cooperative and the
+finalization fence converts a completion race to `CANCELLED`. Review resume is
+authorized only by the existing `ReviewPolicyService` and a compatible
+persisted review context.
+
+The durable job tables are schema version 5 in the existing control store.
+`GET /api/v1/runs/{run_id}/jobs` and the scoped job detail route expose only
+safe metadata for the later frontend step. Step24's synchronous distributed
+partition/scale layer remains unchanged and is wrapped only at this stage
+boundary.
 
 ## Future replacement boundaries
 

@@ -577,6 +577,19 @@ from .platform import (
     staged_part_artifact_id,
     staged_part_logical_key,
 )
+from .jobs import (
+    ExecutionPlan,
+    FailureClassification,
+    JobKind,
+    JobLease,
+    JobRecord,
+    JobStatus,
+    RetryPolicy,
+    StageExecutionRequest,
+    StageExecutionResult,
+    StageResultStatus,
+    StageSpec,
+)
 from .distributed import (
     EquivalenceStatus,
     PartitionDescriptor,
@@ -1009,4 +1022,15 @@ __all__ = [
     "visualization_content_hash",
     "visual_edge_id",
     "visual_node_id",
+    "ExecutionPlan",
+    "FailureClassification",
+    "JobKind",
+    "JobLease",
+    "JobRecord",
+    "JobStatus",
+    "RetryPolicy",
+    "StageExecutionRequest",
+    "StageExecutionResult",
+    "StageResultStatus",
+    "StageSpec",
 ]

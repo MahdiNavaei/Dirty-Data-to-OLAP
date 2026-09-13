@@ -309,17 +309,18 @@ def test_v3_store_migrates_to_v4_and_reopen_repairs_partial_capability(tmp_path:
 
     migrated = SQLiteControlStore(path, project_root=tmp_path)
     try:
-        assert migrated.schema_version == 4
+        assert migrated.schema_version == 5
         assert migrated.get_run(run_id) is not None
         tables = {row[0] for row in sqlite3.connect(path).execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        assert {"api_idempotency", "review_current", "review_history", "review_subject_contexts"}.issubset(tables)
+        assert {"api_idempotency", "review_current", "review_history", "review_subject_contexts", "execution_plans", "jobs"}.issubset(tables)
         migration_rows = sqlite3.connect(path).execute("SELECT version_from, version_to FROM schema_migrations WHERE version_from = 3 AND version_to = 4").fetchall()
         assert migration_rows
+        assert sqlite3.connect(path).execute("SELECT 1 FROM schema_migrations WHERE version_from = 4 AND version_to = 5").fetchone()
     finally:
         migrated.close()
     reopened = SQLiteControlStore(path, project_root=tmp_path)
     try:
-        assert reopened.schema_version == 4
+        assert reopened.schema_version == 5
         assert reopened.get_run(run_id) is not None
     finally:
         reopened.close()

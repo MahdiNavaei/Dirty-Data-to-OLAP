@@ -17,6 +17,7 @@ from .distributed import (
     ScaleService,
 )
 from .visualization import VisualizationInputError, VisualizationService
+from .jobs import BoundedWorkerPool, DurableExecutionSubmission, JobWorker, StageExecutorPort, StageHandlerRegistry, load_authoritative_execution_plan
 
 __all__ = [
     "DependencyDiscoveryService",
@@ -41,4 +42,10 @@ __all__ = [
     "ScaleService",
     "VisualizationInputError",
     "VisualizationService",
+    "BoundedWorkerPool",
+    "DurableExecutionSubmission",
+    "JobWorker",
+    "StageExecutorPort",
+    "StageHandlerRegistry",
+    "load_authoritative_execution_plan",
 ]

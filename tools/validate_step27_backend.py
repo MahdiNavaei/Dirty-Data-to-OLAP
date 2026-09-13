@@ -381,9 +381,9 @@ def _repair_checks() -> int:
         from dirty_data_to_olap.adapters.platform import SQLiteControlStore
         migrated = SQLiteControlStore(path, project_root=project_root)
         try:
-            checks += 1; _check(migrated.schema_version == 4 and migrated.get_run(run_id) is not None, "v3 to v4 migration retains run")
+            checks += 1; _check(migrated.schema_version == 5 and migrated.get_run(run_id) is not None, "v3 to v5 migration retains run")
             tables = _table_names(path)
-            checks += 1; _check({"api_idempotency", "review_current", "review_history", "review_subject_contexts"}.issubset(tables), "v4 control capabilities available")
+            checks += 1; _check({"api_idempotency", "review_current", "review_history", "review_subject_contexts", "execution_plans", "jobs"}.issubset(tables), "v5 control capabilities available")
         finally:
             migrated.close()
         connection = sqlite3.connect(path)
@@ -394,7 +394,7 @@ def _repair_checks() -> int:
         reopened = SQLiteControlStore(path, project_root=project_root)
         try:
             tables = _table_names(path)
-            checks += 1; _check(reopened.schema_version == 4 and reopened.get_run(run_id) is not None and "review_subject_contexts" in tables, "v4 reopen repairs partial capability")
+            checks += 1; _check(reopened.schema_version == 5 and reopened.get_run(run_id) is not None and {"review_subject_contexts", "execution_plans", "jobs"}.issubset(tables), "v5 reopen repairs partial capability")
         finally:
             reopened.close()
     return checks
@@ -502,10 +502,10 @@ def main() -> int:
             checks += 1; _check(client.get("/api/v1/runs", headers=AUTH, params={"page_size": 101}).status_code == 422, "hard page limit")
             checks += 1; _check(client.get("/api/v1/runs", headers=AUTH, params={"status": "PARTIAL"}).status_code == 400, "undefined run state rejected")
             submit = client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "submit-1"})
-            checks += 1; _check(submit.status_code == 503 and submit.json()["status"] == "UNAVAILABLE", "explicit unavailable submission")
+            checks += 1; _check(submit.status_code == 202 and submit.json()["status"] == "ACCEPTED" and submit.json()["submission_id"], "durable command submission")
             checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/execution", headers={**AUTH, "Idempotency-Key": "submit-1"}).json() == submit.json(), "submission idempotency")
-            checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/cancel", headers={**AUTH, "Idempotency-Key": "cancel-1"}).status_code == 503, "cancel boundary")
-            checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/resume", headers={**AUTH, "Idempotency-Key": "resume-1"}).status_code == 503, "resume boundary")
+            checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/cancel", headers={**AUTH, "Idempotency-Key": "cancel-1"}).status_code == 202, "cancel command submission")
+            checks += 1; _check(client.post(f"/api/v1/runs/{run_id}/resume", headers={**AUTH, "Idempotency-Key": "resume-1"}).status_code == 202, "resume command submission")
             checks += _repair_checks()
             backend.get_run = lambda _run_id: (_ for _ in ()).throw(RuntimeError("C:\\secret\\stack.sqlite"))
             sanitized = client.get(f"/api/v1/runs/{run_id}", headers=AUTH)

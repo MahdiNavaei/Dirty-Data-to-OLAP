@@ -157,7 +157,7 @@ def main() -> int:
     store = platform.artifact_store
     try:
         run = _ensure_run(control, platform.config)
-        _check(checks, "sqlite initializes and migrates", control.schema_version == 4 and platform.config.configuration_fingerprint, "schema version is the current local schema including Step27 capability migration")
+        _check(checks, "sqlite initializes and migrates", control.schema_version == 5 and platform.config.configuration_fingerprint, "schema version is the current local schema including Step28 durable job capability migration")
 
         attempt = control.get_stage_attempt(REFERENCE_ATTEMPT_ID)
         if attempt is None:
@@ -390,7 +390,7 @@ def main() -> int:
             reopened.update_stage_attempt(recovered_attempt.model_copy(update={"status": StageStatus.SUCCEEDED, "finished_at": datetime.now(timezone.utc), "output_artifact_refs": (canonical.artifact_id, analytical.artifact_id, semantic.artifact_id, reconciliation.artifact_id)}), expected_revision=recovered_attempt.revision)
         _check(checks, "reference run is persisted with completed stage metadata", run.status is RunStatus.SUCCEEDED, "run lifecycle state is durable and does not imply Step24 execution")
         reproducibility = reopened.build_reproducibility_manifest(REFERENCE_RUN_ID, artifact_store=store)
-        _check(checks, "reproducibility manifest is durable in metadata", reproducibility.run_id == REFERENCE_RUN_ID and reproducibility.configuration_fingerprint == platform.config.configuration_fingerprint and reproducibility.git_content_commit == STEP22_COMMIT and reproducibility.control_schema_version == 4 and len(reproducibility.root_artifact_refs) >= 1, "run, config, content commit, artifact hashes, gate refs and control schema are recoverable provenance")
+        _check(checks, "reproducibility manifest is durable in metadata", reproducibility.run_id == REFERENCE_RUN_ID and reproducibility.configuration_fingerprint == platform.config.configuration_fingerprint and reproducibility.git_content_commit == STEP22_COMMIT and reproducibility.control_schema_version == 5 and len(reproducibility.root_artifact_refs) >= 1, "run, config, content commit, artifact hashes, gate refs and control schema are recoverable provenance")
 
         cleanup_policy = (RetentionPolicy(retention_class=RetentionClass.RUN_SCOPED, max_age_seconds=3600, reason="disposable reference evidence"),)
         cleanup_old = _publish_managed(store, reopened, artifact_id=f"step23-cleanup-disposable-{int(datetime.now(timezone.utc).timestamp() * 1000000)}", kind="DisposableCleanup", payload=b"cleanup", created_at=datetime.now(timezone.utc) - timedelta(days=2))
@@ -480,7 +480,7 @@ def main() -> int:
 
         capabilities = platform.capabilities
         _check(checks, "future S3/Postgres are not falsely implemented", capabilities.get(CapabilityQuery(capability_id="persistence.s3")).status == "FUTURE_NOT_EXECUTED" and capabilities.get(CapabilityQuery(capability_id="persistence.postgres")).status == "FUTURE_NOT_EXECUTED", "future adapter boundaries are explicit and unexecuted")
-        _check(checks, "Step28 job control is not started", not (ROOT / "src/dirty_data_to_olap/application/stage_orchestrator.py").exists() and not (ROOT / "src/dirty_data_to_olap/application/job_control.py").exists(), "Step23 does not implement the future Step28 scheduling/control plane")
+        _check(checks, "Step24 boundary remains separate from Step28 job control", not (ROOT / "src/dirty_data_to_olap/application/stage_orchestrator.py").exists() and not (ROOT / "src/dirty_data_to_olap/application/job_control.py").exists() and (ROOT / "src/dirty_data_to_olap/application/jobs.py").exists(), "Step24 remains synchronous while Step28 owns durable scheduling/control")
 
         scan = PlatformIntegrityService().scan(REFERENCE_RUN_ID, control_store=reopened, artifact_store=store, artifact_stores=(platform.staging_artifact_store,))
         _check(checks, "integrity scan detects missing disposable artifact", any(item.artifact_id == missing.artifact_id and item.state.value == "MISSING" for item in scan.results), "scan is bounded to registered run artifacts and reports the missing blob")

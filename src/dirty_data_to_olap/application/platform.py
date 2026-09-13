@@ -38,6 +38,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
 )
 from dirty_data_to_olap.domain.contracts.api import IdempotencyRecord, ReviewHistoryRecord, ReviewRecord
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision
+from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlan, JobRecord, StageExecutionResult
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
 
@@ -142,6 +143,51 @@ class ControlStorePort(Protocol):
         ...
 
     def update_stage_attempt(self, attempt: StageAttemptRecord, *, expected_revision: int) -> StageAttemptRecord:
+        ...
+
+    # Step28 durable control-plane boundary.  These methods are deliberately
+    # expressed in project-owned types; an OSS queue may deliver a wake-up,
+    # but it is not authoritative for identity, leases or lifecycle state.
+    def register_execution_plan(self, plan: ExecutionPlan) -> ExecutionPlan:
+        ...
+
+    def get_execution_plan(self, run_id: str) -> ExecutionPlan | None:
+        ...
+
+    def enqueue_execution_command(self, command: Any, run: RunRecord) -> tuple[JobRecord, bool]:
+        ...
+
+    def enqueue_stage_job(self, *, run_id: str, plan_id: str, stage_id: str, parent_job_id: str | None = None, available_at: datetime | None = None) -> JobRecord:
+        ...
+
+    def get_job(self, job_id: str) -> JobRecord | None:
+        ...
+
+    def get_stage_job(self, *, run_id: str, stage_id: str) -> JobRecord | None:
+        ...
+
+    def list_jobs(self, *, run_id: str, status: str | None = None, limit: int = 100, offset: int = 0) -> tuple[JobRecord, ...]:
+        ...
+
+    def claim_next_job(self, *, worker_id: str, now: datetime, lease_seconds: int = 30) -> JobRecord | None:
+        ...
+
+    def heartbeat_job(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime, lease_seconds: int = 30) -> JobRecord:
+        ...
+
+    def ensure_stage_attempt(self, *, job_id: str, worker_id: str, lease_generation: int, now: datetime) -> StageAttemptRecord:
+        ...
+
+    def finalize_stage_job(self, *, job_id: str, worker_id: str, lease_generation: int, attempt: StageAttemptRecord, result: StageExecutionResult, status: str, now: datetime, retry_count: int = 0, available_at: datetime | None = None) -> JobRecord:
+        ...
+
+    def finalize_command_job(self, *, job_id: str, worker_id: str, lease_generation: int, status: str, now: datetime, detail: str, failure_code: str | None = None, failure_classification: str | None = None) -> JobRecord:
+        ...
+
+    def request_run_cancellation(self, *, run_id: str, now: datetime) -> RunRecord:
+        ...
+
+    def resume_job(self, *, job_id: str, now: datetime) -> JobRecord:
         ...
 
     def register_artifact(self, artifact: ArtifactRef) -> ArtifactRef:
