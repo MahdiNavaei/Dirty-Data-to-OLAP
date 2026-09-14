@@ -230,15 +230,21 @@ def run_clean_build_and_tests(runner: Runner, checkout: Path, browser_path: Path
     runner.run("locked Python sync", [uv, "sync", *runtime], cwd=checkout, timeout=1200)
     runner.run("Python package build", [uv, "build", "--python", selected_python_version()], cwd=checkout, timeout=600)
     runner.run("frontend clean install", [npm, "ci"], cwd=checkout / "frontend", timeout=900)
+    generated_api = checkout / "frontend" / "openapi.json"
+    if not generated_api.is_file():
+        raise ValidationFailure("tracked OpenAPI artifact is missing from the clean archive")
+    baseline_api_hash = hashlib.sha256(generated_api.read_bytes()).hexdigest()
     runner.run("deterministic OpenAPI generation", [npm, "run", "generate:api"], cwd=checkout / "frontend", timeout=300)
-    diff = runner.run("generated API has no clean-room drift", [tool("git"), "diff", "--exit-code", "--", "frontend/openapi.json"], cwd=checkout, timeout=30)
+    generated_api_hash = hashlib.sha256(generated_api.read_bytes()).hexdigest()
+    if generated_api_hash != baseline_api_hash:
+        raise ValidationFailure("deterministic OpenAPI generation changed the tracked clean-room artifact")
     runner.run("frontend typecheck", [npm, "run", "typecheck"], cwd=checkout / "frontend", timeout=300)
     runner.run("frontend lint", [npm, "run", "lint"], cwd=checkout / "frontend", timeout=300)
     runner.run("frontend tests", [npm, "run", "test", "--", "--run"], cwd=checkout / "frontend", timeout=600)
     runner.run("frontend production build", [npm, "run", "build"], cwd=checkout / "frontend", timeout=600)
     browser_env = {**runner.environment, "PLAYWRIGHT_BROWSERS_PATH": str(browser_path)}
     runner.run("project-owned Playwright browser install", [npx, "--no-install", "playwright", "install", "chromium"], cwd=checkout / "frontend", timeout=900, env=browser_env)
-    checks.append({"name": "clean locked Python/frontend build", "status": "PASS", "generated_api_diff": diff.returncode})
+    checks.append({"name": "clean locked Python/frontend build", "status": "PASS", "generated_api_hash": generated_api_hash, "generated_api_drift": "NONE"})
 
 
 def compose_commands(project: str) -> list[str]:
