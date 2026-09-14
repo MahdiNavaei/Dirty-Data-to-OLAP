@@ -44,6 +44,8 @@ frontend/dist/
 frontend/.playwright-browsers/
 output/playwright/
 output/step29_frontend_validation.json
+output/step30_devops_validation.json
+output/step30_build_manifest.json
 
 # Research clones are disposable and must never be runtime dependencies.
 research/oss/*
