@@ -1611,5 +1611,5 @@ handoff_to:
 - content_commit: `4ac963e4747cb7551dced5d1a09c428928efae27`
 - receipt: `docs/execution/STEP29_REAL_PIPELINE_G7_CLOSURE.md`; prior Step29 receipt preserved at `docs/execution/STEP29_FRONTEND_REVIEW.md`
 - gate_state: `G7_END_TO_END_PRODUCT=PASS`; `G8-G15=PENDING`; `blocked=false`
-- final_state: `last_completed_step=28`, `current_step=29`, `current_role=frontend_engineer`, `step30_started=false`, `step30_status=NOT_STARTED`
+- final_state: `last_completed_step=29`, `last_completed_role=frontend_engineer`, `current_step=30`, `current_role=devops_engineer`, `step30_started=false`, `step30_status=NOT_STARTED`
 - limitations: local SQLite/filesystem control state, local DuckDB and locally provisioned provider only; no production auth, HA/multi-node, capacity, observability, deployment, physical cross-source integration or release claim

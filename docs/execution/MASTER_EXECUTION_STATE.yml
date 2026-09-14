@@ -57,14 +57,14 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 29
-  current_role: "frontend_engineer"
-  current_specialist: "Step29 - Frontend Engineer"
-  last_completed_step: 28
-  last_completed_role: "distributed_job_processing_engineer"
-  last_completed_specialist: "Step28 - Distributed Job Processing Engineer"
+  current_step: 30
+  current_role: "devops_engineer"
+  current_specialist: "Step30 - DevOps Engineer"
+  last_completed_step: 29
+  last_completed_role: "frontend_engineer"
+  last_completed_specialist: "Step29 - Frontend Engineer"
   last_completed_content_commit: "4ac963e4747cb7551dced5d1a09c428928efae27"
-  next_step: "Step29 - Frontend Engineer"
+  next_step: "Step30 - DevOps Engineer"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
   step23_started: true
@@ -151,8 +151,8 @@ specialist_execution:
     step28_started: false
   step28_started: true
   step28_status: "COMPLETED_DURABLE_JOB_PROCESSING"
-  step29_started: false
-  step29_status: "PASS"
+  step29_started: true
+  step29_status: "COMPLETED_FRONTEND_G7_PASS_REAL_PIPELINE"
   step28_job_processing:
     receipt: "docs/execution/STEP28_DISTRIBUTED_JOB_PROCESSING_REVIEW.md"
     content_commit: "37cf6ec0690f176258560f0ddd83c1f90e211854"
