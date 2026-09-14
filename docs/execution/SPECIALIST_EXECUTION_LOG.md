@@ -1613,3 +1613,21 @@ handoff_to:
 - gate_state: `G7_END_TO_END_PRODUCT=PASS`; `G8-G15=PENDING`; `blocked=false`
 - final_state: `last_completed_step=29`, `last_completed_role=frontend_engineer`, `current_step=30`, `current_role=devops_engineer`, `step30_started=false`, `step30_status=NOT_STARTED`
 - limitations: local SQLite/filesystem control state, local DuckDB and locally provisioned provider only; no production auth, HA/multi-node, capacity, observability, deployment, physical cross-source integration or release claim
+
+## PRIMARY PROMPT 30/41 - DevOps Engineer
+
+- execution_step: `30`; status `PASS`; Step31 was not started
+- starting_baseline: accepted Step29 real-pipeline/G7 content `4ac963e4747cb7551dced5d1a09c428928efae27`; Step30 handoff was current with `step30_started=false` and `step30_status=NOT_STARTED`
+- content_commit: `9857e390e48c4260e957ece796d05373f63dde2b`
+- clean_room_remote_run: `34900471499`; Clean-room G8 / build / runtime `PASS`; report `check_count=62`; clean worktree verification `PASS`
+- secret_scan: `PASS` using Gitleaks on full checkout history
+- image_scan: `PASS`; backend and frontend images rebuilt without cache, exported to tar inputs and scanned with pinned Trivy `0.74.0` after release checksum verification
+- reproducibility: locked Python `3.11.16`/uv path, locked Node `22.14.0`/npm path, repository-owned Playwright, source-built Desbordante revision `b211961f3f272ed8815ef1ffbda90573b11e1116`, digest-pinned bases and actual Compose/product runtime path
+- regression: accepted Step29/G7 browser evidence and G6 correctness evidence preserved; focused local cross-step checks `20 passed, 1 warning`
+- boundary: historical artifact-dependent tests and the host-only Step12 provider test were explicitly excluded from clean-room regression; containerized provider/runtime coverage passed; optional Splink/Valentine integrations remain skipped
+- scan_limitation: image scan commands use `--exit-code 0 --ignore-unfixed`; scan execution PASS is not a zero-finding claim and JSON outputs were not published as workflow artifacts
+- protected_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- gate_state: `G7=PASS`, `G8=PASS`, `G9-G15=PENDING`, `blocked=false`
+- final_state: `last_completed_step=30`, `last_completed_role=devops_engineer`, `current_step=31`, `current_role=qa_automation_engineer`, `step30_started=true`, `step30_status=COMPLETED_DEVOPS_G8_PASS`, `step31_started=false`, `step31_status=NOT_STARTED`
+- receipts: `docs/execution/STEP30_DEVOPS_REVIEW.md`; `docs/execution/gates/G8_REPRODUCIBLE_BUILD.md`
+- no Step31 implementation was performed
