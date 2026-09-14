@@ -315,7 +315,7 @@
           "context": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ReviewCompatibilityContext-Input"
+                "$ref": "#/components/schemas/ReviewCompatibilityContext"
               },
               {
                 "type": "null"
@@ -610,7 +610,7 @@
           "review_context": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ReviewCompatibilityContext-Output"
+                "$ref": "#/components/schemas/ReviewCompatibilityContext"
               },
               {
                 "type": "null"
@@ -620,7 +620,7 @@
           "review_contexts": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/ReviewCompatibilityContext-Output"
+              "$ref": "#/components/schemas/ReviewCompatibilityContext"
             },
             "title": "Review Contexts",
             "type": "array"
@@ -1159,7 +1159,7 @@
             "type": "string"
           },
           "context": {
-            "$ref": "#/components/schemas/ReviewCompatibilityContext-Output"
+            "$ref": "#/components/schemas/ReviewCompatibilityContext"
           },
           "decision": {
             "anyOf": [
@@ -1601,7 +1601,7 @@
           "context": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ReviewCompatibilityContext-Input"
+                "$ref": "#/components/schemas/ReviewCompatibilityContext"
               },
               {
                 "type": "null"
@@ -1669,98 +1669,7 @@
         "title": "ReviewCheckpoint",
         "type": "string"
       },
-      "ReviewCompatibilityContext-Input": {
-        "additionalProperties": false,
-        "properties": {
-          "applicability_fingerprint": {
-            "minLength": 1,
-            "title": "Applicability Fingerprint",
-            "type": "string"
-          },
-          "domain_assertion_refs": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Domain Assertion Refs",
-            "type": "array"
-          },
-          "model_version": {
-            "minLength": 1,
-            "title": "Model Version",
-            "type": "string"
-          },
-          "policy_version": {
-            "minLength": 1,
-            "title": "Policy Version",
-            "type": "string"
-          },
-          "review_checkpoint_id": {
-            "$ref": "#/components/schemas/ReviewCheckpoint"
-          },
-          "schema_version": {
-            "default": "1.0",
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "skip_authorization": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReviewSkipAuthorization"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "source_schema_fingerprints": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Source Schema Fingerprints",
-            "type": "object"
-          },
-          "subject_artifact_id": {
-            "minLength": 1,
-            "title": "Subject Artifact Id",
-            "type": "string"
-          },
-          "subject_content_hash": {
-            "minLength": 1,
-            "title": "Subject Content Hash",
-            "type": "string"
-          },
-          "subject_schema_version": {
-            "minLength": 1,
-            "title": "Subject Schema Version",
-            "type": "string"
-          },
-          "subject_semantic_id": {
-            "minLength": 1,
-            "title": "Subject Semantic Id",
-            "type": "string"
-          },
-          "subject_stage": {
-            "minLength": 1,
-            "title": "Subject Stage",
-            "type": "string"
-          }
-        },
-        "required": [
-          "review_checkpoint_id",
-          "subject_stage",
-          "subject_artifact_id",
-          "subject_content_hash",
-          "subject_schema_version",
-          "model_version",
-          "policy_version",
-          "subject_semantic_id",
-          "applicability_fingerprint"
-        ],
-        "title": "ReviewCompatibilityContext",
-        "type": "object"
-      },
-      "ReviewCompatibilityContext-Output": {
+      "ReviewCompatibilityContext": {
         "additionalProperties": false,
         "properties": {
           "applicability_fingerprint": {
@@ -2180,6 +2089,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -2838,7 +2754,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "format": "binary",
+                  "contentMediaType": "application/octet-stream",
                   "title": "Response Artifact Content Api V1 Runs  Run Id  Artifacts  Artifact Id  Content Get",
                   "type": "string"
                 }
