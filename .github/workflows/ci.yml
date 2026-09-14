@@ -75,9 +75,10 @@ jobs:
             "${base_url}/${archive}" --output trivy.tar.gz
           curl --fail --silent --show-error --location --retry 3 \
             "${base_url}/trivy_${TRIVY_VERSION}_checksums.txt" --output trivy_checksums.txt
-          grep -E "[[:space:]]${archive}$" trivy_checksums.txt \
-            | sed "s#${archive}$#trivy.tar.gz#" \
-            | sha256sum --check -
+          expected="$(grep -E "[[:space:]]${archive}$" trivy_checksums.txt | awk '{print $1}')"
+          actual="$(sha256sum trivy.tar.gz | awk '{print $1}')"
+          test -n "${expected}"
+          test "${actual}" = "${expected}"
           mkdir -p "${RUNNER_TEMP}/trivy-bin"
           tar --extract --gzip --file trivy.tar.gz --directory "${RUNNER_TEMP}/trivy-bin" trivy
           chmod 0755 "${RUNNER_TEMP}/trivy-bin/trivy"
