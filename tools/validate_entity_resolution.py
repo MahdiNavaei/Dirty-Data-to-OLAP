@@ -42,7 +42,7 @@ def main() -> int:
         "false merge guards": all(token in contracts + adapter for token in ("placeholder_only", "unsafe_bridge", "largest_cluster_guard", "independent_evidence")),
         "no canonical map output": "SourceRecordCanonicalMap" not in adapter and "canonical_entity_id" not in adapter,
         "benchmark fixture": (ROOT / "benchmarks/entity_resolution/step14_labeled_fixture.json").is_file(),
-        "later specialist handoff": is_authorized_specialist_handoff(state, minimum_current_step=15, maximum_current_step=30) and state.get("blocked") is not True,
+        "later specialist handoff": is_authorized_specialist_handoff(state, minimum_current_step=15, maximum_current_step=31) and state.get("blocked") is not True,
         "G4 remains pending or evidenced pass": state.get("gates", {}).get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"},
         "G4A is intermediate": state.get("intermediate_milestones", {}).get("G4A_INDEPENDENT_EVIDENCE_PRODUCERS") == "PASS" and "G4A_INDEPENDENT_EVIDENCE_PRODUCERS" not in state.get("gates", {}),
     }

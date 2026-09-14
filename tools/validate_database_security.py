@@ -164,7 +164,7 @@ def main() -> int:
     g3 = state.get("gates", {}).get("G3_SOURCE_SAFETY")
     gate_text = (ROOT / "docs" / "execution" / "gates" / "G3_SOURCE_SAFETY.md").read_text(encoding="utf-8")
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
-    checks.append(("execution is at a later specialist handoff", is_authorized_specialist_handoff(state, minimum_current_step=15, maximum_current_step=30)))
+    checks.append(("execution is at a later specialist handoff", is_authorized_specialist_handoff(state, minimum_current_step=15, maximum_current_step=31)))
     checks.append(("G3 state and canonical gate agree", g3 == "PASS" and "Status: `PASS`" in gate_text))
     checks.append(("README agrees with G3 and specialist handoff", ("Steps 01-14 complete" in readme_text or "Steps 01-15 complete" in readme_text or "Steps 01-16 complete" in readme_text or "Steps 01-17 complete" in readme_text or "Steps 01-18 complete" in readme_text or "Steps 01-19 complete" in readme_text or "Steps 01-20" in readme_text or "Steps 01-21" in readme_text) and "G0/G1/G2/G3 PASS" in readme_text and "Step15" in readme_text and "formal G3" not in readme_text.lower()))
     checks.append(("Step14 entity-resolution implementation is present", execution.get("last_completed_step", 0) >= 13 and (ROOT / "src" / "dirty_data_to_olap" / "adapters" / "entity_resolution" / "splink.py").exists()))

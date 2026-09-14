@@ -111,6 +111,24 @@ def step30_handoff(state: dict[str, Any]) -> bool:
     )
 
 
+def step30_g8_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step30/G8 closure and Step31 handoff."""
+
+    specialist = execution(state)
+    return (
+        is_authorized_specialist_handoff(state, minimum_current_step=31, maximum_current_step=31)
+        and specialist.get("last_completed_step") == 30
+        and specialist.get("last_completed_role") == "devops_engineer"
+        and specialist.get("last_completed_specialist") == "Step30 - DevOps Engineer"
+        and specialist.get("step30_started") is True
+        and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
+        and specialist.get("step31_started") is False
+        and specialist.get("step31_status") == "NOT_STARTED"
+        and gates(state).get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and state.get("blocked") is False
+    )
+
+
 def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
     current_gates = gates(state)
     return (
@@ -121,6 +139,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
         and all(
             current_gates.get(key) == "PENDING"
             or (key == "G7_END_TO_END_PRODUCT" and step29_g7_closed(state))
+            or (key == "G8_REPRODUCIBLE_BUILD" and step30_g8_closed(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )

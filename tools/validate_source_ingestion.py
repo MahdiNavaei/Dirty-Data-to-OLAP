@@ -44,7 +44,7 @@ def main() -> int:
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     specialist = state["specialist_execution"]
     gates = state["gates"]
-    if not is_authorized_specialist_handoff(state, minimum_current_step=7, maximum_current_step=30):
+    if not is_authorized_specialist_handoff(state, minimum_current_step=7, maximum_current_step=31):
         fail(errors, "execution state is not a valid Step07 implementation or later specialist handoff")
     if gates.get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"}:
         fail(errors, "formal G3 Source Safety state is invalid")

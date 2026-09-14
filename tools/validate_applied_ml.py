@@ -46,7 +46,7 @@ def main() -> int:
         "architecture learned branch": all((ROOT / path).is_file() for path in ("docs/architecture/specs/components.yml", "docs/architecture/specs/engine_interfaces.yml", "docs/architecture/specs/stage_graph.yml")),
         "required Step15 docs": all((ROOT / path).is_file() for path in ("docs/ml/APPLIED_ML_CONTRACT.md", "docs/ml/FEATURE_SCHEMA.md", "docs/ml/DATASET_AND_SPLIT_POLICY.md", "docs/ml/BASELINE_AND_RANKING_POLICY.md", "docs/ml/MODEL_PERSISTENCE.md", "docs/ml/UNCERTAINTY_AND_ACTIVE_LEARNING.md", "docs/ml/CALIBRATION_EXPERIMENTS.md", "docs/ml/STEP16_HANDOFF.md", "docs/ml/model-cards/RELATIONSHIP_RANKER_EXPERIMENTAL.md")),
         "official dependency pin and ledger": "scikit-learn==1.7.2" in (ROOT / "pyproject.toml").read_text(encoding="utf-8") and "scikit-learn (Step15)" in (ROOT / "docs/oss/REUSE_RESEARCH_LEDGER.md").read_text(encoding="utf-8"),
-        "Step15 through Step30 handoff state": is_authorized_specialist_handoff(state, minimum_current_step=16, maximum_current_step=30),
+        "Step15 through later handoff state": is_authorized_specialist_handoff(state, minimum_current_step=16, maximum_current_step=31),
         "G4 state and G4A": state.get("gates", {}).get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and state.get("intermediate_milestones", {}).get("G4A_INDEPENDENT_EVIDENCE_PRODUCERS") == "PASS",
         "no research clone": not (ROOT / "research/oss/scikit-learn").exists(),
     }

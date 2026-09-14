@@ -59,6 +59,7 @@ CLEAN_ROOM_HISTORICAL_TEST_IGNORES = (
     "tests/integration/test_step28_integrity_repair.py",
     "tests/integration/test_step28_job_processing.py",
     "tests/unit/test_step18_v4_integrity.py",
+    "tests/integration/test_step19_canonical_flow.py",
 )
 CLEAN_ROOM_PROVIDER_TEST_IGNORES = (
     "tests/integration/dependencies/test_step12_real_provider.py",
@@ -181,7 +182,7 @@ def archive_head(runner: Runner, target: Path) -> str:
 
 
 def validate_state(checks: list[dict[str, Any]]) -> dict[str, Any]:
-    from tools.execution_state import step29_g7_closed, step30_handoff
+    from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff
 
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     specialist = state.get("specialist_execution", {})
@@ -191,13 +192,16 @@ def validate_state(checks: list[dict[str, Any]]) -> dict[str, Any]:
         "step29_status": specialist.get("step29_status"),
         "step29_g7_closed": step29_g7_closed(state),
         "step30_handoff": step30_handoff(state),
+        "step30_g8_closed": step30_g8_closed(state),
         "g7": gates.get("G7_END_TO_END_PRODUCT"),
         "g8": gates.get("G8_REPRODUCIBLE_BUILD"),
         "blocked": state.get("blocked"),
     }
-    if not values["step29_g7_closed"] or not values["step30_handoff"] or values["g8"] != "PENDING":
-        raise ValidationFailure("authoritative state is not the accepted Step29/G7 -> Step30 handoff")
-    checks.append({"name": "authoritative Step29/G7 to Step30 handoff", "status": "PASS", "values": values})
+    pre_closure = values["step29_g7_closed"] and values["step30_handoff"] and values["g8"] == "PENDING"
+    post_closure = values["step29_g7_closed"] and values["step30_g8_closed"] and values["g8"] == "PASS"
+    if not (pre_closure or post_closure):
+        raise ValidationFailure("authoritative state is neither the accepted Step29/G7 -> Step30 handoff nor the accepted Step30/G8 -> Step31 handoff")
+    checks.append({"name": "authoritative execution state", "status": "PASS", "phase": "pre-G8" if pre_closure else "post-G8", "values": values})
     return state
 
 
