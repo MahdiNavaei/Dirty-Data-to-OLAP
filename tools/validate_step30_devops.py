@@ -243,7 +243,7 @@ def run_clean_build_and_tests(runner: Runner, checkout: Path, browser_path: Path
     runner.run("frontend tests", [npm, "run", "test", "--", "--run"], cwd=checkout / "frontend", timeout=600)
     runner.run("frontend production build", [npm, "run", "build"], cwd=checkout / "frontend", timeout=600)
     browser_env = {**runner.environment, "PLAYWRIGHT_BROWSERS_PATH": str(browser_path)}
-    runner.run("project-owned Playwright browser install", [npx, "--no-install", "playwright", "install", "chromium"], cwd=checkout / "frontend", timeout=900, env=browser_env)
+    runner.run("project-owned Playwright browser install", [npx, "--no-install", "playwright", "install", "chromium"], cwd=checkout / "frontend", timeout=1800, env=browser_env)
     checks.append({"name": "clean locked Python/frontend build", "status": "PASS", "generated_api_hash": generated_api_hash, "generated_api_drift": "NONE"})
 
 
