@@ -1,7 +1,7 @@
 """Project-owned dependency boundary for native or local Docker Desbordante."""
 from __future__ import annotations
 
-import base64, csv, json, math, shutil, subprocess, time
+import base64, csv, json, math, os, shutil, subprocess, time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -106,21 +106,26 @@ class DesbordantePythonEngine:
 class DesbordanteDockerEngine:
     """Controlled local provider process; image is externally/local provisioned."""
     name = "desbordante-docker"
-    image = "dirty-data-to-olap-desbordante-step12:latest"
     source_revision = "b211961f3f272ed8815ef1ffbda90573b11e1116"
 
-    def __init__(self, image_digest: str) -> None:
-        self.image_digest = image_digest; self.version = "2.4.1"; self.timeout_seconds = 120.0
+    def __init__(self, image: str, image_digest: str | None = None) -> None:
+        if image_digest is None:
+            image_digest = image
+            image = "configured-provider-image"
+        self.image = image; self.image_digest = image_digest; self.version = "2.4.1"; self.timeout_seconds = 120.0
         self.runtime_identity = f"image:{self.image}@{image_digest};source:{self.source_revision};binding:build/src/python_bindings"
 
     @classmethod
     def try_create(cls) -> "DesbordanteDockerEngine | None":
+        image = os.environ.get("DESBORDANTE_PROVIDER_IMAGE", "").strip()
+        if not image:
+            return None
         try:
-            result = subprocess.run(["docker", "image", "inspect", cls.image, "--format", "{{.Id}}"], capture_output=True, text=True, check=True, timeout=10)
+            result = subprocess.run(["docker", "image", "inspect", image, "--format", "{{.Id}}"], capture_output=True, text=True, check=True, timeout=10)
         except (OSError, subprocess.SubprocessError):
             return None
         digest = result.stdout.strip()
-        return cls(digest) if digest.startswith("sha256:") else None
+        return cls(image, digest) if digest.startswith("sha256:") else None
 
     def _run(self, kind: str, paths: Sequence[Path], options: dict[str, Any]) -> list[dict[str, Any]]:
         root = paths[0].parent.resolve()
@@ -147,8 +152,7 @@ else:
  for x in a.get_inds():
   l=x.get_lhs(); r=x.get_rhs(); fn=getattr(x,"get_error",None); out.append({"left_table_index":int(l.table_index),"left_column_indices":[int(v) for v in l.column_indices],"right_table_index":int(r.table_index),"right_column_indices":[int(v) for v in r.column_indices],"native_metric_value":float(fn()) if callable(fn) else None})
 print(json.dumps(out,separators=(",",":")))'''
-        # The mutable tag is used only for discovery. Execution uses the
-        # identity inspected during engine construction.
+        # Execution uses the exact image identity inspected during engine construction.
         command = ["docker","run","--rm","--network","none","--read-only","--mount",f"type=bind,source={root},target=/input,readonly",self.image_digest,"python","-c",script,kind,json.dumps(container_paths),json.dumps(options)]
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=max(self.timeout_seconds, 0.1))

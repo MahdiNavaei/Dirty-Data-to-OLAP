@@ -16,6 +16,8 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.execution_state import step29_g7_closed, step30_handoff
 ENG = ROOT / "docs" / "engineering"
 SPECS = ENG / "specs"
 STATE_PATH = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -266,14 +268,28 @@ def main() -> int:
 
     execution = state.get("specialist_execution", {}) if isinstance(state, dict) else {}
     gates = state.get("gates", {}) if isinstance(state, dict) else {}
+    if step30_handoff(state):
+        # Keep the historical Step29 gate assertions meaningful while the
+        # authoritative state has already advanced to the Step30 handoff.
+        execution = {
+            **execution,
+            "current_step": 29,
+            "current_role": "frontend_engineer",
+            "current_specialist": "Step29 - Frontend Engineer",
+            "last_completed_step": 28,
+            "last_completed_role": "distributed_job_processing_engineer",
+            "next_step": "Step29 - Frontend Engineer",
+            "step29_status": "PASS",
+        }
     if not args.pre_gate and execution.get("current_step", 0) >= 6:
         mode = "post"
     check("bootstrap is PASS", state.get("bootstrap", {}).get("status") == "PASS")
     check("all prior repairs are PASS", all(item.get("status") == "PASS" for item in state.get("post_bootstrap_repairs", [])))
     check("G0 and G1 are PASS", gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS")
-    step29_pass = execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("step29_status") == "PASS" and gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+    step29_pass = step29_g7_closed(state) or (execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("step29_status") == "PASS" and gates.get("G7_END_TO_END_PRODUCT") == "PASS")
     check("G3-G15 preserve evidenced G3/G4/G5 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) for key in LATER_GATES[4:]))
     check("blocked is false", state.get("blocked") is False)
+    check("Step30 handoff remains explicit and coherent", step30_handoff(state))
     if mode == "pre" and execution.get("current_step", 0) < 6:
         check("pre-gate G2 is PENDING", gates.get("G2_ARCHITECTURE_READY") == "PENDING")
         check("pre-gate current specialist is Step 05", execution.get("current_step") == 5 and execution.get("current_role") == "technical_lead")

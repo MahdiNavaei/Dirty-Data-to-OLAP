@@ -7,9 +7,12 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+from tools.execution_state import is_authorized_specialist_handoff
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
@@ -29,6 +32,7 @@ def main() -> int:
     adapter = (ROOT / "src/dirty_data_to_olap/adapters/matching/valentine.py").read_text(encoding="utf-8")
     service = (ROOT / "src/dirty_data_to_olap/application/schema_matching.py").read_text(encoding="utf-8")
     state = (ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8")
+    state_data = yaml.safe_load(state)
     test = (ROOT / "tests/integration/matching/test_step13_real_valentine.py").read_text(encoding="utf-8")
     checks = {
         "project contracts": all(token in contracts for token in ("SchemaMatchRequest", "SchemaMatchCandidate", "SchemaMatchSignal", "MatchingAuthorization")),
@@ -46,7 +50,7 @@ def main() -> int:
         "step12 immutable digest": "self.image_digest" in (ROOT / "src/dirty_data_to_olap/adapters/dependencies/desbordante.py").read_text(encoding="utf-8") and "provider_rows_by_table" in (ROOT / "src/dirty_data_to_olap/domain/contracts/dependency.py").read_text(encoding="utf-8"),
         "step12 project scratch test": "workspace" in test and "test-temp" in test and "tmp_path" not in test,
         "no research clone": not (ROOT / "research/oss/valentine").exists(),
-        "step14 implementation is present and later handoff is explicit": (ROOT / "src/dirty_data_to_olap/adapters/entity_resolution").exists() and (("current_step: 15" in state and "last_completed_step: 14" in state) or ("current_step: 16" in state and "last_completed_step: 15" in state) or ("current_step: 17" in state and "last_completed_step: 16" in state) or ("current_step: 18" in state and "last_completed_step: 17" in state) or ("current_step: 19" in state and "last_completed_step: 18" in state) or ("current_step: 20" in state and "last_completed_step: 19" in state) or ("current_step: 21" in state and "last_completed_step: 20" in state) or ("current_step: 22" in state and "last_completed_step: 21" in state) or ("current_step: 23" in state and "last_completed_step: 22" in state) or ("current_step: 24" in state and "last_completed_step: 23" in state) or ("current_step: 25" in state and "last_completed_step: 24" in state) or ("current_step: 26" in state and "last_completed_step: 25" in state) or ("current_step: 27" in state and "last_completed_step: 26" in state) or ("current_step: 28" in state and "last_completed_step: 27" in state) or ("current_step: 29" in state and "last_completed_step: 28" in state)) and ("G4_BOUNDED_INTELLIGENCE: \"PENDING\"" in state or "G4_BOUNDED_INTELLIGENCE: \"PASS\"" in state),
+        "step14 implementation is present and later handoff is explicit": (ROOT / "src/dirty_data_to_olap/adapters/entity_resolution").exists() and is_authorized_specialist_handoff(state_data, minimum_current_step=15, maximum_current_step=30) and state_data.get("gates", {}).get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"},
         "service owns authorization": "authorize_schema_matching_analysis" in service and "self.adapter.discover" in service,
         "schema-only zero-row boundary": "request.mode is SchemaMatchMode.INSTANCE_AWARE" in adapter and "pd.DataFrame([item.values for item in selected]" in adapter and "instance_rows_read=instance_rows_read" in adapter,
         "unsupported instance matcher boundary": "_UnsupportedMatcherMode" in adapter and "SchemaMatchFailureKind.UNSUPPORTED_MODE" in adapter,

@@ -26,6 +26,7 @@ entity_resolution = [
 test = [
   "pytest>=8.4,<9",
   "PyYAML>=6.0,<7",
+  "httpx2==2.12.0",
 ]
 sql = [
   "dlt==1.30.0",
@@ -43,6 +44,22 @@ excel = [
 ]
 ml = [
   "scikit-learn==1.7.2",
+]
+
+[dependency-groups]
+dev = [
+  "httpx2==2.12.0",
+  "pip-audit==2.9.0",
+  "pytest>=8.4,<9",
+  "PyYAML>=6.0,<7",
+]
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "matching" },
+    { extra = "profiling" },
+  ],
 ]
 
 [tool.setuptools.packages.find]

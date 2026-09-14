@@ -1,0 +1,43 @@
+services:
+  backend:
+    image: "${DDO_BACKEND_IMAGE:-dirty-data-to-olap-backend:step30}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8765}:8765"
+    volumes:
+      - ddo_runtime:/var/lib/dirty-data-to-olap
+    tmpfs:
+      - /tmp
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  frontend:
+    image: "${DDO_FRONTEND_IMAGE:-dirty-data-to-olap-frontend:step30}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-4173}:8080"
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx:uid=10001,gid=10001,mode=0755
+      - /run:uid=10001,gid=10001,mode=0755
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+volumes:
+  ddo_runtime:

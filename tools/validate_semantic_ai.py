@@ -8,8 +8,12 @@ import sys
 import socket
 import tempfile
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+from tools.execution_state import is_authorized_specialist_handoff
 
 from dirty_data_to_olap.adapters.semantic.context import SemanticContextBuilder
 from dirty_data_to_olap.adapters.semantic.ollama import OllamaSemanticEvidenceAdapter, SemanticProviderError
@@ -74,12 +78,14 @@ def main() -> int:
     check("timeout contained", _timeout_contained())
     check("artifact hash and safety evaluation are produced", _artifact_and_evaluation())
     state_text = (ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8")
+    state_data = yaml.safe_load(state_text)
     components_text = (ROOT / "docs/architecture/specs/components.yml").read_text(encoding="utf-8")
     plan_text = (ROOT / "docs/engineering/specs/implementation_plan.yml").read_text(encoding="utf-8")
     check("G4 evidence summary exists", (ROOT / "docs/execution/gates/G4_BOUNDED_INTELLIGENCE.md").exists())
     check("run manager remains planned", "component_id: application.run_manager" in components_text and "implementation_status: PLANNED" in components_text.split("component_id: application.run_manager", 1)[1].split("component_id:", 1)[0])
     execution_log = (ROOT / "docs/execution/SPECIALIST_EXECUTION_LOG.md").read_text(encoding="utf-8")
     handoff_consistent = (("current_handoff: \"Step16 LLM / Semantic AI Engineer\"" in plan_text and "current_step: 16" in state_text) or ("current_handoff: \"Step17 Evidence Fusion Engineer\"" in plan_text and "current_step: 17" in state_text) or ("current_handoff: \"Step18 ML Evaluation Engineer\"" in plan_text and "current_step: 18" in state_text) or ("current_handoff: \"Step20 OLAP Engineer\"" in plan_text and "current_step: 20" in state_text and "Step19" in execution_log) or ("current_handoff: \"Step21 Analytical Model / Semantic Layer Engineer\"" in plan_text and "current_step: 21" in state_text and "Step20" in execution_log) or ("current_handoff: \"Step22 Data QA Engineer\"" in plan_text and "current_step: 22" in state_text and "Step21" in execution_log) or ("current_handoff: \"Step23 Data Platform Engineer\"" in plan_text and "current_step: 23" in state_text and "Step22" in execution_log) or ("current_handoff: \"Step24 Distributed Data Engineer\"" in plan_text and "current_step: 24" in state_text and "Step23" in execution_log) or ("current_handoff: \"Step25 UX / Product Designer\"" in plan_text and "current_step: 25" in state_text and "Step24" in execution_log) or ("current_handoff: \"Step26 Data Visualization Engineer\"" in plan_text and "current_step: 26" in state_text and "Step25" in execution_log) or ("current_handoff: \"Step27 Senior Backend Engineer\"" in plan_text and "current_step: 27" in state_text and "Step26" in execution_log) or ("current_step: 28" in state_text and "step28_status: \"NOT_STARTED\"" in state_text and "Step27" in execution_log) or ("current_step: 29" in state_text and "step28_status: \"COMPLETED_DURABLE_JOB_PROCESSING\"" in state_text and "Step28" in execution_log) or ("current_step: 19" in state_text and "Step19" in execution_log))
+    handoff_consistent = handoff_consistent or is_authorized_specialist_handoff(state_data, minimum_current_step=16, maximum_current_step=30)
     check("Semantic AI architecture and handoff metadata are consistent", "component_id: application.semantic_evidence" in components_text and handoff_consistent)
     check("Step16 execution log exists", "Step16" in (ROOT / "docs/execution/SPECIALIST_EXECUTION_LOG.md").read_text(encoding="utf-8"))
     print("PASS: semantic AI behavioral validator")

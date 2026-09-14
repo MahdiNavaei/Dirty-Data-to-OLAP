@@ -14,6 +14,8 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.execution_state import step29_g7_closed, step30_handoff
 ARCH = ROOT / "docs" / "architecture"
 SPECS = ARCH / "specs"
 KB = ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base"
@@ -876,6 +878,13 @@ def check_state() -> None:
         require(execution.get("current_role") == "frontend_engineer", "post-Step 28 state must hand off to Step29")
         require("Frontend Engineer" in str(execution.get("current_specialist")), "current specialist must be Step29")
         require("Frontend Engineer" in str(execution.get("next_step")), "next step must be Step29")
+    elif execution.get("current_step") == 30:
+        require(step30_handoff(state), "Step30 handoff must be sequential and coherent")
+        require(execution.get("last_completed_step") == 29, "post-Step 29 state must record completed Step 29")
+        require(execution.get("last_completed_role") == "frontend_engineer", "post-Step 29 role must be frontend_engineer")
+        require(execution.get("current_role") == "devops_engineer", "post-Step 29 state must hand off to Step30")
+        require("DevOps Engineer" in str(execution.get("current_specialist")), "current specialist must be Step30")
+        require("DevOps Engineer" in str(execution.get("next_step")), "next step must be Step30")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -898,7 +907,7 @@ def check_state() -> None:
         "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE",
         "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE",
     ]
-    step29_pass = execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("step29_status") == "PASS" and gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+    step29_pass = step29_g7_closed(state) or (execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("step29_status") == "PASS" and gates.get("G7_END_TO_END_PRODUCT") == "PASS")
     require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) for key in later_gate_keys[4:]), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 

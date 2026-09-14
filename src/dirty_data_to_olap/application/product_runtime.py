@@ -368,7 +368,11 @@ class LocalProductStageHandlers:
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED if passed else StageResultStatus.FAILED, output_artifact_refs=(truth_ref.artifact_id, accounting_ref.artifact_id, report_ref.artifact_id, reconciliation_ref.artifact_id), failure_code=None if passed else "G6_VALIDATION_FAILED", failure_classification=None if passed else FailureClassification.TERMINAL_FAILURE, failure_reason=None if passed else "typed validation report contains a blocking discrepancy or pending check", metadata={"g6_status": outcome.report.g6_status.value, "g6_eligible": str(outcome.report.g6_eligible).lower(), "validation_report_id": outcome.report.report_id})
 
     def _git_commit(self) -> str:
-        result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.project_root, capture_output=True, text=True, check=False)
+        try:
+            result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.project_root, capture_output=True, text=True, check=False)
+        except OSError:
+            # Runtime images intentionally do not contain VCS tooling or history.
+            return "0" * 40
         value = result.stdout.strip()
         return value if result.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", value) else "0" * 40
 

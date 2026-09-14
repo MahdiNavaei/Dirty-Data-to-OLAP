@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+from tools.execution_state import is_authorized_specialist_handoff
 
 
 def check(name: str, condition: bool) -> None:
@@ -40,7 +42,7 @@ def main() -> int:
         "false merge guards": all(token in contracts + adapter for token in ("placeholder_only", "unsafe_bridge", "largest_cluster_guard", "independent_evidence")),
         "no canonical map output": "SourceRecordCanonicalMap" not in adapter and "canonical_entity_id" not in adapter,
         "benchmark fixture": (ROOT / "benchmarks/entity_resolution/step14_labeled_fixture.json").is_file(),
-        "later specialist handoff": ((execution.get("last_completed_step"), execution.get("current_step"), execution.get("current_role")) in {(14, 15, "applied_ml_engineer"), (15, 16, "llm_semantic_ai_engineer"), (16, 17, "evidence_fusion_engineer"), (17, 18, "ml_evaluation_engineer"), (18, 19, "canonical_model_engineer"), (19, 20, "olap_engineer"), (20, 21, "analytical_semantic_layer_engineer"), (21, 22, "data_qa_engineer"), (22, 23, "data_platform_engineer"), (23, 24, "distributed_data_engineer"), (24, 25, "ux_product_designer"), (25, 26, "data_visualization_engineer"), (26, 27, "senior_backend_engineer"), (27, 28, "distributed_job_processing_engineer"), (28, 29, "frontend_engineer")}) and execution.get("blocked") is not True,
+        "later specialist handoff": is_authorized_specialist_handoff(state, minimum_current_step=15, maximum_current_step=30) and state.get("blocked") is not True,
         "G4 remains pending or evidenced pass": state.get("gates", {}).get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"},
         "G4A is intermediate": state.get("intermediate_milestones", {}).get("G4A_INDEPENDENT_EVIDENCE_PRODUCERS") == "PASS" and "G4A_INDEPENDENT_EVIDENCE_PRODUCERS" not in state.get("gates", {}),
     }

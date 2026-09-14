@@ -1,0 +1,91 @@
+name: Dirty Data to OLAP CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dirty-data-to-olap-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  g8:
+    name: Clean-room G8 / build / runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      DDO_BACKEND_IMAGE: dirty-data-to-olap-backend:ci
+      DDO_FRONTEND_IMAGE: dirty-data-to-olap-frontend:ci
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.14.0"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute clean-room Step30 validator
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step30_devops.py --ci
+      - name: Verify clean worktree after validation
+        run: git diff --check && test -z "$(git status --porcelain)"
+
+  image-scan:
+    name: Container image vulnerability scan
+    needs: g8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      DDO_BACKEND_IMAGE: dirty-data-to-olap-backend:ci
+      DDO_FRONTEND_IMAGE: dirty-data-to-olap-frontend:ci
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Rebuild fixed image references for scan
+        run: docker compose build --no-cache backend frontend
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        with:
+          image-ref: dirty-data-to-olap-backend:ci
+          format: json
+          output: trivy-backend.json
+          exit-code: "0"
+          ignore-unfixed: true
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        with:
+          image-ref: dirty-data-to-olap-frontend:ci
+          format: json
+          output: trivy-frontend.json
+          exit-code: "0"
+          ignore-unfixed: true
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
