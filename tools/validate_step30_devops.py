@@ -60,6 +60,7 @@ CLEAN_ROOM_HISTORICAL_TEST_IGNORES = (
     "tests/integration/test_step28_job_processing.py",
     "tests/unit/test_step18_v4_integrity.py",
     "tests/integration/test_step19_canonical_flow.py",
+    "tests/contract/test_canonical_contracts.py",
 )
 CLEAN_ROOM_PROVIDER_TEST_IGNORES = (
     "tests/integration/dependencies/test_step12_real_provider.py",
