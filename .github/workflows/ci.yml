@@ -40,7 +40,10 @@ jobs:
       - name: Execute clean-room Step30 validator
         run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step30_devops.py --ci
       - name: Verify clean worktree after validation
-        run: git diff --check && test -z "$(git status --porcelain)"
+        run: |
+          git diff --check
+          git status --short --untracked-files=all
+          test -z "$(git status --porcelain)"
 
   image-scan:
     name: Container image vulnerability scan
