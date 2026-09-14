@@ -262,7 +262,11 @@ def container_runtime_checks(runner: Runner, checkout: Path, browser_path: Path,
     stack_up = False
     try:
         runner.run("Compose config", [*compose, "config", "--quiet"], cwd=checkout, timeout=120, env=env)
-        runner.run("no-cache backend/frontend image build", [*compose, "build", "--no-cache", "backend", "frontend"], cwd=checkout, timeout=3600, env=env)
+        # Build the native-provider backend before the static frontend.  Keeping
+        # these cache-miss builds serial avoids competing for the bounded Docker
+        # builder resources while still proving both targets independently.
+        runner.run("no-cache backend image build", [*compose, "build", "--no-cache", "backend"], cwd=checkout, timeout=5400, env=env)
+        runner.run("no-cache frontend image build", [*compose, "build", "--no-cache", "frontend"], cwd=checkout, timeout=1800, env=env)
         stack_up = True
         runner.run("container stack startup", [*compose, "up", "-d", "backend", "frontend"], cwd=checkout, timeout=300, env=env)
         backend_url = f"http://127.0.0.1:{backend_port}"
