@@ -136,7 +136,9 @@ class Runner:
             entry["stdout_tail"] = sanitize(result.stdout)
         self.report.append(entry)
         if check and result.returncode != 0:
-            raise ValidationFailure(f"{name} failed with exit code {result.returncode}")
+            output_tail = sanitize((result.stdout + "\n" + result.stderr).strip())
+            detail = f"; output_tail={output_tail}" if output_tail else ""
+            raise ValidationFailure(f"{name} failed with exit code {result.returncode}{detail}")
         return result
 
 
