@@ -64,22 +64,18 @@ jobs:
         run: |
           docker compose build --no-cache backend
           docker compose build --no-cache frontend
+      - name: Install pinned Trivy
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # immutable setup-trivy action revision
+        with:
+          version: v0.68.2
+      - name: Export images without daemon socket access
+        run: |
+          docker save --output trivy-backend.tar dirty-data-to-olap-backend:ci
+          docker save --output trivy-frontend.tar dirty-data-to-olap-frontend:ci
       - name: Scan backend image
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: dirty-data-to-olap-backend:ci
-          format: json
-          output: trivy-backend.json
-          exit-code: "0"
-          ignore-unfixed: true
+        run: trivy image --input trivy-backend.tar --format json --output trivy-backend.json --exit-code 0 --ignore-unfixed
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
-        with:
-          image-ref: dirty-data-to-olap-frontend:ci
-          format: json
-          output: trivy-frontend.json
-          exit-code: "0"
-          ignore-unfixed: true
+        run: trivy image --input trivy-frontend.tar --format json --output trivy-frontend.json --exit-code 0 --ignore-unfixed
 
   secret-scan:
     name: Secret scan
