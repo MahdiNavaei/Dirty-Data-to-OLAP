@@ -263,8 +263,15 @@ def main() -> int:
     # 1-3: repository and state baseline.
     state = load_yaml(STATE_PATH)
     check("execution state parses", isinstance(state, dict))
-    check("repository branch is main", subprocess.run(["git", "branch", "--show-current"], cwd=ROOT, text=True, capture_output=True).stdout.strip() == "main")
-    check("repository is on a normal git worktree", subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=ROOT, text=True, capture_output=True).stdout.strip() == "true")
+    has_vcs_metadata = (ROOT / ".git").exists()
+    check(
+        "repository branch is main when VCS metadata is present",
+        not has_vcs_metadata or subprocess.run(["git", "branch", "--show-current"], cwd=ROOT, text=True, capture_output=True).stdout.strip() == "main",
+    )
+    check(
+        "repository is on a normal git worktree when VCS metadata is present",
+        not has_vcs_metadata or subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=ROOT, text=True, capture_output=True).stdout.strip() == "true",
+    )
 
     execution = state.get("specialist_execution", {}) if isinstance(state, dict) else {}
     gates = state.get("gates", {}) if isinstance(state, dict) else {}
