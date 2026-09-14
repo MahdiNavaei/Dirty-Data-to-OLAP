@@ -207,11 +207,15 @@ def validate_active_configuration(checks: list[dict[str, Any]]) -> None:
     checks.append({"name": "active reproducibility configuration", "status": "PASS", "files": len(required)})
 
 
+def selected_python_version() -> str:
+    return "3.11.16" if sys.version_info >= (3, 11) else "3.10.11"
+
+
 def uv_runtime_args() -> list[str]:
     # The canonical Docker/CI policy is .python-version (3.11.16).  The
     # current Windows workstation has only its supported 3.10 interpreter;
     # exercise the same locked graph there without silently changing policy.
-    selected_python = "3.11.16" if sys.version_info >= (3, 11) else "3.10.11"
+    selected_python = selected_python_version()
     args: list[str] = ["--locked", "--python", selected_python, "--group", "dev"]
     for extra in PYTHON_EXTRAS:
         args.extend(("--extra", extra))
@@ -224,7 +228,7 @@ def run_clean_build_and_tests(runner: Runner, checkout: Path, browser_path: Path
     npx = tool("npx")
     runtime = uv_runtime_args()
     runner.run("locked Python sync", [uv, "sync", *runtime], cwd=checkout, timeout=1200)
-    runner.run("Python package build", [uv, "build"], cwd=checkout, timeout=600)
+    runner.run("Python package build", [uv, "build", "--python", selected_python_version()], cwd=checkout, timeout=600)
     runner.run("frontend clean install", [npm, "ci"], cwd=checkout / "frontend", timeout=900)
     runner.run("deterministic OpenAPI generation", [npm, "run", "generate:api"], cwd=checkout / "frontend", timeout=300)
     diff = runner.run("generated API has no clean-room drift", [tool("git"), "diff", "--exit-code", "--", "frontend/openapi.json"], cwd=checkout, timeout=30)
