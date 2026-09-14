@@ -173,7 +173,9 @@ def _artifact_and_evaluation() -> bool:
             return SemanticProviderReference(api_version="0.1", endpoint=self.policy.endpoint, model=self.policy.model, model_digest="845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e")
         def generate(self, request, manifest, authorization, bundle, *, timeout_seconds=None):
             return LLMEvidence(evidence_id="validator-evidence", request_id=request.request_id, task=request.task, subject_refs=request.subject_refs, hypotheses=(), provider=self.capability(), prompt=bundle.reference, context_manifest=manifest, authorization=authorization, generation=SemanticGenerationReference(temperature=0, seed=20260910, num_predict=512, timeout_seconds=20, retry_count=0, stream=False, think=False, structured_schema_id="SemanticProviderOutput", structured_schema_hash="schema", config_fingerprint="generation"), response_hash="response")
-    with tempfile.TemporaryDirectory(dir=ROOT / "workspace" / "test-temp") as directory:
+    temp_root = ROOT / "workspace" / "test-temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=temp_root) as directory:
         project = Path(directory)
         request = SemanticEvidenceRequest(request_id="validator-artifact", task=SemanticTask.AMBIGUITY_EXPLANATION, subject_refs=("column:t.c",), evidence_refs=("e1",))
         item = SemanticContextItem(item_ref="e1", item_kind="profile", safe_fields={"distinct_ratio": 0.5})
