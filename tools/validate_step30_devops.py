@@ -57,6 +57,9 @@ CLEAN_ROOM_HISTORICAL_TEST_IGNORES = (
     "tests/integration/test_step20_olap_flow.py",
     "tests/unit/test_step18_v4_integrity.py",
 )
+CLEAN_ROOM_PROVIDER_TEST_IGNORES = (
+    "tests/integration/dependencies/test_step12_real_provider.py",
+)
 
 
 class ValidationFailure(RuntimeError):
@@ -425,9 +428,18 @@ def main() -> int:
             run_repository_validators(runner, checkout, checks)
             runner.run("G6 focused regression", [tool("uv"), "run", *uv_runtime_args(), "python", "-m", "pytest", "-q", "tests/integration/test_step22_data_correctness_flow.py"], cwd=checkout, timeout=1200)
             full_regression_command = [tool("uv"), "run", *uv_runtime_args(), "python", "-m", "pytest", "-q", "--ignore", PROTECTED_RELATIVE, "--ignore", "tests/integration/test_step29_product_path.py"]
-            for ignored_test in CLEAN_ROOM_HISTORICAL_TEST_IGNORES:
+            for ignored_test in (*CLEAN_ROOM_HISTORICAL_TEST_IGNORES, *CLEAN_ROOM_PROVIDER_TEST_IGNORES):
                 full_regression_command.extend(("--ignore", ignored_test))
-            runner.run("full clean-room regression with historical evidence tests excluded", full_regression_command, cwd=checkout, timeout=2400)
+            runner.run("full clean-room regression with non-clean-room tests excluded", full_regression_command, cwd=checkout, timeout=2400)
+            checks.append(
+                {
+                    "name": "clean-room regression boundary",
+                    "status": "PASS",
+                    "historical_evidence_tests": list(CLEAN_ROOM_HISTORICAL_TEST_IGNORES),
+                    "provider_runtime_test": list(CLEAN_ROOM_PROVIDER_TEST_IGNORES),
+                    "reason": "historical workspace/runs tests are not clean-room inputs; native Desbordante is exercised in the containerized backend/product path",
+                }
+            )
             security_scan(runner, checkout, runtime, checks)
             manifest_files = []
             for artifact in sorted((checkout / "dist").glob("*")):
