@@ -55,6 +55,9 @@ CLEAN_ROOM_HISTORICAL_VALIDATORS = frozenset(
 CLEAN_ROOM_HISTORICAL_TEST_IGNORES = (
     "tests/integration/test_step20_generic_olap_flow.py",
     "tests/integration/test_step20_olap_flow.py",
+    "tests/integration/test_step23_platform.py",
+    "tests/integration/test_step28_integrity_repair.py",
+    "tests/integration/test_step28_job_processing.py",
     "tests/unit/test_step18_v4_integrity.py",
 )
 CLEAN_ROOM_PROVIDER_TEST_IGNORES = (
