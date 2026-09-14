@@ -11,7 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed
 ARCH = ROOT / "docs" / "data-architecture"
 SPECS = ARCH / "specs"
 STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -516,6 +516,7 @@ def main() -> int:
         and not (key == "G5_INFERENCE_VALIDITY" and value in {"REVIEW_ONLY_VALIDATED", "PASS"})
         and not (key == "G6_DATA_CORRECTNESS" and value in {"PENDING", "PASS"})
         and not (key == "G7_END_TO_END_PRODUCT" and step29_pass)
+        and not (key == "G8_REPRODUCIBLE_BUILD" and step30_g8_closed(state))
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:
