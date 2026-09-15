@@ -38,7 +38,7 @@ jobs:
       - name: Install locked project tooling
         run: python -m pip install --disable-pip-version-check uv==0.11.26
       - name: Execute clean-room Step30 validator
-        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step30_devops.py --ci
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/resume_step31_final_ci.py --ci
       - name: Verify clean worktree after validation
         run: |
           git diff --check
