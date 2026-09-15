@@ -1631,3 +1631,21 @@ handoff_to:
 - final_state: `last_completed_step=30`, `last_completed_role=devops_engineer`, `current_step=31`, `current_role=qa_automation_engineer`, `step30_started=true`, `step30_status=COMPLETED_DEVOPS_G8_PASS`, `step31_started=false`, `step31_status=NOT_STARTED`
 - receipts: `docs/execution/STEP30_DEVOPS_REVIEW.md`; `docs/execution/gates/G8_REPRODUCIBLE_BUILD.md`
 - no Step31 implementation was performed
+
+## PRIMARY PROMPT 31/41 - QA Automation Engineer
+
+- execution_step: `31`; status `PASS`; independent system-level QA automation and regression closure completed; Step32 was not started
+- starting_baseline: `41c577caab9d4c687352046e68c45d524b9a06c5`; Step30/G8 accepted; Step31 was `step31_started=false`, `step31_status=NOT_STARTED`
+- content_commit: `1ae45eb190a041165fc86399cf51059739ebb310`
+- local_validator: `tools/validate_step31_qa.py --ci`; `PASS`; report `output/step31_qa_validation.json`
+- local_matrix: API/system `17 passed`; current regression `245 passed, 2 skipped, 2 warnings`; frontend typecheck/lint/Vitest/build `PASS`
+- current_evidence: system integration, API black-box, review flow, failure path, browser E2E, restart/resume durability, project isolation, G6/G7/G8 regression and cleanup contract all `PASS`
+- browser_evidence: Step31 review/resume and duplicate-failure scenarios passed on fresh isolated stacks; accepted `frontend/e2e/step29_product_path.spec.ts` G7 regression passed
+- remote_ci: run `34962240176`; Secret scan, Clean-room G8, Step31 independent QA/system/browser and container image vulnerability scan all `PASS`
+- historical_evidence: artifact-dependent historical tests and host-only Step12 provider test remain excluded from current clean-room evidence; optional Splink/Valentine integrations remain skipped
+- project_owner_self_review: performed; terminal failure status, run-scoped browser context, shared-state isolation, black-box typed errors and source-safety boundaries were repaired and rerun
+- protected_quality_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9-G15=PENDING`, `blocked=false`
+- final_state: `last_completed_step=31`, `last_completed_role=qa_automation_engineer`, `current_step=32`, `current_role=compatibility_test_engineer`, `step31_started=true`, `step31_status=COMPLETED_QA_AUTOMATION`, `step32_started=false`, `step32_status=NOT_STARTED`
+- receipt: `docs/execution/STEP31_QA_AUTOMATION_REVIEW.md`; matrix `docs/qa/STEP31_SYSTEM_TEST_MATRIX.md`
+- limitations: local SQLite/filesystem control state and local provider/runtime evidence only; no production deployment, HA/multi-node, capacity, observability, or G9-G15 claim
