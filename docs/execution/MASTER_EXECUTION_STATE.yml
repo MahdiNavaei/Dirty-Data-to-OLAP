@@ -57,19 +57,18 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 31
-  current_role: "qa_automation_engineer"
-  current_specialist: "Step31 - QA Automation Engineer"
-  last_completed_step: 30
-  last_completed_role: "devops_engineer"
-  last_completed_specialist: "Step30 - DevOps Engineer"
+  current_step: 32
+  current_role: "compatibility_test_engineer"
+  current_specialist: "Step32 - Compatibility Test Engineer"
+  last_completed_step: 31
+  last_completed_role: "qa_automation_engineer"
+  last_completed_specialist: "Step31 - QA Automation Engineer"
   last_completed_content_commit: "1ae45eb190a041165fc86399cf51059739ebb310"
-  next_step: "Step31 - QA Automation Engineer"
+  next_step: "Step32 - Compatibility Test Engineer"
   step30_started: true
   step30_status: "COMPLETED_DEVOPS_G8_PASS"
   step31_started: true
-  step31_status: "BLOCKED_EXTERNAL_FINAL_CI"
-  step31_blocking_reason: "BLOCKED_EXTERNAL_FINAL_CI"
+  step31_status: "COMPLETED_QA_AUTOMATION"
   step32_started: false
   step32_status: "NOT_STARTED"
   step22_status: "COMPLETED_G6_PASS"
@@ -302,13 +301,8 @@ specialist_execution:
     receipt: "docs/execution/STEP31_QA_AUTOMATION_REVIEW.md"
     matrix: "docs/qa/STEP31_SYSTEM_TEST_MATRIX.md"
     content_commit: "1ae45eb190a041165fc86399cf51059739ebb310"
-    implementation_result: "PASS"
-    content_ci_run: "34962240176"
-    content_ci_result: "PASS"
-    content_local_validator: "tools/validate_step31_qa.py --ci on the content state; PASS"
-    content_local_report: "output/step31_qa_validation.json; PASS"
-    local_validator: "tools/validate_step31_qa.py --ci on final state; BLOCKED_EXTERNAL recognition"
-    local_report: "output/step31_qa_validation.json; BLOCKED_EXTERNAL final-head preflight"
+    local_validator: "tools/validate_step31_qa.py --ci; PASS"
+    local_report: "output/step31_qa_validation.json; PASS"
     remote_ci_run: "34962240176"
     remote_ci_result: "PASS; Secret scan, Clean-room G8, Step31 independent QA and container image scan"
     system_api_result: "17 passed; tests/system + tests/api"
@@ -317,11 +311,6 @@ specialist_execution:
     g6_regression: "PASS; typed validation receipt and exact four-row fixture accounting preserved"
     g7_regression: "PASS; accepted real-pipeline browser spec passed"
     g8_regression: "PASS; clean-room validator and image scan passed"
-    final_head: "1881e6e8a5a1394f6606823282a3dfb79db80609"
-    final_head_ci_run: "34975659130"
-    final_head_ci_result: "BLOCKED_EXTERNAL"
-    final_head_ci_blocker: "GitHub Actions billing/spending-limit restriction"
-    closure_status: "BLOCKED_EXTERNAL_FINAL_CI"
     historical_test_debt: "artifact-dependent historical tests and host-only Step12 provider test excluded from clean-room regression; optional Splink and Valentine integrations remain skipped"
     protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
     limitations: "local SQLite/filesystem control state and local provider/runtime evidence only; no production deployment, HA, capacity, observability, or G9-G15 claim"
@@ -364,4 +353,4 @@ filesystem_boundary:
   project_root: 'D:\Projects\Dirty-Data-to-OLAP'
   research_clone_location: 'D:\Projects\Dirty-Data-to-OLAP\research\oss'
   external_project_dependencies_allowed: false
-blocked: true
+blocked: false
