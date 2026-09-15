@@ -37,6 +37,7 @@ CURRENT_ROLE_BY_STEP = {
     29: "frontend_engineer",
     30: "devops_engineer",
     31: "qa_automation_engineer",
+    32: "compatibility_test_engineer",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -124,6 +125,31 @@ def step30_g8_closed(state: dict[str, Any]) -> bool:
         and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
         and specialist.get("step31_started") is False
         and specialist.get("step31_status") == "NOT_STARTED"
+        and gates(state).get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and state.get("blocked") is False
+    )
+
+
+def step31_qa_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step31 QA closure and Step32 handoff."""
+
+    specialist = execution(state)
+    qa = specialist.get("step31_qa_automation", {})
+    return (
+        is_authorized_specialist_handoff(state, minimum_current_step=32, maximum_current_step=32)
+        and specialist.get("last_completed_step") == 31
+        and specialist.get("last_completed_role") == "qa_automation_engineer"
+        and specialist.get("last_completed_specialist") == "Step31 - QA Automation Engineer"
+        and specialist.get("last_completed_content_commit") == (qa.get("content_commit") if isinstance(qa, dict) else None)
+        and specialist.get("step31_started") is True
+        and specialist.get("step31_status") == "COMPLETED_QA_AUTOMATION"
+        and specialist.get("step32_started") is False
+        and specialist.get("step32_status") == "NOT_STARTED"
+        and isinstance(qa, dict)
+        and qa.get("step31_started") is True
+        and qa.get("status") == "PASS"
+        and gates(state).get("G6_DATA_CORRECTNESS") == "PASS"
+        and gates(state).get("G7_END_TO_END_PRODUCT") == "PASS"
         and gates(state).get("G8_REPRODUCIBLE_BUILD") == "PASS"
         and state.get("blocked") is False
     )
