@@ -51,12 +51,9 @@ def wait_http(url: str, *, timeout: float = 180.0) -> None:
     raise ValidationFailure(f"HTTP readiness deadline expired: {url}")
 
 
-def state_check() -> dict[str, str]:
-    import yaml
-
+def classify_state(state: dict) -> dict[str, str]:
     from tools.execution_state import step29_g7_closed, step30_g8_closed, step31_external_ci_blocked, step31_qa_closed
 
-    state = yaml.safe_load((ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     execution = state["specialist_execution"]
     gates = state["gates"]
     step31_handoff = step30_g8_closed(state)
@@ -80,15 +77,24 @@ def state_check() -> dict[str, str]:
             "final_head": str(qa.get("final_head", "")),
             "final_head_ci_run": str(qa.get("final_head_ci_run", "")),
         }
-    if step31_handoff:
+    if step31_closed:
+        phase = "post-Step31"
+    elif step31_handoff:
         if execution.get("step31_started") is not False or execution.get("step31_status") != "NOT_STARTED":
             raise ValidationFailure("Step31 must start from NOT_STARTED")
         if execution.get("current_step") != 31 or execution.get("current_role") != "qa_automation_engineer":
             raise ValidationFailure("authoritative pointer is not the Step31 QA handoff")
         phase = "pre-Step31"
     else:
-        phase = "post-Step31"
+        raise ValidationFailure("authoritative pointer is neither the Step31 QA handoff nor the accepted Step31 closure")
     return {"status": "PASS", "phase": phase, "current_step": str(execution["current_step"]), "g6": gates["G6_DATA_CORRECTNESS"], "g7": gates["G7_END_TO_END_PRODUCT"], "g8": gates["G8_REPRODUCIBLE_BUILD"]}
+
+
+def state_check() -> dict[str, str]:
+    import yaml
+
+    state = yaml.safe_load((ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
+    return classify_state(state)
 
 
 def frontend_contract() -> dict[str, str]:
