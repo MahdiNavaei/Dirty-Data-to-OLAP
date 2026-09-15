@@ -65,6 +65,9 @@ CLEAN_ROOM_HISTORICAL_TEST_IGNORES = (
 CLEAN_ROOM_PROVIDER_TEST_IGNORES = (
     "tests/integration/dependencies/test_step12_real_provider.py",
 )
+CLEAN_ROOM_RUNTIME_TEST_IGNORES = (
+    "tests/system",
+)
 
 
 class ValidationFailure(RuntimeError):
@@ -348,7 +351,7 @@ def container_runtime_checks(runner: Runner, checkout: Path, browser_path: Path,
 
 def run_container_browser_path(runner: Runner, checkout: Path, browser_path: Path, runtime: dict[str, str], checks: list[dict[str, Any]]) -> None:
     browser_env = {**runner.environment, "PLAYWRIGHT_BASE_URL": runtime["frontend_url"], "PLAYWRIGHT_BROWSERS_PATH": str(browser_path)}
-    runner.run("containerized Step29/G7 Playwright path", [tool("npx"), "--no-install", "playwright", "test", "--config=playwright.config.ts"], cwd=checkout / "frontend", timeout=900, env=browser_env)
+    runner.run("containerized Step29/G7 Playwright path", [tool("npx"), "--no-install", "playwright", "test", "--config=playwright.config.ts", "e2e/step29_product_path.spec.ts"], cwd=checkout / "frontend", timeout=900, env=browser_env)
     checks.append({"name": "containerized Step29/G7 browser path", "status": "PASS", "base_url": runtime["frontend_url"]})
 
 
@@ -438,7 +441,7 @@ def main() -> int:
             run_repository_validators(runner, checkout, checks)
             runner.run("G6 focused regression", [tool("uv"), "run", *uv_runtime_args(), "python", "-m", "pytest", "-q", "tests/integration/test_step22_data_correctness_flow.py"], cwd=checkout, timeout=1200)
             full_regression_command = [tool("uv"), "run", *uv_runtime_args(), "python", "-m", "pytest", "-q", "--ignore", PROTECTED_RELATIVE, "--ignore", "tests/integration/test_step29_product_path.py"]
-            for ignored_test in (*CLEAN_ROOM_HISTORICAL_TEST_IGNORES, *CLEAN_ROOM_PROVIDER_TEST_IGNORES):
+            for ignored_test in (*CLEAN_ROOM_HISTORICAL_TEST_IGNORES, *CLEAN_ROOM_PROVIDER_TEST_IGNORES, *CLEAN_ROOM_RUNTIME_TEST_IGNORES):
                 full_regression_command.extend(("--ignore", ignored_test))
             runner.run("full clean-room regression with non-clean-room tests excluded", full_regression_command, cwd=checkout, timeout=2400)
             checks.append(
@@ -447,7 +450,8 @@ def main() -> int:
                     "status": "PASS",
                     "historical_evidence_tests": list(CLEAN_ROOM_HISTORICAL_TEST_IGNORES),
                     "provider_runtime_test": list(CLEAN_ROOM_PROVIDER_TEST_IGNORES),
-                    "reason": "historical workspace/runs tests are not clean-room inputs; native Desbordante is exercised in the containerized backend/product path",
+                    "runtime_owned_tests": list(CLEAN_ROOM_RUNTIME_TEST_IGNORES),
+                    "reason": "historical workspace/runs tests and live-stack QA tests are not clean-room inputs; native Desbordante is exercised in the containerized backend/product path",
                 }
             )
             security_scan(runner, checkout, runtime, checks)

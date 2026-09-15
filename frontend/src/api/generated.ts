@@ -595,7 +595,7 @@ export interface components {
         };
         /** InvalidateReviewRequest */
         InvalidateReviewRequest: {
-            context?: components["schemas"]["ReviewCompatibilityContext-Input"] | null;
+            context?: components["schemas"]["ReviewCompatibilityContext"] | null;
             /** Expected Revision */
             expected_revision: number;
             /** Reason */
@@ -693,12 +693,12 @@ export interface components {
              * @default 0
              */
             retry_count: number;
-            review_context?: components["schemas"]["ReviewCompatibilityContext-Output"] | null;
+            review_context?: components["schemas"]["ReviewCompatibilityContext"] | null;
             /**
              * Review Contexts
              * @default []
              */
-            review_contexts: components["schemas"]["ReviewCompatibilityContext-Output"][];
+            review_contexts: components["schemas"]["ReviewCompatibilityContext"][];
             /**
              * Revision
              * @default 0
@@ -969,7 +969,7 @@ export interface components {
         ProductReviewView: {
             /** Checkpoint */
             checkpoint: string;
-            context: components["schemas"]["ReviewCompatibilityContext-Output"];
+            context: components["schemas"]["ReviewCompatibilityContext"];
             /** Decision */
             decision?: string | null;
             /**
@@ -1169,7 +1169,7 @@ export interface components {
         ReviewActionDecision: "ACCEPTED" | "REJECTED" | "DEFERRED";
         /** ReviewActionRequest */
         ReviewActionRequest: {
-            context?: components["schemas"]["ReviewCompatibilityContext-Input"] | null;
+            context?: components["schemas"]["ReviewCompatibilityContext"] | null;
             decision: components["schemas"]["ReviewActionDecision"];
             /**
              * Expected Revision
@@ -1189,42 +1189,7 @@ export interface components {
          */
         ReviewCheckpoint: "REVIEW_EVIDENCE_DECISIONS" | "REVIEW_CANONICAL_IDENTITY" | "REVIEW_ANALYTICAL_PLAN" | "REVIEW_MATERIALIZATION_PLAN";
         /** ReviewCompatibilityContext */
-        "ReviewCompatibilityContext-Input": {
-            /** Applicability Fingerprint */
-            applicability_fingerprint: string;
-            /**
-             * Domain Assertion Refs
-             * @default []
-             */
-            domain_assertion_refs: string[];
-            /** Model Version */
-            model_version: string;
-            /** Policy Version */
-            policy_version: string;
-            review_checkpoint_id: components["schemas"]["ReviewCheckpoint"];
-            /**
-             * Schema Version
-             * @default 1.0
-             */
-            schema_version: string;
-            skip_authorization?: components["schemas"]["ReviewSkipAuthorization"] | null;
-            /** Source Schema Fingerprints */
-            source_schema_fingerprints?: {
-                [key: string]: string;
-            };
-            /** Subject Artifact Id */
-            subject_artifact_id: string;
-            /** Subject Content Hash */
-            subject_content_hash: string;
-            /** Subject Schema Version */
-            subject_schema_version: string;
-            /** Subject Semantic Id */
-            subject_semantic_id: string;
-            /** Subject Stage */
-            subject_stage: string;
-        };
-        /** ReviewCompatibilityContext */
-        "ReviewCompatibilityContext-Output": {
+        ReviewCompatibilityContext: {
             /** Applicability Fingerprint */
             applicability_fingerprint: string;
             /**
@@ -1393,6 +1358,10 @@ export interface components {
         StageStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "NEEDS_REVIEW" | "BLOCKED" | "FAILED" | "CANCELLED" | "INVALIDATED" | "SKIPPED";
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */

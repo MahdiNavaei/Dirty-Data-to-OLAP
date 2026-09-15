@@ -69,7 +69,7 @@ export class ApiClient {
   }
 
   async bindSource(runId: string, registryId: string, key = mutationKey("source-bind")): Promise<Binding> {
-    return request<Binding>(`/api/v1/runs/${encodeURIComponent(runId)}/source-selection`, { method: "POST", body: JSON.stringify({ registry_id: registryId, extraction: { chunk_size: 1000, max_rows: 10000, max_rows_scope: "SOURCE_WIDE", null_markers: [], preserve_raw_values: true }, scope: { included_objects: [], excluded_objects: [], include_views: false, included_columns: {} }, execution_context_id: "step29-browser" }) }, { mutation: true, key });
+    return request<Binding>(`/api/v1/runs/${encodeURIComponent(runId)}/source-selection`, { method: "POST", body: JSON.stringify({ registry_id: registryId, extraction: { chunk_size: 1000, max_rows: 10000, max_rows_scope: "SOURCE_WIDE", null_markers: [], preserve_raw_values: true }, scope: { included_objects: [], excluded_objects: [], include_views: false, included_columns: {} }, execution_context_id: `step29-browser-${runId}` }) }, { mutation: true, key });
   }
 
   async prepare(runId: string, key = mutationKey("plan-prepare")): Promise<Preparation> {

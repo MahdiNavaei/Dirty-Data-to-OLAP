@@ -352,7 +352,7 @@ class JobWorker:
                 self.control_store.resume_job(job_id=candidate.job_id, now=now)
                 resumed += 1
         if resumed:
-            self._set_run_status(run.run_id, RunStatus.RUNNING)
+            self._set_run_status(run.run_id, RunStatus.RUNNING, allow_terminal_reactivation=True)
             stored = self.control_store.finalize_command_job(
                 job_id=job.job_id,
                 worker_id=self.worker_id,
@@ -743,9 +743,11 @@ class JobWorker:
             and report.g6_eligible is True
         )
 
-    def _set_run_status(self, run_id: str, status: RunStatus) -> None:
+    def _set_run_status(self, run_id: str, status: RunStatus, *, allow_terminal_reactivation: bool = False) -> None:
         run = self.control_store.get_run(run_id)
         if run is None or run.status in {RunStatus.CANCELLED, RunStatus.SUCCEEDED} and status is not RunStatus.CANCELLED:
+            return
+        if run.status in {RunStatus.FAILED, RunStatus.BLOCKED} and status is RunStatus.RUNNING and not allow_terminal_reactivation:
             return
         if run.status is status:
             return

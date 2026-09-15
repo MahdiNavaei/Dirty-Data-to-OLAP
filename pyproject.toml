@@ -69,3 +69,9 @@ where = ["src"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
+markers = [
+  "api: independent HTTP contract checks",
+  "system: independent assembled-product checks",
+  "historical_evidence: validates retained historical receipts or artifacts",
+  "optional_provider: requires an explicitly optional provider runtime",
+]

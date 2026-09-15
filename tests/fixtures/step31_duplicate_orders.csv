@@ -1,0 +1,5 @@
+order_id,customer_id,customer_id_ref,order_date,quantity,unit_price
+qa-2001,qa-cust-01,qa-cust-01,2026-02-01,2,19.50
+qa-2002,qa-cust-02,qa-cust-02,2026-02-02,1,42.00
+qa-2001,qa-cust-03,qa-cust-03,2026-02-03,3,12.25
+qa-2004,qa-cust-03,qa-cust-03,2026-02-04,4,8.75

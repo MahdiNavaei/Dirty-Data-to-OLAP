@@ -39,6 +39,7 @@ COPY policies ./policies
 COPY docs/architecture ./docs/architecture
 RUN uv sync --locked --python "${VIRTUAL_ENV}/bin/python" --no-dev \
     --no-build-isolation-package hll \
+    --no-build-isolation-package dirty-data-to-olap \
     --extra api --extra sql --extra files --extra profiling
 RUN python tools/generate_step29_openapi.py --output /app/frontend-openapi.json
 
