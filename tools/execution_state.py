@@ -39,6 +39,7 @@ CURRENT_ROLE_BY_STEP = {
     30: "devops_engineer",
     31: "qa_automation_engineer",
     32: "compatibility_test_engineer",
+    33: "application_security_engineer",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -72,7 +73,10 @@ def is_authorized_specialist_handoff(
     # Keep exact-step predicates (for example Step30 handoff) strict while
     # allowing the immediately subsequent accepted handoff through a caller's
     # Step31 ceiling.
-    beyond_declared_ceiling = current_step == 32 and maximum_current_step == 31 and step31_qa_closed(state)
+    beyond_declared_ceiling = (
+        (current_step == 32 and maximum_current_step == 31 and step31_qa_closed(state))
+        or (current_step == 33 and maximum_current_step in {31, 32} and step32_compatibility_closed(state))
+    )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
     expected_role = CURRENT_ROLE_BY_STEP.get(current_step)
@@ -160,7 +164,7 @@ def step31_qa_closed(state: dict[str, Any]) -> bool:
 
     specialist = execution(state)
     qa = specialist.get("step31_qa_automation", {})
-    return (
+    direct_closure = (
         is_authorized_specialist_handoff(state, minimum_current_step=32, maximum_current_step=32)
         and specialist.get("last_completed_step") == 31
         and specialist.get("last_completed_role") == "qa_automation_engineer"
@@ -178,6 +182,64 @@ def step31_qa_closed(state: dict[str, Any]) -> bool:
         and gates(state).get("G6_DATA_CORRECTNESS") == "PASS"
         and gates(state).get("G7_END_TO_END_PRODUCT") == "PASS"
         and gates(state).get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and state.get("blocked") is False
+    )
+    return direct_closure or step32_compatibility_closed(state)
+
+
+def _step31_completion_evidence(state: dict[str, Any]) -> bool:
+    """Keep Step31's accepted evidence valid after a later handoff."""
+
+    specialist = execution(state)
+    qa = specialist.get("step31_qa_automation", {})
+    current_gates = gates(state)
+    return (
+        isinstance(qa, dict)
+        and specialist.get("step31_started") is True
+        and specialist.get("step31_status") == "COMPLETED_QA_AUTOMATION"
+        and specialist.get("step30_started") is True
+        and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
+        and qa.get("step31_started") is True
+        and qa.get("status") == "PASS"
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and state.get("blocked") is False
+    )
+
+
+def step32_compatibility_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step32/G9 closure and Step33 handoff."""
+
+    specialist = execution(state)
+    compatibility = specialist.get("step32_compatibility", {})
+    current_gates = gates(state)
+    content_commit = compatibility.get("content_commit") if isinstance(compatibility, dict) else None
+    return (
+        isinstance(compatibility, dict)
+        and is_authorized_specialist_handoff(state, minimum_current_step=33, maximum_current_step=33)
+        and _step31_completion_evidence(state)
+        and specialist.get("last_completed_step") == 32
+        and specialist.get("last_completed_role") == "compatibility_test_engineer"
+        and specialist.get("last_completed_specialist") == "Step32 - Compatibility Test Engineer"
+        and specialist.get("last_completed_content_commit") == content_commit
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("step32_started") is True
+        and specialist.get("step32_status") == "COMPLETED_COMPATIBILITY_G9_PASS"
+        and specialist.get("step33_started") is False
+        and specialist.get("step33_status") == "NOT_STARTED"
+        and compatibility.get("step32_started") is True
+        and compatibility.get("status") == "PASS"
+        and compatibility.get("g9_status") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PENDING"
+        and current_gates.get("G11_RESILIENCE") == "PENDING"
+        and current_gates.get("G12_CAPACITY") == "PENDING"
+        and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PENDING"
+        and current_gates.get("G14_USABILITY") == "PENDING"
+        and current_gates.get("G15_RELEASE") == "PENDING"
         and state.get("blocked") is False
     )
 
@@ -237,6 +299,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             current_gates.get(key) == "PENDING"
             or (key == "G7_END_TO_END_PRODUCT" and step29_g7_closed(state))
             or (key == "G8_REPRODUCIBLE_BUILD" and (step30_g8_closed(state) or step31_external_ci_blocked(state)))
+            or (key == "G9_FUNCTIONAL_SUPPORT" and step32_compatibility_closed(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )

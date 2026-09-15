@@ -51,6 +51,7 @@ output/step29_frontend_validation.json
 output/step30_devops_validation.json
 output/step30_build_manifest.json
 output/step31_qa_validation.json
+output/step32_compatibility_validation.json
 
 # Research clones are disposable and must never be runtime dependencies.
 research/oss/*
