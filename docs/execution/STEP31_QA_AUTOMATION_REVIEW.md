@@ -2,7 +2,7 @@
 
 ## GOAL RESULT
 
-PASS. Step31 independent QA automation and system-level regression closure completed on content commit `1ae45eb190a041165fc86399cf51059739ebb310`. Step32 was not started.
+BLOCKED_EXTERNAL. Step31 implementation and content-commit verification passed, but exact final-head CI was externally blocked before job execution. Step32 was not started.
 
 ## STARTING STATE
 
@@ -10,6 +10,14 @@ PASS. Step31 independent QA automation and system-level regression closure compl
 - Step30/G8 was already accepted; Step31 was the current `NOT_STARTED` specialist.
 - Step29/G7 and Step22/G6 remained preserved as accepted gates.
 - `tests/quality_unit_artifacts/` was not read, modified, staged, or committed.
+
+## CLOSURE STATUS
+
+- IMPLEMENTATION RESULT: `PASS`
+- CONTENT-COMMIT CI: `PASS` (`34962240176`, head `1ae45eb190a041165fc86399cf51059739ebb310`)
+- FINAL-HEAD CI: `BLOCKED_EXTERNAL` (`34975659130`, head `1881e6e8a5a1394f6606823282a3dfb79db80609`)
+- BLOCKER: GitHub Actions billing/spending-limit restriction; jobs were rejected before actual steps
+- AUTHORITATIVE STEP31 CLOSURE: `BLOCKED`
 
 ## QA ARCHITECTURE
 
@@ -85,7 +93,7 @@ Official Splink and Valentine integrations remain optional and skipped; no claim
 
 ## STEP31 VALIDATOR RESULT
 
-PASS. `uv run --python 3.11.7 python tools/validate_step31_qa.py --ci` produced `output/step31_qa_validation.json` with status `PASS`. It records PASS for state preflight, frontend contract, isolated stack readiness, API/system matrix, fresh browser stack, G7 browser regression, fresh Step31 browser stack, review scenario, restart boundary, failure scenario and cleanup contract.
+PASS for the verified content state. `uv run --python 3.11.7 python tools/validate_step31_qa.py --ci` on content commit `1ae45eb190a041165fc86399cf51059739ebb310` produced `output/step31_qa_validation.json` with status `PASS` and recorded all independent QA checks. On the corrected final state, the same validator performs only the bounded preflight and returns `BLOCKED_EXTERNAL` for the missing final-head CI evidence; it does not rebuild or rerun the QA stack.
 
 ## PROJECT-OWNER SELF-REVIEW FINDINGS
 
@@ -97,8 +105,12 @@ The same Step31 content commit added terminal-failure status protection and expl
 
 ## CI QA RESULT
 
-PASS. Remote GitHub Actions run `34962240176` for the content commit passed Secret scan, Clean-room G8 / build / runtime, Step31 independent QA / system / browser, and container image vulnerability scan.
+PASS. Content-commit GitHub Actions run `34962240176` passed Secret scan, Clean-room G8 / build / runtime, Step31 independent QA / system / browser, and container image vulnerability scan.
+
+## FINAL-HEAD CI RESULT
+
+BLOCKED_EXTERNAL. Run `34975659130` targeted exact head `1881e6e8a5a1394f6606823282a3dfb79db80609`, but Clean-room G8 and Secret scan were rejected before execution by the GitHub Actions billing/spending-limit restriction. Dependent QA and image-scan jobs were skipped. This is not product, QA, or G8 failure evidence.
 
 ## KNOWN LIMITATIONS
 
-Evidence is local/CI and bounded to the repository's SQLite/filesystem control state, local Compose runtime and locally provisioned provider. It is not a production deployment, high-availability, multi-node, capacity, observability, physical cross-source, or release claim. Image scanning passed with `--exit-code 0 --ignore-unfixed`; that is not a zero-finding claim. G9-G15 remain pending.
+Evidence is local/CI and bounded to the repository's SQLite/filesystem control state, local Compose runtime and locally provisioned provider. It is not a production deployment, high-availability, multi-node, capacity, observability, physical cross-source, or release claim. Image scanning passed with `--exit-code 0 --ignore-unfixed`; that is not a zero-finding claim. Exact final-head CI remains externally blocked by GitHub account billing; G9-G15 remain pending.

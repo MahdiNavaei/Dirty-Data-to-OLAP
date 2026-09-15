@@ -1649,3 +1649,13 @@ handoff_to:
 - final_state: `last_completed_step=31`, `last_completed_role=qa_automation_engineer`, `current_step=32`, `current_role=compatibility_test_engineer`, `step31_started=true`, `step31_status=COMPLETED_QA_AUTOMATION`, `step32_started=false`, `step32_status=NOT_STARTED`
 - receipt: `docs/execution/STEP31_QA_AUTOMATION_REVIEW.md`; matrix `docs/qa/STEP31_SYSTEM_TEST_MATRIX.md`
 - limitations: local SQLite/filesystem control state and local provider/runtime evidence only; no production deployment, HA/multi-node, capacity, observability, or G9-G15 claim
+
+## STEP31 EXTERNAL-CI BLOCKER STATE CORRECTION
+
+- correction: Step31 content and independent QA implementation passed; the repository then advanced metadata/state before exact final-head CI succeeded
+- verified_content: `content_commit=1ae45eb190a041165fc86399cf51059739ebb310`; `content_ci_run=34962240176`; `content_ci_result=PASS`
+- final_head: `1881e6e8a5a1394f6606823282a3dfb79db80609`
+- final_head_ci: `run=34975659130`; `result=BLOCKED_EXTERNAL`; blocker=`GitHub Actions billing/spending-limit restriction`; jobs were rejected before execution
+- authoritative_state: `current_step=31`; `current_role=qa_automation_engineer`; `last_completed_step=30`; `last_completed_role=devops_engineer`; `step31_started=true`; `step31_status=BLOCKED_EXTERNAL_FINAL_CI`; `blocked=true`
+- step32: `step32_started=false`; `step32_status=NOT_STARTED`; no Step32 implementation began
+- correction_scope: execution metadata, receipt and state-aware validator support only; product runtime, API, frontend behavior and QA scenarios were not changed

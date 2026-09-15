@@ -54,19 +54,32 @@ def wait_http(url: str, *, timeout: float = 180.0) -> None:
 def state_check() -> dict[str, str]:
     import yaml
 
-    from tools.execution_state import step29_g7_closed, step30_g8_closed, step31_qa_closed
+    from tools.execution_state import step29_g7_closed, step30_g8_closed, step31_external_ci_blocked, step31_qa_closed
 
     state = yaml.safe_load((ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     execution = state["specialist_execution"]
     gates = state["gates"]
     step31_handoff = step30_g8_closed(state)
     step31_closed = step31_qa_closed(state)
-    if not step29_g7_closed(state) or not (step31_handoff or step31_closed):
+    step31_blocked = step31_external_ci_blocked(state)
+    if not step29_g7_closed(state) or not (step31_handoff or step31_closed or step31_blocked):
         raise ValidationFailure("Step30/G8 or Step29/G7 state is not a coherent Step31 handoff or accepted Step31 closure")
     if gates.get("G6_DATA_CORRECTNESS") != "PASS" or gates.get("G7_END_TO_END_PRODUCT") != "PASS" or gates.get("G8_REPRODUCIBLE_BUILD") != "PASS":
         raise ValidationFailure("G6, G7 and G8 must remain PASS before Step31 QA")
-    if not step31_handoff and not step31_closed:
+    if not step31_handoff and not step31_closed and not step31_blocked:
         raise ValidationFailure("authoritative pointer is neither the Step31 QA handoff nor the accepted Step31 closure")
+    if step31_blocked:
+        qa = execution.get("step31_qa_automation", {})
+        return {
+            "status": "BLOCKED_EXTERNAL",
+            "phase": "final-head-ci-blocked",
+            "current_step": str(execution["current_step"]),
+            "g6": gates["G6_DATA_CORRECTNESS"],
+            "g7": gates["G7_END_TO_END_PRODUCT"],
+            "g8": gates["G8_REPRODUCIBLE_BUILD"],
+            "final_head": str(qa.get("final_head", "")),
+            "final_head_ci_run": str(qa.get("final_head_ci_run", "")),
+        }
     if step31_handoff:
         if execution.get("step31_started") is not False or execution.get("step31_status") != "NOT_STARTED":
             raise ValidationFailure("Step31 must start from NOT_STARTED")
@@ -119,7 +132,13 @@ def main() -> int:
     npx = "npx.cmd" if os.name == "nt" else "npx"
     started = False
     try:
-        checks.append({"name": "authoritative Step31 preflight", **state_check()})
+        preflight = state_check()
+        checks.append({"name": "authoritative Step31 preflight", **preflight})
+        if preflight["status"] == "BLOCKED_EXTERNAL":
+            report["status"] = "BLOCKED_EXTERNAL"
+            report["blocker"] = "GitHub Actions billing/spending-limit restriction"
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 2
         checks.append({"name": "frontend contract", **frontend_contract()})
         run("Compose configuration", [*compose, "config", "--quiet"], env=env, timeout=120)
         run("reference backend/frontend image build", [*compose, "build", "backend", "frontend"], env=env, timeout=5400)

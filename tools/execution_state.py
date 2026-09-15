@@ -120,6 +120,22 @@ def step30_handoff(state: dict[str, Any]) -> bool:
     )
 
 
+def step30_g8_accepted(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step30/G8 result before later Step31 closure."""
+
+    specialist = execution(state)
+    return (
+        is_authorized_specialist_handoff(state, minimum_current_step=31, maximum_current_step=31)
+        and specialist.get("last_completed_step") == 30
+        and specialist.get("last_completed_role") == "devops_engineer"
+        and specialist.get("last_completed_specialist") == "Step30 - DevOps Engineer"
+        and specialist.get("current_role") == "qa_automation_engineer"
+        and specialist.get("step30_started") is True
+        and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
+        and gates(state).get("G8_REPRODUCIBLE_BUILD") == "PASS"
+    )
+
+
 def step30_g8_closed(state: dict[str, Any]) -> bool:
     """Recognize the accepted Step30/G8 closure, including later QA closure."""
 
@@ -166,6 +182,50 @@ def step31_qa_closed(state: dict[str, Any]) -> bool:
     )
 
 
+def step31_external_ci_blocked(state: dict[str, Any]) -> bool:
+    """Recognize Step31 implementation success blocked only by final-head CI."""
+
+    specialist = execution(state)
+    qa = specialist.get("step31_qa_automation", {})
+    current_gates = gates(state)
+    if not isinstance(qa, dict):
+        return False
+    content_commit = qa.get("content_commit")
+    return (
+        step30_g8_accepted(state)
+        and specialist.get("current_step") == 31
+        and specialist.get("current_role") == "qa_automation_engineer"
+        and specialist.get("current_specialist") == "Step31 - QA Automation Engineer"
+        and specialist.get("last_completed_step") == 30
+        and specialist.get("last_completed_role") == "devops_engineer"
+        and specialist.get("last_completed_specialist") == "Step30 - DevOps Engineer"
+        and specialist.get("last_completed_content_commit") == content_commit
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("next_step") == "Step31 - QA Automation Engineer"
+        and specialist.get("step31_started") is True
+        and specialist.get("step31_status") == "BLOCKED_EXTERNAL_FINAL_CI"
+        and specialist.get("step32_started") is False
+        and specialist.get("step32_status") == "NOT_STARTED"
+        and qa.get("step31_started") is True
+        and qa.get("status") == "PASS"
+        and qa.get("implementation_result") == "PASS"
+        and qa.get("content_ci_run") == "34962240176"
+        and qa.get("content_ci_result") == "PASS"
+        and qa.get("final_head") == "1881e6e8a5a1394f6606823282a3dfb79db80609"
+        and qa.get("final_head_ci_run") == "34975659130"
+        and qa.get("final_head_ci_result") == "BLOCKED_EXTERNAL"
+        and qa.get("final_head_ci_blocker") == "GitHub Actions billing/spending-limit restriction"
+        and specialist.get("step31_blocking_reason") == "BLOCKED_EXTERNAL_FINAL_CI"
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PENDING"
+        and state.get("blocked") is True
+    )
+
+
 def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
     current_gates = gates(state)
     return (
@@ -176,7 +236,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
         and all(
             current_gates.get(key) == "PENDING"
             or (key == "G7_END_TO_END_PRODUCT" and step29_g7_closed(state))
-            or (key == "G8_REPRODUCIBLE_BUILD" and step30_g8_closed(state))
+            or (key == "G8_REPRODUCIBLE_BUILD" and (step30_g8_closed(state) or step31_external_ci_blocked(state)))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )
