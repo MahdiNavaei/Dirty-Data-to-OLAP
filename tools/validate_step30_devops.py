@@ -32,7 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 REPORT = ROOT / "output" / "step30_devops_validation.json"
 MANIFEST = ROOT / "output" / "step30_build_manifest.json"
-PYTHON_EXTRAS = ("api", "sql", "files", "profiling")
+# Every clean-room validator is executed from the same locked environment.
+# Keep the Step32 compatibility validator importable there; its live database
+# cases remain opt-in and skip without the CI fixture environment.
+PYTHON_EXTRAS = ("api", "sql", "files", "profiling", "excel", "compatibility")
 PROVIDER_REVISION = "b211961f3f272ed8815ef1ffbda90573b11e1116"
 PROTECTED_RELATIVE = "tests/quality_unit_artifacts"
 PROXY_NAMES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
