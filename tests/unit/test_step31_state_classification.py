@@ -12,7 +12,28 @@ STATE_PATH = Path(__file__).parents[2] / "docs" / "execution" / "MASTER_EXECUTIO
 
 
 def _state() -> dict:
-    return yaml.safe_load(STATE_PATH.read_text(encoding="utf-8"))
+    state = yaml.safe_load(STATE_PATH.read_text(encoding="utf-8"))
+    execution = state["specialist_execution"]
+    qa = execution["step31_qa_automation"]
+    execution.update(
+        {
+            "current_step": 32,
+            "current_role": "compatibility_test_engineer",
+            "current_specialist": "Step32 - Compatibility Test Engineer",
+            "last_completed_step": 31,
+            "last_completed_role": "qa_automation_engineer",
+            "last_completed_specialist": "Step31 - QA Automation Engineer",
+            "last_completed_content_commit": qa["content_commit"],
+            "next_step": "Step32 - Compatibility Test Engineer",
+            "step31_started": True,
+            "step31_status": "COMPLETED_QA_AUTOMATION",
+            "step32_started": False,
+            "step32_status": "NOT_STARTED",
+        }
+    )
+    state["gates"]["G9_FUNCTIONAL_SUPPORT"] = "PENDING"
+    state["blocked"] = False
+    return state
 
 
 def _pre_step31_state() -> dict:
