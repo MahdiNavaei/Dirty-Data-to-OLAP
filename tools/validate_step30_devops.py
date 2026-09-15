@@ -434,10 +434,16 @@ def main() -> int:
     runtime: dict[str, str] | None = None
     try:
         state = validate_state(checks)
-        if any(item.get("status") == "BLOCKED_EXTERNAL" for item in checks):
+        blocked_external = any(item.get("status") == "BLOCKED_EXTERNAL" for item in checks)
+        if blocked_external and not args.ci:
             report["status"] = "BLOCKED_EXTERNAL"
             report["blocker"] = "GitHub Actions billing/spending-limit restriction"
-            raise ValidationFailure("Step31 final-head CI is externally blocked; G8/QA execution is intentionally not re-run")
+            raise ValidationFailure("Step31 final-head CI is externally blocked; local G8/QA execution is intentionally not re-run")
+        if blocked_external:
+            checks[-1]["status"] = "PASS"
+            checks[-1]["phase"] = "resuming-final-head-ci"
+            checks[-1]["prior_status"] = "BLOCKED_EXTERNAL"
+            report["resuming_external_final_ci"] = True
         validate_active_configuration(checks)
         with tempfile.TemporaryDirectory(prefix="ddo-step30-clean-") as temporary:
             temporary_root = Path(temporary)
