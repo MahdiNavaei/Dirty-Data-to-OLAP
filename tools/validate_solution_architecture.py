@@ -15,7 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed
 ARCH = ROOT / "docs" / "architecture"
 SPECS = ARCH / "specs"
 KB = ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base"
@@ -892,6 +892,13 @@ def check_state() -> None:
         require(execution.get("current_role") == "qa_automation_engineer", "post-Step 30 state must hand off to Step31")
         require("QA Automation Engineer" in str(execution.get("current_specialist")), "current specialist must be Step31")
         require("QA Automation Engineer" in str(execution.get("next_step")), "next step must be Step31")
+    elif execution.get("current_step") == 32:
+        require(step31_qa_closed(state), "Step31/QA closure must be sequential and coherent")
+        require(execution.get("last_completed_step") == 31, "post-Step 31 state must record completed Step 31")
+        require(execution.get("last_completed_role") == "qa_automation_engineer", "post-Step 31 role must be qa_automation_engineer")
+        require(execution.get("current_role") == "compatibility_test_engineer", "post-Step 31 state must hand off to Step32")
+        require("Compatibility Test Engineer" in str(execution.get("current_specialist")), "current specialist must be Step32")
+        require("Compatibility Test Engineer" in str(execution.get("next_step")), "next step must be Step32")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")

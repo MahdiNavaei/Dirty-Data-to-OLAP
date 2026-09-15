@@ -207,7 +207,7 @@ def validate_state(checks: list[dict[str, Any]]) -> dict[str, Any]:
     post_step31 = values["step29_g7_closed"] and values["step31_qa_closed"] and values["g8"] == "PASS"
     if not (pre_closure or post_closure or post_step31):
         raise ValidationFailure("authoritative state is neither the accepted Step29/G7 -> Step30 handoff, the accepted Step30/G8 -> Step31 handoff, nor the accepted Step31 QA -> Step32 handoff")
-    phase = "pre-G8" if pre_closure else "post-G8" if post_closure else "post-Step31"
+    phase = "pre-G8" if pre_closure else "post-Step31" if post_step31 else "post-G8"
     checks.append({"name": "authoritative execution state", "status": "PASS", "phase": phase, "values": values})
     return state
 

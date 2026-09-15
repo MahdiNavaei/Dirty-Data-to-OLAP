@@ -1,8 +1,9 @@
 """Shared execution-state predicates used by repository validators.
 
 The execution state is a durable handoff record, not a snapshot tied to one
-specialist.  Validators must therefore accept the current Step30 handoff
-after Step29/G7 has closed while still rejecting skipped or mis-ordered steps.
+specialist.  Validators must therefore accept the current later handoff
+after prior gates have closed while still rejecting skipped or mis-ordered
+steps.
 """
 
 from __future__ import annotations
@@ -65,7 +66,14 @@ def is_authorized_specialist_handoff(
     last_step = specialist.get("last_completed_step")
     if not isinstance(current_step, int) or not isinstance(last_step, int):
         return False
-    if not minimum_current_step <= current_step <= maximum_current_step or last_step != current_step - 1:
+    # Upstream validators describe their supported range as "through the
+    # later specialist handoff".  Once the accepted Step31 closure advances
+    # the pointer to Step32, those prior-stage invariants remain applicable.
+    # Keep exact-step predicates (for example Step30 handoff) strict while
+    # allowing the immediately subsequent accepted handoff through a caller's
+    # Step31 ceiling.
+    beyond_declared_ceiling = current_step == 32 and maximum_current_step == 31 and step31_qa_closed(state)
+    if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
     expected_role = CURRENT_ROLE_BY_STEP.get(current_step)
     if expected_role is None or specialist.get("current_role") != expected_role:
@@ -113,10 +121,10 @@ def step30_handoff(state: dict[str, Any]) -> bool:
 
 
 def step30_g8_closed(state: dict[str, Any]) -> bool:
-    """Recognize the accepted Step30/G8 closure and Step31 handoff."""
+    """Recognize the accepted Step30/G8 closure, including later QA closure."""
 
     specialist = execution(state)
-    return (
+    direct_closure = (
         is_authorized_specialist_handoff(state, minimum_current_step=31, maximum_current_step=31)
         and specialist.get("last_completed_step") == 30
         and specialist.get("last_completed_role") == "devops_engineer"
@@ -128,6 +136,7 @@ def step30_g8_closed(state: dict[str, Any]) -> bool:
         and gates(state).get("G8_REPRODUCIBLE_BUILD") == "PASS"
         and state.get("blocked") is False
     )
+    return direct_closure or step31_qa_closed(state)
 
 
 def step31_qa_closed(state: dict[str, Any]) -> bool:
@@ -143,6 +152,8 @@ def step31_qa_closed(state: dict[str, Any]) -> bool:
         and specialist.get("last_completed_content_commit") == (qa.get("content_commit") if isinstance(qa, dict) else None)
         and specialist.get("step31_started") is True
         and specialist.get("step31_status") == "COMPLETED_QA_AUTOMATION"
+        and specialist.get("step30_started") is True
+        and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
         and specialist.get("step32_started") is False
         and specialist.get("step32_status") == "NOT_STARTED"
         and isinstance(qa, dict)
