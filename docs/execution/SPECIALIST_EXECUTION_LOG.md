@@ -1659,3 +1659,23 @@ handoff_to:
 - authoritative_state: `current_step=31`; `current_role=qa_automation_engineer`; `last_completed_step=30`; `last_completed_role=devops_engineer`; `step31_started=true`; `step31_status=BLOCKED_EXTERNAL_FINAL_CI`; `blocked=true`
 - step32: `step32_started=false`; `step32_status=NOT_STARTED`; no Step32 implementation began
 - correction_scope: execution metadata, receipt and state-aware validator support only; product runtime, API, frontend behavior and QA scenarios were not changed
+
+## PRIMARY PROMPT 32/41 - Compatibility Test Engineer
+
+- execution_step: `32`; compatibility implementation and evidence closure completed; Step33 was not started
+- starting_baseline: accepted Step31 QA closure with `step32_started=false` and `step32_status=NOT_STARTED`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- implementation_commit: `12fdfe7e87ecf78a01384e73137d937d3ad08fa7`
+- final_content_head: `29f5f77eed2b0a946aa348462ec1b009fe5c8264`
+- exact_head_ci: run `35034150663`; Secret scan, G8, container image scan, Step31 QA and Step32 compatibility jobs all `PASS`
+- compatibility_result: `8 passed, 0 skipped` through the project source boundary for CSV, Parquet, XLSX, SQLite, PostgreSQL, MySQL, MariaDB and SQL Server
+- support_policy: PostgreSQL, MySQL, MariaDB and SQL Server are `LIVE_VERIFIED` for the tested source boundary; SQLite and files remain `REFERENCE_TESTED`; Oracle is `DEFERRED`
+- negative_controls: missing provider configuration fails CI; source writes are rejected by the live read-only principals
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10-G15=PENDING`, `blocked=false`
+- receipt: `docs/execution/STEP32_COMPATIBILITY_REVIEW.md`; gate receipt `docs/execution/gates/G9_FUNCTIONAL_SUPPORT.md`
+
+## FINAL STEP32 G9 COMPATIBILITY CLOSURE
+
+- closure: metadata and evidence state advanced only after exact content-head CI run `35034150663` completed green
+- authoritative_final_state: `last_completed_step=32`; `last_completed_role=compatibility_test_engineer`; `current_step=33`; `current_role=application_security_engineer`; `step32_started=true`; `step32_status=COMPLETED_COMPATIBILITY_G9_PASS`; `step33_started=false`; `step33_status=NOT_STARTED`; `G9=PASS`; `blocked=false`
+- final_state: `last_completed_specialist=Step32 - Compatibility Test Engineer`; `current_specialist=Step33 - Application Security Engineer`; `next_step=Step33 - Application Security Engineer`
+- no_step33_implementation: true

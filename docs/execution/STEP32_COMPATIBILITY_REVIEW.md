@@ -21,7 +21,7 @@ The source of truth is the combination of:
 | Claim surface | Current claim | Test boundary | Content-phase status |
 |---|---|---|---|
 | User-facing Step29 import | Managed CSV import with the real product path | Existing Step29 product path plus Step32 CSV source-boundary case | `REFERENCE_TESTED` |
-| Source adapter | SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, CSV, Parquet and optional XLSX | `SourceDiscoveryService` -> `SourceSnapshotService` -> project-owned staging contracts | SQLite/files `REFERENCE_TESTED`; SQL engines `CI_LIVE_TEST_REQUIRED` |
+| Source adapter | SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, CSV, Parquet and optional XLSX | `SourceDiscoveryService` -> `SourceSnapshotService` -> project-owned staging contracts | SQLite/files `REFERENCE_TESTED`; SQL engines `LIVE_VERIFIED` by exact-head CI |
 | Analytical target | Local DuckDB reference target | Existing upstream G6/G7/G8 evidence | Preserved; not re-scoped by Step32 |
 | Oracle | Deferred by V1 | No test is presented as support evidence | `DEFERRED` |
 
@@ -34,10 +34,10 @@ requirements; they are not silently converted into user-facing release claims.
 | Engine | Adapter path | Required test | Content-phase result |
 |---|---|---|---|
 | SQLite | dlt/SQLAlchemy reference with SQLite read-only controls | discovery, Unicode/decimal rows, staging and source-write rejection | `REFERENCE_TESTED` |
-| PostgreSQL | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `CI_LIVE_TEST_REQUIRED` |
-| MySQL | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `CI_LIVE_TEST_REQUIRED` |
-| MariaDB | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `CI_LIVE_TEST_REQUIRED` |
-| SQL Server | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `CI_LIVE_TEST_REQUIRED` |
+| PostgreSQL | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `LIVE_VERIFIED` |
+| MySQL | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `LIVE_VERIFIED` |
+| MariaDB | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `LIVE_VERIFIED` |
+| SQL Server | dlt/SQLAlchemy | real service, read-only role, discovery, extraction, Parquet staging, write rejection | `LIVE_VERIFIED` |
 | Oracle | none in current V1 slice | not applicable | `DEFERRED` |
 
 The CI fixtures use disposable databases and a separately provisioned source
@@ -61,6 +61,16 @@ principal's effective grants before the dlt operation is allowed.
 | GitHub Actions | Ubuntu runner, locked Python 3.11.16, disposable real database services and pinned project dependencies |
 | Container runtime | Upstream Step30/G8 container evidence remains authoritative; Step32 does not change the runtime image |
 
+## Closure evidence
+
+- Implementation commit: `12fdfe7e87ecf78a01384e73137d937d3ad08fa7`
+- Final content-head test commit: `29f5f77eed2b0a946aa348462ec1b009fe5c8264`
+- Exact-head CI run: `35034150663`; Secret scan, G8, image scan, Step31 QA
+  and Step32 compatibility jobs all passed.
+- Compatibility receipt: `tools/validate_step32_compatibility.py --ci`
+  reported `8 passed, 0 skipped` across the required live database matrix.
+- G9 result: `PASS`.
+
 ## Negative evidence and limitations
 
 - A missing CI provider environment fails `--ci`; it is never reported as a
@@ -70,5 +80,6 @@ principal's effective grants before the dlt operation is allowed.
 - Compatibility evidence covers the source boundary, not HA, capacity,
   production deployment or application security (G10+).
 
-G9 remains `PENDING` during the content phase until the exact content commit's
-compatibility CI is green.
+G9 is `PASS` after exact content-head CI run `35034150663` completed green.
+The evidence is limited to the tested source boundary; Oracle and G10-G15
+remain outside this closure.
