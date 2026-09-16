@@ -1692,3 +1692,17 @@ handoff_to:
 - gate_state: `G6=PASS`; `G7=PASS`; `G8=PASS`; `G9=PASS`; `G10=PASS`; `G11-G15=PENDING`; `blocked=false`
 - final_state: `last_completed_step=33`, `last_completed_role=application_security_engineer`, `current_step=34`, `current_role=observability_engineer`, `step33_started=true`, `step33_status=COMPLETED_APPLICATION_SECURITY_G10_PASS`, `step34_started=false`, `step34_status=NOT_STARTED`
 - no_step34_implementation: true
+
+## PRIMARY PROMPT 34/41 - Observability Engineer
+
+- execution_step: `34`; project-owned observability implementation and evidence closure completed; Step35 was not started
+- starting_baseline: `a0c526652758b0b6401ff638e04519fa9885c50d`; accepted Step33/G10 handoff with `step34_started=false` and `step34_status=NOT_STARTED`
+- content_commits: initial observability implementation `26a6c4d4c1704a591cc88ee65b79cc37e5a7c87b`; generated API repair `6e07ffe649947c44b4478c3683b591198b4f3cf8`; locked generated API repair `01c5f2b2cdac1e4b484027cae74abf0f7a7f11d7`; compatibility handoff validator repair `9ab5bcfd2cd7044498024853f03ca0d67196abbb`; semantic-equivalence race stabilization `993f36bf7c1660f79f8d9fcd6fe190bd4b45d9a5`
+- exact_head_content_ci: run `35117704614`; result `PASS` on `993f36bf7c1660f79f8d9fcd6fe190bd4b45d9a5`; Secret scan, clean-room G8, image scan, Step31 independent QA, Step32 compatibility/G9, Step33 AppSec/G10 and Step34 observability all passed
+- observability_result: `25` required scenarios PASS; `13` metrics; `9` dashboard panels; `9` observability tests PASS; structured logs/events, bounded metrics, deterministic traces, correlation IDs, safe diagnostics, redaction and non-authoritative sink-failure behavior verified on the real local product path
+- dependency_boundary: optional local Desbordante was unavailable; the real product path produced a correlated classified dependency failure, not a fabricated success and not an OLAP success claim
+- protected_quality_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11-G15=PENDING`, `blocked=false`
+- final_state: `last_completed_step=34`, `last_completed_role=observability_engineer`, `current_step=35`, `current_role=sre`, `step34_started=true`, `step34_status=COMPLETED_OBSERVABILITY`, `step35_started=false`, `step35_status=NOT_STARTED`
+- receipts: `output/step34_observability_validation.json`; `docs/observability/telemetry-spec.md`; `docs/execution/STEP34_OBSERVABILITY_REVIEW.md`; `tools/validate_step34_observability.py`
+- no_step35_implementation: true

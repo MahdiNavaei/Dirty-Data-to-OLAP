@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "step": 34,
-  "phase": "STEP34_CONTENT",
-  "assessed_commit": "a0c526652758b0b6401ff638e04519fa9885c50d",
+  "phase": "STEP34_CLOSURE",
+  "assessed_commit": "993f36bf7c1660f79f8d9fcd6fe190bd4b45d9a5",
   "telemetry_implementation_version": "1.0",
   "overall_result": "PASS",
   "scenario_summary": {"required": 25, "pass": 25, "not_applicable": 0},
