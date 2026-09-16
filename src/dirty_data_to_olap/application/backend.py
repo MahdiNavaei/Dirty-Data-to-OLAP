@@ -58,6 +58,7 @@ from dirty_data_to_olap.domain.contracts.visualization import (
 )
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
 from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SelectionScope, SourceSelection
+from dirty_data_to_olap.observability import CorrelationContext, DiagnosticBundle, TelemetryClient, classify_error
 from dirty_data_to_olap.domain.contracts.product import (
     ProductAnalyticalView,
     ProductCanonicalView,
@@ -180,6 +181,7 @@ class BackendService:
         review_subject_resolver: ReviewSubjectResolverPort | None = None,
         execution_plan_service: ExecutionPlanService | None = None,
         source_service: ProductSourceService | None = None,
+        telemetry: TelemetryClient | None = None,
     ) -> None:
         if max_page_size < 1 or max_page_size > 1000:
             raise ValueError("max_page_size must be between 1 and 1000")
@@ -195,6 +197,7 @@ class BackendService:
         self.review_subject_resolver = review_subject_resolver or ControlStoreReviewSubjectResolver(control_store)
         self.execution_plan_service = execution_plan_service
         self.source_service = source_service
+        self.telemetry = telemetry or TelemetryClient()
 
     def _require_scope(self, principal: Principal, scope: str) -> None:
         if not principal.subject or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", principal.subject) or scope not in principal.scopes:
@@ -279,6 +282,7 @@ class BackendService:
         metadata: Mapping[str, str],
         principal: Principal,
         idempotency_key: str,
+        correlation: CorrelationContext | None = None,
     ) -> tuple[RunRecord, bool]:
         self._require_scope(principal, "runs:write")
         self._authorize_project(principal, project_id, mutation=True)
@@ -319,7 +323,11 @@ class BackendService:
                 response_body={},
                 resource_id=run.run_id,
             )
-            return self.control_store.create_run_with_idempotency(run, stored)
+            result = self.control_store.create_run_with_idempotency(run, stored)
+            created, replayed = result
+            run_correlation = self.telemetry.context(project_id=created.project_id, run_id=created.run_id) if correlation is None else correlation.model_copy(update={"project_id": created.project_id, "run_id": created.run_id})
+            self.telemetry.operation(event_name="run.created", component="backend", operation="create_run", correlation=run_correlation, status=created.status.value, details={"replayed": replayed})
+            return result
         except BackendError:
             raise
         except ArtifactConflictError as exc:
@@ -796,7 +804,10 @@ class BackendService:
                 response_body={},
                 resource_id=record.decision.review_decision_id,
             )
-            return self.control_store.record_review_with_idempotency(record, expected_revision=expected_revision, idempotency=stored)
+            result = self.control_store.record_review_with_idempotency(record, expected_revision=expected_revision, idempotency=stored)
+            self.telemetry.operation(event_name="review.recorded", component="backend", operation="review", correlation=self.telemetry.context(run_id=run_id, stage_id=authoritative.subject_stage, artifact_id=authoritative.subject_artifact_id, checkpoint=checkpoint.value), status=decision.value, details={"replayed": result[1], "checkpoint": checkpoint.value})
+            self.telemetry.metric("ddo_review_lifecycle_total", 1, labels={"review_checkpoint": checkpoint.value, "result_class": decision.value})
+            return result
         except BackendError:
             raise
         except ArtifactConflictError as exc:
@@ -857,7 +868,9 @@ class BackendService:
                 response_body={},
                 resource_id=record.decision.review_decision_id,
             )
-            return self.control_store.record_review_with_idempotency(record, expected_revision=expected_revision, idempotency=stored)
+            result = self.control_store.record_review_with_idempotency(record, expected_revision=expected_revision, idempotency=stored)
+            self.telemetry.operation(event_name="review.invalidated", component="backend", operation="review_invalidate", correlation=self.telemetry.context(run_id=run_id, stage_id=authoritative.subject_stage, artifact_id=authoritative.subject_artifact_id, checkpoint=checkpoint.value), status="INVALIDATED", details={"replayed": result[1], "checkpoint": checkpoint.value})
+            return result
         except ArtifactConflictError as exc:
             raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
         except ConcurrencyConflictError as exc:
@@ -982,6 +995,13 @@ class BackendService:
             raise BackendError("VISUALIZATION_SCOPE_REJECTED", "visualization scope is not bound to this run", status=409)
         return graph
 
+    def diagnostic_bundle(self, *, run_id: str, principal: Principal) -> DiagnosticBundle:
+        """Return an authorized, raw-data-free diagnostic projection for one run."""
+
+        self._require_scope(principal, "runs:read")
+        self._get_authorized_run(run_id, principal)
+        return self.telemetry.build_diagnostic_bundle(run_id=run_id, control_store=self.control_store, artifact_store=self.artifact_store)
+
     def _submission(
         self,
         *,
@@ -1063,6 +1083,7 @@ class BackendService:
             except Exception:
                 pass
             return unknown, False
+        self.telemetry.operation(event_name="execution.submission", component="backend", operation=action, correlation=self.telemetry.context(run_id=run_id, command_id=command.command_id), status=result.status, error_class=classify_error(result.detail if result.status not in {"ACCEPTED", "BLOCKED"} else None), details={"accepted_by": result.accepted_by})
         return result, False
 
     def prepare_execution_plan(

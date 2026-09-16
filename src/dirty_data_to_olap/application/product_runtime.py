@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+from time import monotonic
 from threading import Lock, Thread
 from typing import Any
 
@@ -50,6 +51,7 @@ from dirty_data_to_olap.domain.contracts.quality import QualityResult
 from dirty_data_to_olap.domain.contracts.semantic import SemanticModel, SemanticValidationResult
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSelection, SourceSnapshotResult, SourceType, stable_digest, stable_id
 from dirty_data_to_olap.domain.contracts.validation import ValidationArtifactBindings, ValidationReport
+from dirty_data_to_olap.observability import TelemetryClient
 
 
 def _json(value: Any) -> bytes:
@@ -61,10 +63,11 @@ def _json(value: Any) -> bytes:
 class LocalProductStageHandlers:
     """Thin stage adapters; domain decisions belong to the accepted services."""
 
-    def __init__(self, *, project_root: Path, platform, registry: DurableSourceRegistry, policy_root: Path | None = None) -> None:
+    def __init__(self, *, project_root: Path, platform, registry: DurableSourceRegistry, policy_root: Path | None = None, telemetry: TelemetryClient | None = None) -> None:
         self.project_root = Path(project_root).resolve()
         self.graph_root = Path(policy_root or self.project_root).resolve()
         self.platform = platform
+        self.telemetry = telemetry or TelemetryClient()
         self.registry = registry
         self.source_service = ProductSourceService(self.project_root, registry)
         adapters = {"file_source": FileSourceAdapter(SourceType.CSV, project_root=self.project_root)}
@@ -93,12 +96,32 @@ class LocalProductStageHandlers:
         return StageHandlerRegistry({stage: self for stage in stages})
 
     def execute_with_context(self, request: StageExecutionRequest, cancellation_probe) -> StageExecutionResult:
+        correlation = self.telemetry.context(run_id=request.run_id, stage_id=request.stage_id, job_id=request.job_id, attempt_id=request.attempt_id)
         if cancellation_probe.is_cancelled():
+            self.telemetry.operation(event_name="stage.cancelled", component="product_runtime", operation="stage", correlation=correlation, status="CANCELLED")
             return StageExecutionResult(status=StageResultStatus.CANCELLED, failure_code="CANCELLATION_REQUESTED", failure_classification=FailureClassification.CANCELLED, failure_reason="cancellation observed before product stage")
-        try:
-            return self._execute(request)
-        except Exception as exc:
-            return StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__})
+        started = monotonic()
+        with self.telemetry.adapter_operation(self._adapter_kind(request.stage_id), request.stage_id, correlation, attributes={"stage_kind": self.telemetry.stage_kind(request.stage_id)}):
+            try:
+                result = self._execute(request)
+            except Exception as exc:
+                result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__})
+        duration = max(0.0, monotonic() - started)
+        self.telemetry.observe_adapter_operation(self._adapter_kind(request.stage_id), duration, result.status.value)
+        self.telemetry.observe_stage_result(correlation=correlation, stage_id=request.stage_id, status=result.status.value, duration_seconds=duration, metadata=result.metadata, failure_code=result.failure_code, failure_classification=result.failure_classification.value if result.failure_classification else None)
+        return result
+
+    @staticmethod
+    def _adapter_kind(stage_id: str) -> str:
+        return {
+            "SOURCE_DISCOVERY": "file_source",
+            "SOURCE_SNAPSHOT_STAGE": "file_source",
+            "PROFILING": "dataprofiler",
+            "DEPENDENCY_DISCOVERY": "desbordante",
+            "EVIDENCE_FUSION": "product_runtime",
+            "MATERIALIZATION": "duckdb",
+            "VALIDATION_RECONCILIATION": "duckdb",
+        }.get(stage_id, "product_runtime")
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
         return self.execute_with_context(request, _NeverCancelled())
@@ -421,12 +444,13 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
 class LocalProductRuntime:
     """Composition root for the local browser product path."""
 
-    def __init__(self, project_root: Path, platform, *, execution_plan_service: ExecutionPlanService, policy_root: Path | None = None) -> None:
+    def __init__(self, project_root: Path, platform, *, execution_plan_service: ExecutionPlanService, policy_root: Path | None = None, telemetry: TelemetryClient | None = None) -> None:
         self.project_root = Path(project_root).resolve()
         self.platform = platform
+        self.telemetry = telemetry or TelemetryClient()
         self.registry = DurableSourceRegistry(self.project_root / "workspace" / "platform" / "product" / "source_registry.json")
-        self.handlers = LocalProductStageHandlers(project_root=self.project_root, platform=platform, registry=self.registry, policy_root=policy_root)
-        worker = JobWorker(control_store=platform.control_store, artifact_store=platform.artifact_store, executor=self.handlers.handlers(), worker_id="step29-local-worker", plan_advancer=execution_plan_service)
+        self.handlers = LocalProductStageHandlers(project_root=self.project_root, platform=platform, registry=self.registry, policy_root=policy_root, telemetry=self.telemetry)
+        worker = JobWorker(control_store=platform.control_store, artifact_store=platform.artifact_store, executor=self.handlers.handlers(), worker_id="step29-local-worker", plan_advancer=execution_plan_service, telemetry=self.telemetry)
         self.pool = BoundedWorkerPool((worker,), max_workers=1, max_jobs_per_pump=250, max_active_per_run=1, max_active_per_source=1)
         self.execution = LocalProductExecutionSubmission(platform.control_store, self.pool)
         self.source_service = self.handlers.source_service
@@ -435,15 +459,16 @@ class LocalProductRuntime:
         self.execution.close()
 
 
-def build_local_product(project_root: Path, *, graph_root: Path | None = None):
+def build_local_product(project_root: Path, *, graph_root: Path | None = None, telemetry: TelemetryClient | None = None):
     from dirty_data_to_olap.platform import LocalPlatform
 
     root = Path(project_root).resolve()
     platform = LocalPlatform.from_project_root(root)
     graph = Path(graph_root or root).resolve()
     plan_service = ExecutionPlanService(root, platform.control_store, platform.artifact_store, graph_root=graph)
-    runtime = LocalProductRuntime(root, platform, execution_plan_service=plan_service, policy_root=graph)
-    backend = BackendService(control_store=platform.control_store, artifact_store=platform.artifact_store, execution=runtime.execution, configuration_fingerprint=platform.config.configuration_fingerprint, execution_plan_service=plan_service, source_service=runtime.source_service)
+    shared_telemetry = telemetry or TelemetryClient()
+    runtime = LocalProductRuntime(root, platform, execution_plan_service=plan_service, policy_root=graph, telemetry=shared_telemetry)
+    backend = BackendService(control_store=platform.control_store, artifact_store=platform.artifact_store, execution=runtime.execution, configuration_fingerprint=platform.config.configuration_fingerprint, execution_plan_service=plan_service, source_service=runtime.source_service, telemetry=shared_telemetry)
     return platform, backend, runtime
 
 

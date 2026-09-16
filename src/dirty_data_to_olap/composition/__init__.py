@@ -9,6 +9,7 @@ from dirty_data_to_olap.application.execution_plan import ExecutionPlanService
 from dirty_data_to_olap.application.jobs import DurableExecutionSubmission
 from dirty_data_to_olap.domain.contracts.platform import ResourceBudget
 from dirty_data_to_olap.platform import LocalPlatform
+from dirty_data_to_olap.observability import TelemetryClient
 
 
 def build_local_backend(
@@ -16,6 +17,7 @@ def build_local_backend(
     *,
     resource_budget: ResourceBudget | None = None,
     execution: ExecutionSubmissionPort | None = None,
+    telemetry: TelemetryClient | None = None,
 ) -> tuple[LocalPlatform, BackendService]:
     """Wire concrete Step23 stores to the Step27 application service."""
 
@@ -29,6 +31,7 @@ def build_local_backend(
         execution=execution_port,
         configuration_fingerprint=platform.config.configuration_fingerprint,
         execution_plan_service=execution_plan_service,
+        telemetry=telemetry,
     )
     return platform, backend
 

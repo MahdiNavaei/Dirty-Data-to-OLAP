@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "dashboard_id": "ddo-run-health-v1",
+  "title": "Dirty Data to OLAP V1 run health",
+  "scope": "local/reference runtime",
+  "production_ready": false,
+  "panels": [
+    {"id": "run-lifecycle", "title": "Run lifecycle", "metric": "ddo_run_lifecycle_total", "group_by": ["run_status"]},
+    {"id": "stage-duration", "title": "Stage duration", "metric": "ddo_stage_duration_seconds", "group_by": ["stage_kind", "result_class"]},
+    {"id": "queue-state", "title": "Queue state", "metric": "ddo_queue_jobs", "group_by": ["queue_state"]},
+    {"id": "queue-age", "title": "Oldest runnable age", "metric": "ddo_queue_oldest_runnable_age_seconds", "group_by": []},
+    {"id": "retry-behavior", "title": "Retry behavior", "metric": "ddo_job_retries_total", "group_by": ["retry_reason_class"]},
+    {"id": "review-waits", "title": "Review waits", "metric": "ddo_review_lifecycle_total", "group_by": ["review_checkpoint", "result_class"]},
+    {"id": "adapter-latency", "title": "Adapter latency", "metric": "ddo_adapter_operation_duration_seconds", "group_by": ["adapter_kind", "result_class"]},
+    {"id": "validation-outcomes", "title": "Validation outcomes", "metric": "ddo_validation_outcomes_total", "group_by": ["result_class"]},
+    {"id": "telemetry-health", "title": "Telemetry exporter health", "metric": "ddo_telemetry_exporter_failures_total", "group_by": ["signal", "exporter"]}
+  ],
+  "alerts": [],
+  "slo_targets": []
+}

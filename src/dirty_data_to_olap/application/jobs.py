@@ -52,6 +52,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
 )
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
+from dirty_data_to_olap.observability import TelemetryClient, classify_error
 
 
 class StageExecutorPort(Protocol):
@@ -195,6 +196,7 @@ class JobWorker:
         max_active_per_source: int = 1,
         review_subject_deriver: ReviewSubjectDerivationPort | None = None,
         plan_advancer: ExecutionPlanAdvancerPort | None = None,
+        telemetry: TelemetryClient | None = None,
     ) -> None:
         if not worker_id or lease_seconds < 1 or max_active_per_run < 1 or max_active_per_source < 1:
             raise ValueError("worker_id and a positive lease are required")
@@ -211,15 +213,23 @@ class JobWorker:
         self.review_policy = ReviewPolicyService()
         self.review_subject_deriver = review_subject_deriver or ReviewCheckpointSubjectResolver(control_store, artifact_store)
         self.plan_advancer = plan_advancer
+        self.telemetry = telemetry or TelemetryClient()
 
     def run_once(self) -> WorkerOutcome:
         now = _safe_now(self.clock)
         job = self.control_store.claim_next_job(worker_id=self.worker_id, now=now, lease_seconds=self.lease_seconds, max_active_per_run=self.max_active_per_run, max_active_per_source=self.max_active_per_source)
         if job is None:
+            self.telemetry.metric("ddo_worker_activity_total", 1, labels={"activity": "idle"})
             return WorkerOutcome(None, "IDLE", "no eligible durable job")
+        correlation = self.telemetry.context(run_id=job.run_id, job_id=job.job_id, stage_id=job.stage_id, command_id=job.command_id)
+        self.telemetry.operation(event_name="job.claimed", component="worker", operation="claim", correlation=correlation, status=job.status.value, details={"job_kind": job.job_kind.value, "delivery_count": job.delivery_count})
+        self.telemetry.metric("ddo_job_lifecycle_total", 1, labels={"job_kind": job.job_kind.value, "job_status": job.status.value})
+        self.telemetry.queue_snapshot(self.control_store.list_jobs(run_id=job.run_id, limit=10_000))
         self._inject_fault("after_claim", job, None)
         if job.job_kind is JobKind.COMMAND:
-            return self._run_command(job, now)
+            outcome = self._run_command(job, now)
+            self.telemetry.operation(event_name="command.finalized", component="worker", operation="command", correlation=correlation, status=outcome.status, details={"detail": outcome.detail})
+            return outcome
         return self._run_stage(job, now)
 
     def _run_command(self, job: JobRecord, now: datetime) -> WorkerOutcome:
@@ -352,6 +362,14 @@ class JobWorker:
                 self.control_store.resume_job(job_id=candidate.job_id, now=now)
                 resumed += 1
         if resumed:
+            self.telemetry.operation(
+                event_name="review.resumed",
+                component="worker",
+                operation="resume",
+                correlation=self.telemetry.context(run_id=run.run_id),
+                status="SUCCEEDED",
+                details={"resumed_jobs": resumed},
+            )
             self._set_run_status(run.run_id, RunStatus.RUNNING, allow_terminal_reactivation=True)
             stored = self.control_store.finalize_command_job(
                 job_id=job.job_id,
@@ -381,6 +399,8 @@ class JobWorker:
         plan = self.control_store.get_execution_plan(job.run_id)
         stage = None if plan is None else plan.stage(job.stage_id or "")
         attempt = self.control_store.ensure_stage_attempt(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=now)
+        correlation = self.telemetry.context(run_id=job.run_id, stage_id=job.stage_id, job_id=job.job_id, attempt_id=attempt.attempt_id)
+        self.telemetry.operation(event_name="stage.attempt_created", component="worker", operation="attempt", correlation=correlation, status=attempt.status.value, details={"attempt_number": attempt.attempt_number})
         refreshed_job = self.control_store.get_job(job.job_id)
         if refreshed_job is None:
             raise PlatformError("stage job disappeared after attempt creation")
@@ -465,6 +485,7 @@ class JobWorker:
             )
             self._inject_fault("before_handler_delivery_marker", job, attempt)
             self.control_store.mark_handler_delivery_started(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, now=_safe_now(self.clock))
+            self.telemetry.operation(event_name="stage.delivery_started", component="worker", operation="handler_delivery", correlation=correlation, status="STARTED")
             attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.HANDLER_DELIVERY_STARTED.value})
             self._inject_fault("after_handler_delivery_marker", job, attempt)
             result = self._execute(stage.handler_key, request, probe)
@@ -500,6 +521,7 @@ class JobWorker:
                 metadata={"error_type": type(exc).__name__},
             )
         self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
+        self.telemetry.operation(event_name="stage.result_recorded", component="worker", operation="result_record", correlation=correlation, status=result.status.value, error_class=classify_error(result.failure_code, result.failure_classification.value if result.failure_classification else None) if result.failure_code else None, details={"output_artifact_count": len(result.output_artifact_refs)})
         attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.RESULT_RECORDED.value})
         self._inject_fault("after_result_record_before_finalization", job, attempt)
         self._inject_fault("before_stage_finalization", job, attempt)
@@ -579,9 +601,36 @@ class JobWorker:
                 accepted = False
                 break
         if accepted:
+            self.telemetry.operation(
+                event_name="review.satisfied",
+                component="worker",
+                operation="review_checkpoint",
+                correlation=self.telemetry.context(run_id=job.run_id, stage_id=stage.stage_id, job_id=job.job_id),
+                status="SUCCEEDED",
+                details={"checkpoint": checkpoint.value, "context_count": len(contexts)},
+            )
+            self.telemetry.metric("ddo_review_lifecycle_total", 1, labels={"review_checkpoint": checkpoint.value, "result_class": "SUCCEEDED"})
             return StageExecutionResult(status=StageResultStatus.SUCCEEDED)
         if len(contexts) == 1:
+            self.telemetry.operation(
+                event_name="review.waiting",
+                component="worker",
+                operation="review_checkpoint",
+                correlation=self.telemetry.context(run_id=job.run_id, stage_id=stage.stage_id, job_id=job.job_id),
+                status="NEEDS_REVIEW",
+                details={"checkpoint": checkpoint.value},
+            )
+            self.telemetry.metric("ddo_review_lifecycle_total", 1, labels={"review_checkpoint": checkpoint.value, "result_class": "NEEDS_REVIEW"})
             return StageExecutionResult(status=StageResultStatus.NEEDS_REVIEW, review_context=contexts[0])
+        self.telemetry.operation(
+            event_name="review.waiting",
+            component="worker",
+            operation="review_checkpoint",
+            correlation=self.telemetry.context(run_id=job.run_id, stage_id=stage.stage_id, job_id=job.job_id),
+            status="NEEDS_REVIEW",
+            details={"checkpoint": checkpoint.value, "context_count": len(contexts)},
+        )
+        self.telemetry.metric("ddo_review_lifecycle_total", 1, labels={"review_checkpoint": checkpoint.value, "result_class": "NEEDS_REVIEW"})
         return StageExecutionResult(status=StageResultStatus.NEEDS_REVIEW, review_contexts=contexts)
 
     def _handler_available(self, handler_key: str) -> bool:
@@ -657,7 +706,7 @@ class JobWorker:
                 job_status = JobStatus.FAILED
                 retry_count = job.retry_count
                 available_at = now
-            return self.control_store.finalize_stage_job(
+            stored = self.control_store.finalize_stage_job(
                 job_id=job.job_id,
                 worker_id=self.worker_id,
                 lease_generation=job.lease_generation,
@@ -668,7 +717,9 @@ class JobWorker:
                 retry_count=retry_count,
                 available_at=available_at,
             )
-        return self.control_store.finalize_stage_job(
+            self._observe_finalization(job, attempt, result, stored, retry_count=retry_count)
+            return stored
+        stored = self.control_store.finalize_stage_job(
             job_id=job.job_id,
             worker_id=self.worker_id,
             lease_generation=job.lease_generation,
@@ -677,6 +728,27 @@ class JobWorker:
             status=job_status.value,
             now=now,
         )
+        self._observe_finalization(job, attempt, result, stored, retry_count=stored.retry_count)
+        return stored
+
+    def _observe_finalization(self, job: JobRecord, attempt: StageAttemptRecord, result: StageExecutionResult, stored: JobRecord, *, retry_count: int) -> None:
+        correlation = self.telemetry.context(run_id=job.run_id, stage_id=job.stage_id, job_id=job.job_id, attempt_id=attempt.attempt_id)
+        error_class = classify_error(result.failure_code, result.failure_classification.value if result.failure_classification else None) if result.failure_code else None
+        duration = None
+        if attempt.started_at is not None and attempt.finished_at is not None:
+            duration = max(0.0, (attempt.finished_at - attempt.started_at).total_seconds())
+        self.telemetry.operation(event_name="job.finalized", component="worker", operation="finalize", correlation=correlation, status=stored.status.value, error_class=error_class, retry_count=retry_count, details={"delivery_phase": stored.delivery_phase.value, "failure_code": result.failure_code})
+        self.telemetry.metric("ddo_job_lifecycle_total", 1, labels={"job_kind": job.job_kind.value, "job_status": stored.status.value})
+        if duration is not None:
+            self.telemetry.metric("ddo_job_execution_duration_seconds", duration, labels={"result_class": self.telemetry.result_class(stored.status.value)})
+        if stored.status is JobStatus.RETRY_WAIT:
+            self.telemetry.metric("ddo_job_retries_total", 1, labels={"retry_reason_class": error_class.value if error_class else "UNKNOWN"})
+            self.telemetry.operation(event_name="job.retry_scheduled", component="worker", operation="retry", correlation=correlation, status=stored.status.value, error_class=error_class, retry_count=retry_count)
+        if stored.status is JobStatus.NEEDS_REVIEW:
+            contexts = result.review_contexts or ((result.review_context,) if result.review_context is not None else ())
+            checkpoints = {context.review_checkpoint_id.value for context in contexts}
+            for checkpoint in checkpoints or {"OTHER"}:
+                self.telemetry.metric("ddo_review_lifecycle_total", 1, labels={"review_checkpoint": checkpoint, "result_class": "NEEDS_REVIEW"})
 
     def _advance_after_stage(self, plan: ExecutionPlan, stage_id: str, job: JobRecord) -> None:
         if job.status is JobStatus.SUCCEEDED:
@@ -751,6 +823,14 @@ class JobWorker:
             return
         if run.status is status:
             return
+        self.telemetry.metric("ddo_run_lifecycle_total", 1, labels={"run_status": status.value})
+        self.telemetry.operation(
+            event_name="run.status_changed",
+            component="worker",
+            operation="run_status",
+            correlation=self.telemetry.context(run_id=run_id),
+            status=status.value,
+        )
         try:
             self.control_store.update_run(run.model_copy(update={"status": status}), expected_revision=run.revision)
         except ConcurrencyConflictError:

@@ -41,6 +41,7 @@ CURRENT_ROLE_BY_STEP = {
     32: "compatibility_test_engineer",
     33: "application_security_engineer",
     34: "observability_engineer",
+    35: "sre",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -78,6 +79,7 @@ def is_authorized_specialist_handoff(
         (current_step == 32 and maximum_current_step == 31 and step31_qa_closed(state))
         or (current_step == 33 and maximum_current_step in {31, 32} and step32_compatibility_closed(state))
         or (current_step == 34 and maximum_current_step <= 33 and _step33_completion_evidence(state))
+        or (current_step == 35 and maximum_current_step <= 34 and step34_observability_closed(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -247,6 +249,9 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     return direct_closure or (
         is_authorized_specialist_handoff(state, minimum_current_step=34, maximum_current_step=34)
         and _step33_completion_evidence(state)
+    ) or (
+        is_authorized_specialist_handoff(state, minimum_current_step=35, maximum_current_step=35)
+        and _step34_completion_evidence(state)
     )
 
 
@@ -257,20 +262,25 @@ def _step33_completion_evidence(state: dict[str, Any]) -> bool:
     appsec = specialist.get("step33_application_security", {})
     current_gates = gates(state)
     content_commit = appsec.get("content_commit") if isinstance(appsec, dict) else None
+    current_step = specialist.get("current_step")
+    step34_is_next = current_step == 34 and specialist.get("step34_started") is False and specialist.get("step34_status") == "NOT_STARTED"
+    step34_is_closed = current_step == 35 and specialist.get("step34_started") is True and specialist.get("step34_status") == "COMPLETED_OBSERVABILITY"
+    pointer_preserves_step33 = (
+        (current_step == 34 and specialist.get("last_completed_step") == 33 and specialist.get("last_completed_role") == "application_security_engineer" and specialist.get("last_completed_content_commit") == content_commit)
+        or (current_step == 35 and specialist.get("last_completed_step") == 34 and specialist.get("last_completed_role") == "observability_engineer")
+    )
     return (
         isinstance(appsec, dict)
         and _step31_completion_evidence(state)
-        and specialist.get("last_completed_step") == 33
-        and specialist.get("last_completed_role") == "application_security_engineer"
-        and specialist.get("last_completed_specialist") == "Step33 - Application Security Engineer"
-        and specialist.get("last_completed_content_commit") == content_commit
+        and pointer_preserves_step33
+        and (current_step == 35 or specialist.get("last_completed_specialist") == "Step33 - Application Security Engineer")
+        and (current_step == 35 or specialist.get("last_completed_content_commit") == content_commit)
         and isinstance(content_commit, str)
         and len(content_commit) == 40
         and all(character in "0123456789abcdef" for character in content_commit.lower())
         and specialist.get("step33_started") is True
         and specialist.get("step33_status") == "COMPLETED_APPLICATION_SECURITY_G10_PASS"
-        and specialist.get("step34_started") is False
-        and specialist.get("step34_status") == "NOT_STARTED"
+        and (step34_is_next or step34_is_closed)
         and appsec.get("step33_started") is True
         and appsec.get("status") == "PASS"
         and appsec.get("g10_status") == "PASS"
@@ -284,7 +294,56 @@ def _step33_completion_evidence(state: dict[str, Any]) -> bool:
 def step33_application_security_closed(state: dict[str, Any]) -> bool:
     """Recognize the accepted Step33/G10 closure and Step34 handoff."""
 
-    return is_authorized_specialist_handoff(state, minimum_current_step=34, maximum_current_step=34) and _step33_completion_evidence(state)
+    return (
+        is_authorized_specialist_handoff(state, minimum_current_step=34, maximum_current_step=34)
+        and _step33_completion_evidence(state)
+    ) or (
+        is_authorized_specialist_handoff(state, minimum_current_step=35, maximum_current_step=35)
+        and _step34_completion_evidence(state)
+    )
+
+
+def _step34_completion_evidence(state: dict[str, Any]) -> bool:
+    """Recognize Step34 observability evidence behind the Step35 handoff."""
+
+    specialist = execution(state)
+    observability = specialist.get("step34_observability", {})
+    current_gates = gates(state)
+    content_commit = observability.get("content_commit") if isinstance(observability, dict) else None
+    return (
+        isinstance(observability, dict)
+        and _step33_completion_evidence(state)
+        and specialist.get("current_step") == 35
+        and specialist.get("current_role") == "sre"
+        and specialist.get("current_specialist") == "Step35 - Site Reliability Engineer"
+        and specialist.get("last_completed_step") == 34
+        and specialist.get("last_completed_role") == "observability_engineer"
+        and specialist.get("last_completed_specialist") == "Step34 - Observability Engineer"
+        and specialist.get("last_completed_content_commit") == content_commit
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("step34_started") is True
+        and specialist.get("step34_status") == "COMPLETED_OBSERVABILITY"
+        and specialist.get("step35_started") is False
+        and specialist.get("step35_status") == "NOT_STARTED"
+        and observability.get("step34_started") is True
+        and observability.get("status") == "PASS"
+        and observability.get("content_commit") == content_commit
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
+    )
+
+
+def step34_observability_closed(state: dict[str, Any]) -> bool:
+    """Recognize only the exact Step34 -> Step35 observability handoff."""
+
+    return is_authorized_specialist_handoff(state, minimum_current_step=35, maximum_current_step=35) and _step34_completion_evidence(state)
 
 
 def step31_external_ci_blocked(state: dict[str, Any]) -> bool:

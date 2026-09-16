@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import Enum
 import re
+from time import monotonic
 from typing import Any
 
 from fastapi import FastAPI, Header, Path, Query, Request
@@ -273,6 +274,24 @@ def create_app(
                     return JSONResponse(status_code=413, content={"error": {"code": "REQUEST_TOO_LARGE", "message": "request exceeds the bounded API payload limit", "status": 413, "retryable": False, "request_id": _safe_request_id(request)}})
         return await call_next(request)
 
+    @app.middleware("http")
+    async def telemetry_request(request: Request, call_next):
+        run_match = re.match(r"^/api/v1/runs/([^/]+)", request.url.path)
+        run_id = run_match.group(1) if run_match and _TOKEN.fullmatch(run_match.group(1)) else None
+        correlation = backend.telemetry.context(run_id=run_id, request_id=_safe_request_id(request))
+        request.state.telemetry_correlation = correlation
+        started = monotonic()
+        try:
+            with backend.telemetry.span("api.request", correlation, attributes={"operation": request.method}):
+                response = await call_next(request)
+        except Exception:
+            backend.telemetry.emit_event(event_name="api.request", component="api", operation=request.method.lower(), correlation=correlation, level="ERROR", status="500", duration_ms=round((monotonic() - started) * 1000, 3), details={"route_template": "unhandled"})
+            raise
+        route = request.scope.get("route")
+        template = getattr(route, "path", None) or "unmatched"
+        backend.telemetry.emit_event(event_name="api.request", component="api", operation=request.method.lower(), correlation=correlation, status=str(response.status_code), duration_ms=round((monotonic() - started) * 1000, 3), details={"route_template": template, "status_class": f"{response.status_code // 100}xx"})
+        return response
+
     def principal(request: Request) -> Principal:
         if auth_mode == "trusted_proxy":
             resolved = principal_resolver(request) if principal_resolver is not None else None
@@ -389,6 +408,7 @@ def create_app(
             metadata=payload.metadata,
             principal=principal(request),
             idempotency_key=key(idempotency_key),
+            correlation=getattr(request.state, "telemetry_correlation", None),
         )
         response = JSONResponse(status_code=201, content=_run_view(run).model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
@@ -420,6 +440,11 @@ def create_app(
     async def product_summary(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> ProductSummary:
         caller = read_principal(request, "runs:read")
         return backend.product_summary(run_id=run_id, principal=caller)
+
+    @app.get("/api/v1/runs/{run_id}/diagnostics", tags=["observability"])
+    async def run_diagnostics(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> dict[str, Any]:
+        caller = read_principal(request, "runs:read")
+        return backend.diagnostic_bundle(run_id=run_id, principal=caller).model_dump(mode="json")
 
     @app.get("/api/v1/runs/{run_id}/attempts", response_model=PageResponse, tags=["attempts"])
     async def list_attempts(
