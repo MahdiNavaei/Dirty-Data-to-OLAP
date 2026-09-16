@@ -78,7 +78,7 @@ def command(run_id: str, key: str, action: ExecutionAction = ExecutionAction.SUB
 def run_case(root: Path, name: str) -> tuple[SQLiteControlStore, LocalArtifactStore, RunRecord]:
     control = SQLiteControlStore(root / f"{name}.sqlite", project_root=root)
     artifacts = LocalArtifactStore(root / f"{name}-artifacts", project_root=root)
-    run = control.create_run(RunRecord(run_id=f"run-{name}", project_id="step28", configuration_fingerprint="cfg"))
+    run = control.create_run(RunRecord(run_id=f"run-{name}", project_id="step28", configuration_fingerprint="cfg", metadata={"_owner_subject": "validator-reviewer"}))
     return control, artifacts, run
 
 
@@ -323,9 +323,13 @@ def accept_validator_evidence_review(client: TestClient, control, run_id: str, c
     assert context is not None
     subject = control.get_artifact(context.subject_artifact_id)
     assert subject is not None
+    run = control.get_run(run_id)
+    assert run is not None
+    owner_subject = run.metadata.get("_owner_subject")
+    assert isinstance(owner_subject, str) and owner_subject
     reviewed = client.post(
         f"/api/v1/runs/{run_id}/reviews/REVIEW_EVIDENCE_DECISIONS",
-        headers={"X-Local-Principal": "validator-reviewer", "Idempotency-Key": f"{run_id}-evidence-review"},
+        headers={"X-Local-Principal": owner_subject, "Idempotency-Key": f"{run_id}-evidence-review"},
         json={
             "subject_artifact_id": subject.artifact_id,
             "subject_content_hash": subject.content_hash,
@@ -337,7 +341,7 @@ def accept_validator_evidence_review(client: TestClient, control, run_id: str, c
     assert reviewed.status_code == 200, reviewed.text
     resumed = client.post(
         f"/api/v1/runs/{run_id}/resume",
-        headers={"X-Local-Principal": "validator-reviewer", "Idempotency-Key": f"{run_id}-evidence-resume"},
+        headers={"X-Local-Principal": owner_subject, "Idempotency-Key": f"{run_id}-evidence-resume"},
     )
     assert resumed.status_code == 202, resumed.text
 
@@ -741,7 +745,7 @@ def extended_scenarios(root: Path) -> int:
 
     pool_control = SQLiteControlStore(root / "backpressure.sqlite", project_root=root)
     pool_artifacts = LocalArtifactStore(root / "backpressure-artifacts", project_root=root)
-    pool_runs = [pool_control.create_run(RunRecord(run_id=f"pool-run-{index}", project_id="step28", configuration_fingerprint="cfg")) for index in range(2)]
+    pool_runs = [pool_control.create_run(RunRecord(run_id=f"pool-run-{index}", project_id="step28", configuration_fingerprint="cfg", metadata={"_owner_subject": "validator"})) for index in range(2)]
     for pool_run in pool_runs:
         pool_plan = ExecutionPlan(plan_id=f"pool-plan-{pool_run.run_id}", run_id=pool_run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", source_scope="source-a"),))
         pool_control.register_execution_plan(pool_plan)

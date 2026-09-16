@@ -84,7 +84,7 @@ def main() -> int:
 
         def resolve(self, profile, *, required_purpose, source_id):
             self.calls += 1
-            self.last = RuntimeSqlCredentials("postgresql://runtime", credential_reference="vault://source", credential_purpose=required_purpose, credential_version="2", source_id=source_id)
+            self.last = RuntimeSqlCredentials("postgresql://db.example/runtime", credential_reference="vault://source", credential_purpose=required_purpose, credential_version="2", source_id=source_id)
             return self.last
 
     class CompleteVerifier:
@@ -131,8 +131,8 @@ def main() -> int:
         pass
     checks.append(("verifier failure blocks before dlt", failing.dlt_reached is False))
 
-    runtime = RuntimeSqlCredentials("postgresql://runtime")
-    checks.append(("runtime credential representation is redacted", "postgresql://runtime" not in repr(runtime)))
+    runtime = RuntimeSqlCredentials("postgresql://db.example/runtime")
+    checks.append(("runtime credential representation is redacted", "postgresql://db.example/runtime" not in repr(runtime)))
     metric = AggregateSafeMetric(metric_id="row_count", aggregate_kind="count", value=1, derivation_scope="table", privacy_classification="aggregate", provenance="validator")
     privacy = PrivacyPolicyService()
     checks.append(("numeric identifier is not aggregate-safe", not privacy.prepare_external_payload({"customer_id": 123456}, aggregate_only=True).allowed and privacy.prepare_external_payload({"row_count": metric}, aggregate_only=True).allowed))

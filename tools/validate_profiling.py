@@ -62,7 +62,7 @@ def main() -> int:
         errors.append(f"cannot read execution state: {exc.__class__.__name__}")
 
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if '"DataProfiler==0.13.4"' not in pyproject:
+    if '"DataProfiler==0.14.0"' not in pyproject:
         errors.append("official DataProfiler dependency is not pinned")
     if "[full]" in pyproject or "[ml]" in pyproject or "report" in pyproject.lower():
         errors.append("DataProfiler ML/full/report extras are not allowed")

@@ -344,7 +344,7 @@ def _repair_checks() -> int:
     with TemporaryDirectory(dir=ROOT) as temp:
         project_root = Path(temp)
         platform, backend1 = build_local_backend(project_root)
-        run_id = backend1.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("multi", frozenset({"runs:write"})), idempotency_key="multi-run")[0].run_id
+        run_id = backend1.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("multi", frozenset({"runs:write"}), "LOCAL_TEST_AUTH"), idempotency_key="multi-run")[0].run_id
         ref = _publish((platform, backend1), run_id, "repair-multi")
         context = _context(ref)
         platform.control_store.register_review_subject_context(run_id=run_id, context=context)
@@ -372,7 +372,7 @@ def _repair_checks() -> int:
         platform, backend = build_local_backend(project_root)
         executor = _RepairRecordingExecutor()
         backend.execution = executor
-        run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("execution", frozenset({"runs:write"})), idempotency_key="execution-run")[0].run_id
+        run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("execution", frozenset({"runs:write"}), "LOCAL_TEST_AUTH"), idempotency_key="execution-run")[0].run_id
         platform.control_store.register_execution_plan(ExecutionPlan(plan_id="step27-validator-execution-plan", run_id=run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", final_validation=True),)))
         original_complete = platform.control_store.complete_idempotency
         failed = False
@@ -396,13 +396,13 @@ def _repair_checks() -> int:
     with TemporaryDirectory(dir=ROOT) as temp:
         project_root = Path(temp)
         platform, backend = build_local_backend(project_root)
-        run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("auth", frozenset({"runs:write"})), idempotency_key="auth-run")[0].run_id
+        run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("auth", frozenset({"runs:write"}), "LOCAL_TEST_AUTH"), idempotency_key="auth-run")[0].run_id
         try:
             anonymous = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: None), raise_server_exceptions=False)
             checks += 1; _check(anonymous.get(f"/api/v1/runs/{run_id}").status_code == 401, "anonymous trusted-proxy read rejected")
-            insufficient = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset(), "TRUSTED_PROXY")), raise_server_exceptions=False)
+            insufficient = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset(), "TRUSTED_PROXY", frozenset({"repair-project"}))), raise_server_exceptions=False)
             checks += 1; _check(insufficient.get(f"/api/v1/runs/{run_id}").status_code == 403, "insufficient read scope rejected")
-            authorized = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset({"runs:read"}), "TRUSTED_PROXY")), raise_server_exceptions=False)
+            authorized = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset({"runs:read"}), "TRUSTED_PROXY", frozenset({"repair-project"}))), raise_server_exceptions=False)
             authorized_response = authorized.get(f"/api/v1/runs/{run_id}")
             checks += 1; _check(authorized_response.status_code == 200 and "TRUSTED_PROXY" not in authorized_response.text and authorized.get("/api/v1/health").status_code == 200, "authorized read and public health")
             checks += 1; _check(authorized.post("/api/v1/runs", headers={"Idempotency-Key": "auth-write"}, json={"project_id": "p", "configuration_fingerprint": platform.config.configuration_fingerprint}).status_code == 403, "read and mutation scopes remain separate")
@@ -412,7 +412,7 @@ def _repair_checks() -> int:
     with TemporaryDirectory(dir=ROOT) as temp:
         project_root = Path(temp)
         platform, backend = build_local_backend(project_root)
-        run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("migration", frozenset({"runs:write"})), idempotency_key="migration-run")[0].run_id
+        run_id = backend.create_run(project_id="repair-project", configuration_fingerprint=platform.config.configuration_fingerprint, git_content_commit=None, metadata={}, principal=Principal("migration", frozenset({"runs:write"}), "LOCAL_TEST_AUTH"), idempotency_key="migration-run")[0].run_id
         path = platform.control_store.path
         platform.close()
         connection = sqlite3.connect(path)
