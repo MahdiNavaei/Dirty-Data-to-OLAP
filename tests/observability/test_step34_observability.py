@@ -98,7 +98,14 @@ def _poll_run(client: TestClient, *, headers: dict[str, str], run_id: str, suffi
                 assert resumed.status_code in (200, 202), resumed.text
                 accepted.add(review["checkpoint"])
         if summary["status"] in {"SUCCEEDED", "FAILED", "CANCELLED"}:
-            return summary
+            # A terminal run status is persisted before the bounded local
+            # worker necessarily finishes finalizing already-queued jobs.
+            # Wait for the durable job projection to quiesce so the semantic
+            # equivalence assertion cannot compare one snapshot mid-pump with
+            # another after the pump has drained.
+            active_statuses = {"QUEUED", "RUNNING", "RETRY_WAIT"}
+            if not any(item["status"] in active_statuses for item in summary["stages"]):
+                return summary
         time.sleep(0.2)
     raise AssertionError(f"run did not reach a terminal state: {run_id}")
 
