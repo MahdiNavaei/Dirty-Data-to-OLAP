@@ -1679,3 +1679,16 @@ handoff_to:
 - authoritative_final_state: `last_completed_step=32`; `last_completed_role=compatibility_test_engineer`; `current_step=33`; `current_role=application_security_engineer`; `step32_started=true`; `step32_status=COMPLETED_COMPATIBILITY_G9_PASS`; `step33_started=false`; `step33_status=NOT_STARTED`; `G9=PASS`; `blocked=false`
 - final_state: `last_completed_specialist=Step32 - Compatibility Test Engineer`; `current_specialist=Step33 - Application Security Engineer`; `next_step=Step33 - Application Security Engineer`
 - no_step33_implementation: true
+
+## POST-STEP33 APPLICATION SECURITY G10 INTEGRITY CLOSURE
+
+- execution_step: `33`; surgical application-security closure only; Step34 was not started
+- starting_baseline: accepted Step32/G9 closure with `step33_started=false` and `step33_status=NOT_STARTED`; protected `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- content_commits: initial AppSec implementation `a35141ae3f5869a489bec9e4021a36bab6317f52`; CI validator fixture repair `db69f2dc6afe2ff0c17b0b20de673dff40547142`; authorized browser polling harness repair `8d3691cc00ebebb16ccb3695ec27dd52372584c2`
+- exact_head_content_ci: run `35059112393`; result `PASS`; Secret scan, clean-room G8, image scan, Step31 independent QA, Step32 compatibility/G9 and Step33 AppSec/G10 all passed on `8d3691cc00ebebb16ccb3695ec27dd52372584c2`
+- threat_model: `docs/security/STEP33_APPLICATION_SECURITY_THREAT_MODEL.md`
+- receipt: `docs/execution/STEP33_APPLICATION_SECURITY_REVIEW.md`
+- validator: `tools/validate_step33_appsec.py`; `25` required scenarios; Critical open `0`; High open `0`; dependency audits PASS; protected path untouched
+- gate_state: `G6=PASS`; `G7=PASS`; `G8=PASS`; `G9=PASS`; `G10=PASS`; `G11-G15=PENDING`; `blocked=false`
+- final_state: `last_completed_step=33`, `last_completed_role=application_security_engineer`, `current_step=34`, `current_role=observability_engineer`, `step33_started=true`, `step33_status=COMPLETED_APPLICATION_SECURITY_G10_PASS`, `step34_started=false`, `step34_status=NOT_STARTED`
+- no_step34_implementation: true
