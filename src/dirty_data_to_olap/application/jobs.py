@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from typing import Callable, Mapping, Protocol, Sequence
 
 from dirty_data_to_olap.application.platform import (
@@ -850,14 +851,26 @@ class BoundedWorkerPool:
         self.max_jobs_per_pump = max_jobs_per_pump
         self.max_active_per_run = max_active_per_run
         self.max_active_per_source = max_active_per_source
+        self._shutdown_requested = Event()
         for worker in self.workers:
             worker.max_active_per_run = max_active_per_run
             worker.max_active_per_source = max_active_per_source
+
+    @property
+    def shutdown_requested(self) -> bool:
+        return self._shutdown_requested.is_set()
+
+    def request_shutdown(self) -> None:
+        """Stop admitting new claims after the current bounded batch."""
+
+        self._shutdown_requested.set()
 
     def pump(self) -> tuple[WorkerOutcome, ...]:
         outcomes: list[WorkerOutcome] = []
         with ThreadPoolExecutor(max_workers=len(self.workers)) as executor:
             while len(outcomes) < self.max_jobs_per_pump:
+                if self._shutdown_requested.is_set():
+                    break
                 batch = self.workers[: min(len(self.workers), self.max_jobs_per_pump - len(outcomes))]
                 batch_outcomes = tuple(executor.map(lambda worker: worker.run_once(), batch))
                 outcomes.extend(batch_outcomes)

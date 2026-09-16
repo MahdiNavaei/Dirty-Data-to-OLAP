@@ -413,15 +413,29 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
         self.pool = pool
         self._lock = Lock()
         self._thread: Thread | None = None
+        self._closed = False
 
     def submit_command(self, *, command, run):
-        result = super().submit_command(command=command, run=run)
+        with self._lock:
+            if self._closed:
+                from dirty_data_to_olap.domain.contracts.api import SubmissionResult
+
+                return SubmissionResult(
+                    run_id=run.run_id,
+                    command_id=command.command_id,
+                    status="UNAVAILABLE",
+                    detail="local execution runtime is shutting down",
+                    accepted_by="local-runtime",
+                )
+            result = super().submit_command(command=command, run=run)
         if result.status == "ACCEPTED":
             self._wake()
         return result
 
     def _wake(self) -> None:
         with self._lock:
+            if self._closed:
+                return
             if self._thread is not None and self._thread.is_alive():
                 return
             self._thread = Thread(target=self._pump, name="step29-product-worker", daemon=True)
@@ -436,6 +450,8 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
 
     def close(self) -> None:
         with self._lock:
+            self._closed = True
+            self.pool.request_shutdown()
             thread = self._thread
         if thread is not None and thread.is_alive():
             thread.join(timeout=15)
@@ -457,6 +473,7 @@ class LocalProductRuntime:
 
     def close(self) -> None:
         self.execution.close()
+        self.platform.close()
 
 
 def build_local_product(project_root: Path, *, graph_root: Path | None = None, telemetry: TelemetryClient | None = None):
