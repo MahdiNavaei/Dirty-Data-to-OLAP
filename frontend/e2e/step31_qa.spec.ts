@@ -3,6 +3,7 @@ import path from "node:path";
 
 const validFixture = path.resolve("../tests/fixtures/step31_orders.csv");
 const duplicateFixture = path.resolve("../tests/fixtures/step31_duplicate_orders.csv");
+const browserPrincipal = "step29-browser-reviewer";
 
 async function importAndStart(page: Page, fixture: string, project: string) {
   await page.goto("/");
@@ -20,7 +21,7 @@ async function waitForJobsToSettle(page: Page) {
   if (!runId) throw new Error("run id was not present in the browser URL");
   await expect.poll(async () => {
     const response = await page.request.get(`${new URL(page.url()).origin}/api/v1/runs/${runId}/jobs`, {
-      headers: { "X-Local-Principal": "step31-browser" },
+      headers: { "X-Local-Principal": browserPrincipal },
     });
     if (!response.ok()) return false;
     const body = await response.json() as { items?: Array<{ status?: string }> };
