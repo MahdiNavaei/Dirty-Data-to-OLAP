@@ -72,4 +72,6 @@ pending.
 
 Content commit: `993f36bf7c1660f79f8d9fcd6fe190bd4b45d9a5`.
 Content exact-head CI: `35117704614` — `PASS`.
-Closure commit: `PENDING`.
+Closure commit: `b1ccc8c0252845101510c8f63ab82f716d06e798`.
+Final validator-compatibility repair commit: `c7155abc6d8dbcfd9acd4bf9d7aced36f9858880`.
+Final exact-head CI: `35131223529` — `PASS`.

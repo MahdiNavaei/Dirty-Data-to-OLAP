@@ -1706,3 +1706,13 @@ handoff_to:
 - final_state: `last_completed_step=34`, `last_completed_role=observability_engineer`, `current_step=35`, `current_role=sre`, `step34_started=true`, `step34_status=COMPLETED_OBSERVABILITY`, `step35_started=false`, `step35_status=NOT_STARTED`
 - receipts: `output/step34_observability_validation.json`; `docs/observability/telemetry-spec.md`; `docs/execution/STEP34_OBSERVABILITY_REVIEW.md`; `tools/validate_step34_observability.py`
 - no_step35_implementation: true
+
+## POST-STEP34 FINAL-HEAD VALIDATION RECORD
+
+- correction: the Step34 handoff remained authoritative; historical validators were narrowly updated to accept the legitimate Step35 handoff without authorizing later specialists
+- closure_commit: `b1ccc8c0252845101510c8f63ab82f716d06e798`
+- final_repair_commit: `c7155abc6d8dbcfd9acd4bf9d7aced36f9858880`
+- final_exact_head_ci: `35131223529`; result `PASS`
+- final_state: `last_completed_step=34`; `last_completed_role=observability_engineer`; `current_step=35`; `current_role=sre`; `step35_started=false`; `step35_status=NOT_STARTED`
+- gate_state: `G6=PASS`; `G7=PASS`; `G8=PASS`; `G9=PASS`; `G10=PASS`; `G11-G15=PENDING`; `blocked=false`
+- no_step35_implementation: true
