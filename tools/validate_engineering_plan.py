@@ -17,7 +17,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed
 ENG = ROOT / "docs" / "engineering"
 SPECS = ENG / "specs"
 STATE_PATH = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -295,7 +295,8 @@ def main() -> int:
     check("G0 and G1 are PASS", gates.get("G0_PRODUCT_CONTRACT") == "PASS" and gates.get("G1_DOMAIN_TRUTH") == "PASS")
     step29_pass = step29_g7_closed(state) or (execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("step29_status") == "PASS" and gates.get("G7_END_TO_END_PRODUCT") == "PASS")
     step30_pass = step30_g8_closed(state)
-    check("G3-G15 preserve evidenced G3/G4/G5/G6/G7/G8 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) for key in LATER_GATES[4:]))
+    step32_pass = step32_compatibility_closed(state)
+    check("G3-G15 preserve evidenced G3/G4/G5/G6/G7/G8/G9 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) for key in LATER_GATES[4:]))
     check("blocked is false", state.get("blocked") is False)
     check("Step30 handoff or completed G8 closure remains explicit and coherent", step30_handoff(state) or step30_g8_closed(state))
     if mode == "pre" and execution.get("current_step", 0) < 6:
@@ -304,7 +305,7 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer", "data_qa_engineer", "data_platform_engineer", "distributed_data_engineer", "ux_designer", "data_visualization_engineer", "senior_backend_engineer", "distributed_job_processing_engineer", "devops_engineer", "qa_automation_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer", "data_qa_engineer", "data_platform_engineer", "distributed_data_engineer", "ux_designer", "data_visualization_engineer", "senior_backend_engineer", "distributed_job_processing_engineer", "devops_engineer", "qa_automation_engineer", "compatibility_test_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
             "post-gate current specialist is an authorized specialist handoff when G3 passes",
@@ -333,7 +334,8 @@ def main() -> int:
             or (execution.get("current_step") == 28 and execution.get("current_role") == "distributed_job_processing_engineer" and execution.get("last_completed_step") == 27 and execution.get("last_completed_role") == "senior_backend_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS")
             or (execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("last_completed_step") == 28 and execution.get("last_completed_role") == "distributed_job_processing_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS")
             or (execution.get("current_step") == 31 and execution.get("current_role") == "qa_automation_engineer" and execution.get("last_completed_step") == 30 and execution.get("last_completed_role") == "devops_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS" and gates.get("G8_REPRODUCIBLE_BUILD") == "PASS")
-            or (execution.get("current_step") == 32 and execution.get("current_role") == "compatibility_test_engineer" and execution.get("last_completed_step") == 31 and execution.get("last_completed_role") == "qa_automation_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS" and gates.get("G8_REPRODUCIBLE_BUILD") == "PASS" and step31_qa_closed(state)),
+            or (execution.get("current_step") == 32 and execution.get("current_role") == "compatibility_test_engineer" and execution.get("last_completed_step") == 31 and execution.get("last_completed_role") == "qa_automation_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS" and gates.get("G8_REPRODUCIBLE_BUILD") == "PASS" and step31_qa_closed(state))
+            or (execution.get("current_step") == 33 and execution.get("current_role") == "application_security_engineer" and execution.get("last_completed_step") == 32 and execution.get("last_completed_role") == "compatibility_test_engineer" and gates.get("G3_SOURCE_SAFETY") == "PASS" and gates.get("G6_DATA_CORRECTNESS") == "PASS" and gates.get("G8_REPRODUCIBLE_BUILD") == "PASS" and gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS" and step32_pass),
         )
 
     # 4-5: required artifacts parse and carry provenance.

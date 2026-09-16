@@ -11,7 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed
 ARCH = ROOT / "docs" / "data-architecture"
 SPECS = ARCH / "specs"
 STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -510,6 +510,7 @@ def main() -> int:
     if state["gates"]["G2_ARCHITECTURE_READY"] not in {"PENDING", "PASS"}:
         errors.append("G2 is not PENDING or PASS")
     step29_pass = step29_g7_closed(state)
+    step32_pass = step32_compatibility_closed(state)
     if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"} or state["gates"].get("G4_BOUNDED_INTELLIGENCE") not in {"PENDING", "PASS"} or any(
         value != "PENDING" for key, value in state["gates"].items()
         if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY", "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY"}
@@ -517,6 +518,7 @@ def main() -> int:
         and not (key == "G6_DATA_CORRECTNESS" and value in {"PENDING", "PASS"})
         and not (key == "G7_END_TO_END_PRODUCT" and step29_pass)
         and not (key == "G8_REPRODUCIBLE_BUILD" and step30_g8_closed(state))
+        and not (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass)
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:
