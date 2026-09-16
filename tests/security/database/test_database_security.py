@@ -237,7 +237,7 @@ class _CountingResolver:
 
     def resolve(self, profile, *, required_purpose, source_id):
         self.calls += 1
-        self.last_credentials = RuntimeSqlCredentials("postgresql://runtime", credential_reference="vault://source", credential_purpose=required_purpose, credential_version="7", source_id=source_id)
+        self.last_credentials = RuntimeSqlCredentials("postgresql://db.example/runtime", credential_reference="vault://source", credential_purpose=required_purpose, credential_version="7", source_id=source_id)
         return self.last_credentials
 
 

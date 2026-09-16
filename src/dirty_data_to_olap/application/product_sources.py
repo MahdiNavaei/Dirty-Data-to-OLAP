@@ -26,6 +26,7 @@ class ProductSourceService:
     """Store bounded CSV imports below the project-owned product workspace."""
 
     MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+    _OWNER_KEY = "_owner_subject"
 
     def __init__(self, project_root: Path, registry: DurableSourceRegistry) -> None:
         self.project_root = Path(project_root).resolve()
@@ -71,7 +72,9 @@ class ProductSourceService:
         except (UnicodeDecodeError, csv.Error) as exc:
             raise ProductSourceError("CSV content could not be parsed as UTF-8 CSV") from exc
 
-    def import_csv(self, *, registry_id: str, filename: str, payload: bytes) -> SourceRegistryRecord:
+    def import_csv(self, *, registry_id: str, filename: str, payload: bytes, owner_subject: str) -> SourceRegistryRecord:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", owner_subject):
+            raise ProductSourceError("source owner is invalid")
         if len(payload) > self.MAX_UPLOAD_BYTES:
             raise ProductSourceError("CSV import exceeds the bounded 5 MB upload limit")
         clean_name = self._filename(filename)
@@ -100,7 +103,7 @@ class ProductSourceService:
             scope=SelectionScope(),
             adapter_name="file_source",
             adapter_version="1.0.0",
-            adapter_config={"managed_import": "true", "original_filename": clean_name},
+            adapter_config={"managed_import": "true", "original_filename": clean_name, self._OWNER_KEY: owner_subject},
             read_only=True,
         )
         try:
@@ -115,8 +118,21 @@ class ProductSourceService:
         except KeyError as exc:
             raise ProductSourceError("source was not found") from exc
 
-    def list(self) -> tuple[SourceRegistryRecord, ...]:
-        return self.registry.list()
+    @classmethod
+    def _owner_matches(cls, record: SourceRegistryRecord, owner_subject: str) -> bool:
+        return record.adapter_config.get(cls._OWNER_KEY) == owner_subject
+
+    def get_for_owner(self, registry_id: str, *, owner_subject: str) -> SourceRegistryRecord:
+        record = self.get(registry_id)
+        if not self._owner_matches(record, owner_subject):
+            raise ProductSourceError("source was not found")
+        return record
+
+    def list(self, *, owner_subject: str | None = None) -> tuple[SourceRegistryRecord, ...]:
+        records = self.registry.list()
+        if owner_subject is None:
+            return records
+        return tuple(record for record in records if self._owner_matches(record, owner_subject))
 
     def selection(self, *, registry_id: str, scope: SelectionScope, extraction, execution_context_id: str) -> SourceSelection:
         record = self.get(registry_id)

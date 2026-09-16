@@ -61,7 +61,13 @@ def normalize_sqlite_failure(
         kind = DatabaseFailureKind.ACCESS_DENIED
         retryable = False
         cause = "authorization"
-    elif "unable to open" in lowered or "no such file" in lowered or "cannot open" in lowered:
+    elif (
+        isinstance(exception, FileNotFoundError)
+        or "unable to open" in lowered
+        or "no such file" in lowered
+        or "cannot open" in lowered
+        or "cannot find the file" in lowered
+    ):
         kind = DatabaseFailureKind.CONNECTION_FAILED
         retryable = False
         cause = "connection"
@@ -110,6 +116,7 @@ class SQLiteReadOnlySource:
         self,
         profile: ConnectionProfileReference,
         *,
+        project_root: Path | None = None,
         timeout_policy: TimeoutPolicy | None = None,
         access_policy: DatabaseAccessPolicy | None = None,
         pool_policy: PoolPolicy | None = None,
@@ -117,6 +124,7 @@ class SQLiteReadOnlySource:
         if profile.database_engine is not DatabaseEngine.SQLITE:
             raise ValueError("SQLiteReadOnlySource requires a sqlite connection profile")
         self.profile = profile
+        self.project_root = None if project_root is None else Path(project_root).resolve()
         self.timeout_policy = timeout_policy or TimeoutPolicy(
             connection_timeout_seconds=5.0,
             busy_timeout_seconds=5.0,
@@ -130,7 +138,14 @@ class SQLiteReadOnlySource:
         database = self.profile.database_name
         if database == ":memory:" or database.startswith("file:"):
             raise ValueError("SQLite reference access requires a filesystem path, not an in-memory or raw URI")
-        path = Path(database).expanduser().resolve()
+        path = Path(database).expanduser().resolve(strict=True)
+        if self.project_root is not None:
+            try:
+                path.relative_to(self.project_root)
+            except ValueError as exc:
+                raise ValueError("SQLite source file is outside the project-owned source root") from exc
+        if not path.is_file():
+            raise ValueError("SQLite source file is not accessible")
         uri = path.as_uri()
         return f"{uri}&mode=ro" if "?" in uri else f"{uri}?mode=ro"
 

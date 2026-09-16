@@ -309,7 +309,7 @@ def test_review_resume_requires_compatible_context_and_creates_new_attempt(tmp_p
         decision=ReviewDecisionStatus.ACCEPTED,
         rationale="reviewed",
         expected_revision=0,
-        principal=Principal(subject="reviewer", scopes=frozenset({"reviews:write"})),
+        principal=Principal(subject="reviewer", scopes=frozenset({"reviews:write"}), project_ids=frozenset({"project"})),
         idempotency_key="step28-review",
     )
     assert control.get_current_review(run_id=run.run_id, subject_key=subject_key) is not None

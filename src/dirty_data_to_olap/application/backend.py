@@ -87,6 +87,7 @@ class Principal:
     subject: str
     scopes: frozenset[str]
     source: str = "TRUSTED_PRINCIPAL"
+    project_ids: frozenset[str] = frozenset()
 
 
 class ExecutionSubmissionPort(Protocol):
@@ -196,8 +197,50 @@ class BackendService:
         self.source_service = source_service
 
     def _require_scope(self, principal: Principal, scope: str) -> None:
-        if not principal.subject or scope not in principal.scopes:
+        if not principal.subject or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", principal.subject) or scope not in principal.scopes:
             raise BackendError("FORBIDDEN", "caller is not authorized for this operation", status=403)
+
+    @staticmethod
+    def _owner_subject(run: RunRecord) -> str | None:
+        value = run.metadata.get("_owner_subject")
+        return value if isinstance(value, str) else None
+
+    def _authorize_project(self, principal: Principal, project_id: str, *, mutation: bool = False) -> None:
+        """Require an explicit project claim; local test auth is owner-bound."""
+
+        if principal.source == "LOCAL_TEST_AUTH":
+            # Local test authentication establishes ownership when a run is
+            # created. Existing runs are checked by _authorize_run.
+            return
+        if project_id not in principal.project_ids:
+            raise BackendError(
+                "FORBIDDEN" if mutation else "PROJECT_NOT_FOUND",
+                "caller is not authorized for this project",
+                status=403 if mutation else 404,
+            )
+
+    def _authorize_run(self, principal: Principal, run: RunRecord, *, mutation: bool = False) -> RunRecord:
+        allowed = self._is_authorized_run(principal, run)
+        if not allowed:
+            raise BackendError(
+                "FORBIDDEN" if mutation else "RUN_NOT_FOUND",
+                "run was not found",
+                status=403 if mutation else 404,
+            )
+        return run
+
+    def _is_authorized_run(self, principal: Principal, run: RunRecord) -> bool:
+        return (
+            self._owner_subject(run) == principal.subject
+            if principal.source == "LOCAL_TEST_AUTH"
+            else run.project_id in principal.project_ids
+        )
+
+    def _get_authorized_run(self, run_id: str, principal: Principal, *, mutation: bool = False) -> RunRecord:
+        run = self.control_store.get_run(run_id)
+        if run is None:
+            raise BackendError("RUN_NOT_FOUND", "run was not found", status=404)
+        return self._authorize_run(principal, run, mutation=mutation)
 
     def authorize_read(self, principal: Principal, scope: str) -> None:
         """Apply the explicit control-plane read policy at the API boundary."""
@@ -238,6 +281,9 @@ class BackendService:
         idempotency_key: str,
     ) -> tuple[RunRecord, bool]:
         self._require_scope(principal, "runs:write")
+        self._authorize_project(principal, project_id, mutation=True)
+        if "_owner_subject" in metadata:
+            raise BackendError("INVALID_METADATA", "run metadata contains a reserved field", status=422)
         key = _safe_key(idempotency_key)
         try:
             safe = safe_metadata(metadata)
@@ -253,6 +299,8 @@ class BackendService:
         scope = f"run-create:{principal.subject}"
         if self.configuration_fingerprint is not None and configuration_fingerprint != self.configuration_fingerprint:
             raise BackendError("CONFIGURATION_CONFLICT", "run configuration does not match the configured local platform", status=409)
+        stored_metadata = dict(safe)
+        stored_metadata["_owner_subject"] = principal.subject
         run = RunRecord(
             # A distinct idempotency key represents a new run command; the
             # key participates in resource identity but not fingerprinting.
@@ -260,7 +308,7 @@ class BackendService:
             project_id=project_id,
             configuration_fingerprint=configuration_fingerprint,
             git_content_commit=git_content_commit,
-            metadata=safe,
+            metadata=stored_metadata,
         )
         try:
             stored = IdempotencyRecord(
@@ -279,24 +327,27 @@ class BackendService:
         except PlatformError as exc:
             raise BackendError("RUN_CREATION_REJECTED", "run could not be persisted", status=409) from exc
 
-    def get_run(self, run_id: str) -> RunRecord:
-        run = self.control_store.get_run(run_id)
-        if run is None:
-            raise BackendError("RUN_NOT_FOUND", "run was not found", status=404)
-        return run
+    def get_run(self, run_id: str, *, principal: Principal) -> RunRecord:
+        return self._get_authorized_run(run_id, principal)
 
-    def list_runs(self, *, project_id: str | None, status: str | None, page_size: int, offset: int) -> PageResult:
+    def list_runs(self, *, project_id: str | None, status: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
         project_id = _safe_filter(project_id, name="project_id")
+        self._require_scope(principal, "runs:read")
+        if project_id is not None and principal.source != "LOCAL_TEST_AUTH":
+            self._authorize_project(principal, project_id)
         if status is not None:
             try:
                 RunStatus(status)
             except ValueError as exc:
                 raise BackendError("INVALID_RUN_STATUS", "status filter is not a supported run status", status=400) from exc
-        rows = self.control_store.list_runs(project_id=project_id, status=status, limit=page_size + 1, offset=offset)
-        return self._page(rows, page_size=page_size, offset=offset, order_by="created_at,run_id")
+        if page_size < 1 or page_size > self.max_page_size or offset < 0:
+            raise BackendError("INVALID_PAGE", "page_size exceeds the bounded API limit or offset is invalid", status=400)
+        rows = self.control_store.list_runs(project_id=project_id, status=status, limit=10000, offset=0)
+        visible = tuple(item for item in rows if self._is_authorized_run(principal, item))
+        return self._page(visible[offset:offset + page_size + 1], page_size=page_size, offset=offset, order_by="created_at,run_id")
 
-    def list_attempts(self, *, run_id: str, stage_id: str | None, status: str | None, page_size: int, offset: int) -> PageResult:
-        self.get_run(run_id)
+    def list_attempts(self, *, run_id: str, stage_id: str | None, status: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
+        self._get_authorized_run(run_id, principal)
         stage_id = _safe_filter(stage_id, name="stage_id")
         if status is not None:
             try:
@@ -306,16 +357,17 @@ class BackendService:
         rows = self.control_store.list_stage_attempts(run_id=run_id, stage_id=stage_id, status=status, limit=page_size + 1, offset=offset)
         return self._page(rows, page_size=page_size, offset=offset, order_by="stage_id,attempt_number,attempt_id")
 
-    def get_attempt(self, *, run_id: str, attempt_id: str) -> StageAttemptRecord:
+    def get_attempt(self, *, run_id: str, attempt_id: str, principal: Principal) -> StageAttemptRecord:
+        self._get_authorized_run(run_id, principal)
         attempt = self.control_store.get_stage_attempt(attempt_id)
         if attempt is None or attempt.run_id != run_id:
             raise BackendError("ATTEMPT_NOT_FOUND", "stage attempt was not found", status=404)
         return attempt
 
-    def list_jobs(self, *, run_id: str, status: str | None, page_size: int, offset: int) -> PageResult:
+    def list_jobs(self, *, run_id: str, status: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
         """Expose only the safe durable job projection; no queue payloads."""
 
-        self.get_run(run_id)
+        self._get_authorized_run(run_id, principal)
         if status is not None:
             try:
                 JobStatus(status)
@@ -324,7 +376,8 @@ class BackendService:
         rows = self.control_store.list_jobs(run_id=run_id, status=status, limit=page_size + 1, offset=offset)
         return self._page(rows, page_size=page_size, offset=offset, order_by="created_at,job_id")
 
-    def get_job(self, *, run_id: str, job_id: str) -> JobRecord:
+    def get_job(self, *, run_id: str, job_id: str, principal: Principal) -> JobRecord:
+        self._get_authorized_run(run_id, principal)
         job = self.control_store.get_job(job_id)
         if job is None or job.run_id != run_id:
             raise BackendError("JOB_NOT_FOUND", "job was not found", status=404)
@@ -345,7 +398,7 @@ class BackendService:
         self._require_scope(principal, "runs:read")
         if self.source_service is None:
             return ()
-        return tuple(self._product_source_view(item) for item in self.source_service.list())
+        return tuple(self._product_source_view(item) for item in self.source_service.list(owner_subject=principal.subject))
 
     def product_configuration(self, *, principal: Principal) -> ProductConfiguration:
         self._require_scope(principal, "runs:read")
@@ -378,7 +431,7 @@ class BackendService:
                 raise BackendError("SOURCE_IMPORT_REPLAY_INVALID", "source import replay cannot be reconciled", status=409) from exc
         registry_id = stable_id("registry", {"principal": principal.subject, "key": key, "request": request})
         try:
-            record = self.source_service.import_csv(registry_id=registry_id, filename=filename, payload=payload)
+            record = self.source_service.import_csv(registry_id=registry_id, filename=filename, payload=payload, owner_subject=principal.subject)
             idempotency = IdempotencyRecord(
                 scope=scope,
                 key=key,
@@ -408,7 +461,7 @@ class BackendService:
         self._require_scope(principal, "runs:write")
         if self.source_service is None:
             raise BackendError("SOURCE_PRODUCT_UNAVAILABLE", "managed source selection is not configured", status=503, retryable=True)
-        run = self.get_run(run_id)
+        run = self._get_authorized_run(run_id, principal, mutation=True)
         key = _safe_key(idempotency_key)
         request = {
             "run_id": run_id,
@@ -426,7 +479,7 @@ class BackendService:
                 raise BackendError("SOURCE_BIND_REPLAY_INVALID", "source binding replay metadata is incomplete", status=409)
             return ProductSourceBinding.model_validate(body), True
         try:
-            record = self.source_service.get(registry_id)
+            record = self.source_service.get_for_owner(registry_id, owner_subject=principal.subject)
             selection = self.source_service.selection(
                 registry_id=registry_id,
                 scope=scope,
@@ -494,7 +547,7 @@ class BackendService:
 
     def product_summary(self, *, run_id: str, principal: Principal) -> ProductSummary:
         self._require_scope(principal, "runs:read")
-        run = self.get_run(run_id)
+        run = self._get_authorized_run(run_id, principal)
         plan = self.control_store.get_execution_plan(run_id)
         jobs = self.control_store.list_jobs(run_id=run_id, limit=10000)
         artifacts = self.control_store.list_artifacts(run_id=run_id, limit=10000)
@@ -688,6 +741,7 @@ class BackendService:
         idempotency_key: str,
     ) -> tuple[ReviewRecord, bool]:
         self._require_scope(principal, "reviews:write")
+        self._get_authorized_run(run_id, principal, mutation=True)
         decision = ReviewDecisionStatus(decision)
         if expected_revision < 0:
             raise BackendError("INVALID_REVIEW_REVISION", "expected_revision must be non-negative", status=422)
@@ -698,7 +752,6 @@ class BackendService:
         if context is not None and context.review_checkpoint_id is not checkpoint:
             raise BackendError("WRONG_REVIEW_CHECKPOINT", "review context checkpoint does not match the API resource", status=422)
         key = _safe_key(idempotency_key)
-        run = self.get_run(run_id)
         _subject, authoritative, subject_key = self._resolve_review_subject(
             run_id=run_id,
             checkpoint=checkpoint,
@@ -767,6 +820,7 @@ class BackendService:
         idempotency_key: str,
     ) -> tuple[ReviewRecord, bool]:
         self._require_scope(principal, "reviews:write")
+        self._get_authorized_run(run_id, principal, mutation=True)
         key = _safe_key(idempotency_key)
         _subject, authoritative, subject_key = self._resolve_review_subject(
             run_id=run_id,
@@ -811,8 +865,8 @@ class BackendService:
         except (ValueError, PlatformError) as exc:
             raise BackendError("REVIEW_REJECTED", "review invalidation could not be recorded", status=422) from exc
 
-    def list_reviews(self, *, run_id: str, subject_key: str | None, page_size: int, offset: int) -> PageResult:
-        self.get_run(run_id)
+    def list_reviews(self, *, run_id: str, subject_key: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
+        self._get_authorized_run(run_id, principal)
         rows = self.control_store.list_review_history(run_id=run_id, subject_key=subject_key, limit=page_size + 1, offset=offset)
         return self._page(rows, page_size=page_size, offset=offset, order_by="subject_key,revision")
 
@@ -831,11 +885,12 @@ class BackendService:
             raise BackendError("ARTIFACT_INTEGRITY_FAILED", "registered artifact could not be verified", status=409)
         return artifact
 
-    def artifact(self, *, run_id: str, artifact_id: str) -> ArtifactRef:
+    def artifact(self, *, run_id: str, artifact_id: str, principal: Principal) -> ArtifactRef:
+        self._get_authorized_run(run_id, principal)
         return self._verified_artifact(run_id=run_id, artifact_id=artifact_id)
 
-    def list_artifacts(self, *, run_id: str, stage_id: str | None, artifact_kind: str | None, page_size: int, offset: int) -> PageResult:
-        self.get_run(run_id)
+    def list_artifacts(self, *, run_id: str, stage_id: str | None, artifact_kind: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
+        self._get_authorized_run(run_id, principal)
         stage_id = _safe_filter(stage_id, name="stage_id")
         artifact_kind = _safe_filter(artifact_kind, name="artifact_kind")
         rows = self.control_store.list_artifacts(run_id=run_id, stage_id=stage_id, artifact_kind=artifact_kind, limit=page_size + 1, offset=offset)
@@ -846,6 +901,7 @@ class BackendService:
 
     def register_artifact(self, *, run_id: str, artifact_id: str, principal: Principal) -> ArtifactRef:
         self._require_scope(principal, "artifacts:write")
+        self._get_authorized_run(run_id, principal, mutation=True)
         artifact = self._verified_artifact(run_id=run_id, artifact_id=artifact_id) if self.control_store.get_artifact(artifact_id) else None
         if artifact is not None:
             return artifact
@@ -870,6 +926,7 @@ class BackendService:
         """Generic content serving is intentionally denied at this boundary."""
 
         self._require_scope(principal, "artifacts:read")
+        self._get_authorized_run(run_id, principal)
         artifact = self._verified_artifact(run_id=run_id, artifact_id=artifact_id)
         raise BackendError("ARTIFACT_PAYLOAD_NOT_EXPOSED", "generic artifact payload access is not exposed by the V1 API", status=403)
 
@@ -885,7 +942,8 @@ class BackendService:
             raise BackendError("ARTIFACT_PAYLOAD_INVALID", "registered artifact payload is not a valid project contract", status=409)
         return artifact, payload
 
-    def validation_view(self, *, run_id: str, artifact_id: str, visualization_id: str) -> ValidationReportVisualization:
+    def validation_view(self, *, run_id: str, artifact_id: str, visualization_id: str, principal: Principal) -> ValidationReportVisualization:
+        self._get_authorized_run(run_id, principal)
         artifact, payload = self._read_verified_json(run_id=run_id, artifact_id=artifact_id)
         if artifact.artifact_kind != "ValidationReport":
             raise BackendError("WRONG_ARTIFACT_KIND", "artifact is not a ValidationReport", status=422)
@@ -894,7 +952,7 @@ class BackendService:
             report = ValidationReport.model_validate(payload)
             if declared_hash is not None and declared_hash != report.content_hash:
                 raise ValueError("validation report hash mismatch")
-            run = self.get_run(run_id)
+            run = self._get_authorized_run(run_id, principal)
             scope = VisualizationScope(
                 visualization_id=visualization_id,
                 visualization_version=VisualizationService.visualization_version,
@@ -911,7 +969,8 @@ class BackendService:
         except (ValueError, VisualizationInputError) as exc:
             raise BackendError("VALIDATION_PROJECTION_REJECTED", "ValidationReport could not be projected through the trusted Step26 path", status=409) from exc
 
-    def visualization_graph(self, *, run_id: str, artifact_id: str) -> VisualizationGraph:
+    def visualization_graph(self, *, run_id: str, artifact_id: str, principal: Principal) -> VisualizationGraph:
+        self._get_authorized_run(run_id, principal)
         artifact, payload = self._read_verified_json(run_id=run_id, artifact_id=artifact_id)
         if artifact.artifact_kind != "VisualizationGraph":
             raise BackendError("WRONG_ARTIFACT_KIND", "artifact is not a VisualizationGraph", status=422)
@@ -933,7 +992,7 @@ class BackendService:
     ) -> tuple[SubmissionResult, bool]:
         self._require_scope(principal, "runs:write")
         key = _safe_key(idempotency_key)
-        run = self.get_run(run_id)
+        run = self._get_authorized_run(run_id, principal, mutation=True)
         scope = f"execution:{action}:{run_id}:{principal.subject}"
         fingerprint = idempotency_fingerprint({"action": action, "run_id": run_id})
         command = ExecutionCommand(
@@ -1018,7 +1077,7 @@ class BackendService:
 
         self._require_scope(principal, "runs:write")
         key = _safe_key(idempotency_key)
-        run = self.get_run(run_id)
+        run = self._get_authorized_run(run_id, principal, mutation=True)
         scope = f"execution-plan:{run_id}:{principal.subject}"
         fingerprint = idempotency_fingerprint({"run_id": run_id, "intent": intent.model_dump(mode="json")})
         reservation = IdempotencyRecord(

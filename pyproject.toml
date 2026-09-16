@@ -24,7 +24,7 @@ entity_resolution = [
     "splink==4.0.17",
 ]
 test = [
-  "pytest>=8.4,<9",
+  "pytest>=8.4,<10",
   "PyYAML>=6.0,<7",
   "httpx2==2.12.0",
 ]
@@ -33,17 +33,17 @@ sql = [
   "SQLAlchemy>=2.0,<3",
 ]
 files = [
-  "pyarrow>=16,<23",
+  "pyarrow>=16,<24",
 ]
 profiling = [
-  "DataProfiler==0.13.4",
-  "setuptools<81",
+  "DataProfiler==0.14.0",
+  "setuptools<84",
 ]
 excel = [
   "openpyxl>=3.1,<4",
 ]
 compatibility = [
-  "cryptography==44.0.2",
+  "cryptography>=50,<51",
   "psycopg[binary]==3.2.10",
   "PyMySQL==1.1.2",
   "pyodbc==5.2.0",
@@ -56,7 +56,7 @@ ml = [
 dev = [
   "httpx2==2.12.0",
   "pip-audit==2.9.0",
-  "pytest>=8.4,<9",
+  "pytest>=8.4,<10",
   "PyYAML>=6.0,<7",
 ]
 

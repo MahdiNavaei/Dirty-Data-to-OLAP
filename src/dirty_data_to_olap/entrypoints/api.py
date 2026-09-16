@@ -32,6 +32,8 @@ from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, Selecti
 
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _FILTER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+_MAX_JSON_BODY_BYTES = 1_000_000
+_MAX_SOURCE_BODY_BYTES = 5 * 1024 * 1024
 
 
 class ApiModel(BaseModel):
@@ -257,10 +259,24 @@ def create_app(
         allow_headers=["Accept", "Content-Type", "Idempotency-Key", "X-Local-Principal", "X-Source-Filename"],
     )
 
+    @app.middleware("http")
+    async def bounded_request_size(request: Request, call_next):
+        if request.method in {"POST", "PUT", "PATCH"}:
+            limit = _MAX_SOURCE_BODY_BYTES if request.url.path == "/api/v1/sources/import" else _MAX_JSON_BODY_BYTES
+            raw_length = request.headers.get("content-length")
+            if raw_length is not None:
+                try:
+                    content_length = int(raw_length)
+                except ValueError:
+                    return JSONResponse(status_code=400, content={"error": {"code": "INVALID_CONTENT_LENGTH", "message": "request content length is invalid", "status": 400, "retryable": False, "request_id": _safe_request_id(request)}})
+                if content_length < 0 or content_length > limit:
+                    return JSONResponse(status_code=413, content={"error": {"code": "REQUEST_TOO_LARGE", "message": "request exceeds the bounded API payload limit", "status": 413, "retryable": False, "request_id": _safe_request_id(request)}})
+        return await call_next(request)
+
     def principal(request: Request) -> Principal:
         if auth_mode == "trusted_proxy":
             resolved = principal_resolver(request) if principal_resolver is not None else None
-            if resolved is None:
+            if resolved is None or resolved.source != "TRUSTED_PROXY":
                 raise BackendError("UNAUTHENTICATED", "a trusted principal is required", status=401)
             return resolved
         subject = request.headers.get("X-Local-Principal")
@@ -281,6 +297,16 @@ def create_app(
         if value is None:
             raise BackendError("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key is required for this mutation", status=400)
         return value
+
+    async def bounded_source_body(request: Request) -> bytes:
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > _MAX_SOURCE_BODY_BYTES:
+                raise BackendError("REQUEST_TOO_LARGE", "request exceeds the bounded source upload limit", status=413)
+            chunks.append(chunk)
+        return b"".join(chunks)
 
     @app.exception_handler(BackendError)
     async def backend_error_handler(request: Request, exc: BackendError) -> JSONResponse:
@@ -323,7 +349,7 @@ def create_app(
         source_filename: str = Header(default="", alias="X-Source-Filename"),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ) -> JSONResponse:
-        source = await request.body()
+        source = await bounded_source_body(request)
         view, replayed = backend.import_product_source(
             filename=source_filename,
             payload=source,
@@ -377,23 +403,23 @@ def create_app(
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
-        read_principal(request, "runs:read")
-        return _model_page(backend.list_runs(project_id=project_id, status=status, page_size=page_size, offset=offset), _run_view)
+        caller = read_principal(request, "runs:read")
+        return _model_page(backend.list_runs(project_id=project_id, status=status, page_size=page_size, offset=offset, principal=caller), _run_view)
 
     @app.get("/api/v1/projects/{project_id}/runs", response_model=PageResponse, tags=["projects"])
     async def list_project_runs(request: Request, project_id: str = Path(min_length=1, max_length=128), status: str | None = Query(default=None, max_length=32), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
-        read_principal(request, "runs:read")
-        return _model_page(backend.list_runs(project_id=project_id, status=status, page_size=page_size, offset=offset), _run_view)
+        caller = read_principal(request, "runs:read")
+        return _model_page(backend.list_runs(project_id=project_id, status=status, page_size=page_size, offset=offset, principal=caller), _run_view)
 
     @app.get("/api/v1/runs/{run_id}", response_model=RunView, tags=["runs"])
     async def get_run(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> RunView:
-        read_principal(request, "runs:read")
-        return _run_view(backend.get_run(run_id))
+        caller = read_principal(request, "runs:read")
+        return _run_view(backend.get_run(run_id, principal=caller))
 
     @app.get("/api/v1/runs/{run_id}/product-summary", response_model=ProductSummary, tags=["product"])
     async def product_summary(request: Request, run_id: str = Path(min_length=1, max_length=128)) -> ProductSummary:
-        read_principal(request, "runs:read")
-        return backend.product_summary(run_id=run_id, principal=principal(request))
+        caller = read_principal(request, "runs:read")
+        return backend.product_summary(run_id=run_id, principal=caller)
 
     @app.get("/api/v1/runs/{run_id}/attempts", response_model=PageResponse, tags=["attempts"])
     async def list_attempts(
@@ -404,13 +430,13 @@ def create_app(
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
-        read_principal(request, "attempts:read")
-        return _model_page(backend.list_attempts(run_id=run_id, stage_id=stage_id, status=status, page_size=page_size, offset=offset))
+        caller = read_principal(request, "attempts:read")
+        return _model_page(backend.list_attempts(run_id=run_id, stage_id=stage_id, status=status, page_size=page_size, offset=offset, principal=caller))
 
     @app.get("/api/v1/runs/{run_id}/attempts/{attempt_id}", response_model=StageAttemptRecord, tags=["attempts"])
     async def get_attempt(request: Request, run_id: str = Path(min_length=1, max_length=128), attempt_id: str = Path(min_length=1, max_length=128)) -> StageAttemptRecord:
-        read_principal(request, "attempts:read")
-        return backend.get_attempt(run_id=run_id, attempt_id=attempt_id)
+        caller = read_principal(request, "attempts:read")
+        return backend.get_attempt(run_id=run_id, attempt_id=attempt_id, principal=caller)
 
     @app.get("/api/v1/runs/{run_id}/jobs", response_model=PageResponse, tags=["jobs"])
     async def list_jobs(
@@ -420,18 +446,18 @@ def create_app(
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
-        read_principal(request, "jobs:read")
-        return _model_page(backend.list_jobs(run_id=run_id, status=status, page_size=page_size, offset=offset))
+        caller = read_principal(request, "jobs:read")
+        return _model_page(backend.list_jobs(run_id=run_id, status=status, page_size=page_size, offset=offset, principal=caller))
 
     @app.get("/api/v1/runs/{run_id}/jobs/{job_id}", response_model=JobRecord, tags=["jobs"])
     async def get_run_job(request: Request, run_id: str = Path(min_length=1, max_length=128), job_id: str = Path(min_length=1, max_length=128)) -> JobRecord:
-        read_principal(request, "jobs:read")
-        return backend.get_job(run_id=run_id, job_id=job_id)
+        caller = read_principal(request, "jobs:read")
+        return backend.get_job(run_id=run_id, job_id=job_id, principal=caller)
 
     @app.get("/api/v1/jobs/{job_id}", response_model=JobRecord, tags=["jobs"])
     async def get_job(request: Request, job_id: str = Path(min_length=1, max_length=128), run_id: str = Query(min_length=1, max_length=128)) -> JobRecord:
-        read_principal(request, "jobs:read")
-        return backend.get_job(run_id=run_id, job_id=job_id)
+        caller = read_principal(request, "jobs:read")
+        return backend.get_job(run_id=run_id, job_id=job_id, principal=caller)
 
     @app.get("/api/v1/runs/{run_id}/artifacts", response_model=PageResponse, tags=["artifacts"])
     async def list_artifacts(
@@ -442,13 +468,13 @@ def create_app(
         page_size: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
-        read_principal(request, "artifacts:read")
-        return _model_page(backend.list_artifacts(run_id=run_id, stage_id=stage_id, artifact_kind=artifact_kind, page_size=page_size, offset=offset), _artifact_view)
+        caller = read_principal(request, "artifacts:read")
+        return _model_page(backend.list_artifacts(run_id=run_id, stage_id=stage_id, artifact_kind=artifact_kind, page_size=page_size, offset=offset, principal=caller), _artifact_view)
 
     @app.get("/api/v1/artifacts/{artifact_id}", response_model=ArtifactView, tags=["artifacts"])
     async def get_artifact(request: Request, artifact_id: str = Path(min_length=1, max_length=128), run_id: str = Query(min_length=1, max_length=128)) -> ArtifactView:
-        read_principal(request, "artifacts:read")
-        return _artifact_view(backend.artifact(run_id=run_id, artifact_id=artifact_id))
+        caller = read_principal(request, "artifacts:read")
+        return _artifact_view(backend.artifact(run_id=run_id, artifact_id=artifact_id, principal=caller))
 
     @app.post("/api/v1/runs/{run_id}/artifacts/register", response_model=ArtifactView, status_code=201, tags=["artifacts"])
     async def register_artifact(payload: RegisterArtifactRequest, request: Request, run_id: str = Path(min_length=1, max_length=128)) -> ArtifactView:
@@ -460,8 +486,8 @@ def create_app(
 
     @app.get("/api/v1/runs/{run_id}/reviews", response_model=PageResponse, tags=["reviews"])
     async def list_reviews(request: Request, run_id: str = Path(min_length=1, max_length=128), subject_key: str | None = Query(default=None, max_length=512), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
-        read_principal(request, "reviews:read")
-        return _model_page(backend.list_reviews(run_id=run_id, subject_key=subject_key, page_size=page_size, offset=offset))
+        caller = read_principal(request, "reviews:read")
+        return _model_page(backend.list_reviews(run_id=run_id, subject_key=subject_key, page_size=page_size, offset=offset, principal=caller))
 
     @app.post("/api/v1/runs/{run_id}/reviews/{checkpoint}", tags=["reviews"])
     async def record_review(payload: ReviewActionRequest, request: Request, checkpoint: ReviewCheckpoint = Path(...), run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
@@ -481,13 +507,13 @@ def create_app(
 
     @app.get("/api/v1/runs/{run_id}/validation/{artifact_id}", tags=["validation"])
     async def validation_view(request: Request, run_id: str = Path(min_length=1, max_length=128), artifact_id: str = Path(min_length=1, max_length=128), visualization_id: str = Query(default="validation-preview", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")) -> dict[str, Any]:
-        read_principal(request, "validation:read")
-        return backend.validation_view(run_id=run_id, artifact_id=artifact_id, visualization_id=visualization_id).model_dump(mode="json")
+        caller = read_principal(request, "validation:read")
+        return backend.validation_view(run_id=run_id, artifact_id=artifact_id, visualization_id=visualization_id, principal=caller).model_dump(mode="json")
 
     @app.get("/api/v1/runs/{run_id}/visualizations/{artifact_id}", tags=["visualization"])
     async def visualization_view(request: Request, run_id: str = Path(min_length=1, max_length=128), artifact_id: str = Path(min_length=1, max_length=128)) -> dict[str, Any]:
-        read_principal(request, "visualizations:read")
-        return backend.visualization_graph(run_id=run_id, artifact_id=artifact_id).model_dump(mode="json")
+        caller = read_principal(request, "visualizations:read")
+        return backend.visualization_graph(run_id=run_id, artifact_id=artifact_id, principal=caller).model_dump(mode="json")
 
     @app.post("/api/v1/runs/{run_id}/execution", tags=["execution"])
     async def submit_execution(request: Request, run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:

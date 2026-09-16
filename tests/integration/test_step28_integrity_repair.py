@@ -68,7 +68,7 @@ class Clock:
 def _bundle(tmp_path: Path, *, g6: bool = True):
     control = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
     artifacts = LocalArtifactStore(tmp_path / "artifacts", project_root=tmp_path)
-    run = control.create_run(RunRecord(run_id="run-step28-repair", project_id="step28", configuration_fingerprint="cfg"))
+    run = control.create_run(RunRecord(run_id="run-step28-repair", project_id="step28", configuration_fingerprint="cfg", metadata={"_owner_subject": "step28-reviewer"}))
     if g6:
         source = Path(__file__).resolve().parents[2] / "workspace" / "runs" / "step22-reference-run" / "validation" / "validation_report.json"
         payload = source.read_bytes()
@@ -230,7 +230,7 @@ def test_changed_authoritative_review_context_never_resumes_old_decision(tmp_pat
     worker.run_once()
     context = handler.context
     assert context is not None
-    BackendService(control_store=control, artifact_store=artifacts).review(run_id=run.run_id, checkpoint=context.review_checkpoint_id, subject_artifact_id=context.subject_artifact_id, subject_content_hash=context.subject_content_hash, decision=ReviewDecisionStatus.ACCEPTED, rationale="accepted before mutation", expected_revision=0, principal=Principal(subject="reviewer", scopes=frozenset({"reviews:write"})), idempotency_key="change-review")
+    BackendService(control_store=control, artifact_store=artifacts).review(run_id=run.run_id, checkpoint=context.review_checkpoint_id, subject_artifact_id=context.subject_artifact_id, subject_content_hash=context.subject_content_hash, decision=ReviewDecisionStatus.ACCEPTED, rationale="accepted before mutation", expected_revision=0, principal=Principal(subject="reviewer", scopes=frozenset({"reviews:write"}), project_ids=frozenset({"step28"})), idempotency_key="change-review")
     changed = context.model_copy(update={field: f"changed-{field}"})
     control.get_review_subject_context = lambda **_kwargs: changed
     DurableExecutionSubmission(control).submit_command(command=_command(run.run_id, "resume", ExecutionAction.RESUME), run=run)
@@ -326,7 +326,7 @@ def test_cooperative_cancellation_probe_stops_multi_checkpoint_handler(tmp_path:
 def test_bounded_pool_enforces_per_source_admission(tmp_path: Path) -> None:
     control = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
     artifacts = LocalArtifactStore(tmp_path / "artifacts", project_root=tmp_path)
-    runs = [control.create_run(RunRecord(run_id=f"run-source-{index}", project_id="step28", configuration_fingerprint="cfg")) for index in range(2)]
+    runs = [control.create_run(RunRecord(run_id=f"run-source-{index}", project_id="step28", configuration_fingerprint="cfg", metadata={"_owner_subject": "step28-reviewer"})) for index in range(2)]
     for run in runs:
         plan = ExecutionPlan(plan_id=f"plan-{run.run_id}", run_id=run.run_id, stages=(StageSpec(stage_id="WORK", handler_key="work", source_scope="authoritative-source", final_validation=False),))
         control.register_execution_plan(plan)

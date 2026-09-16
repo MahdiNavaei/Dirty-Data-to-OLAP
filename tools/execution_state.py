@@ -40,6 +40,7 @@ CURRENT_ROLE_BY_STEP = {
     31: "qa_automation_engineer",
     32: "compatibility_test_engineer",
     33: "application_security_engineer",
+    34: "observability_engineer",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -76,6 +77,7 @@ def is_authorized_specialist_handoff(
     beyond_declared_ceiling = (
         (current_step == 32 and maximum_current_step == 31 and step31_qa_closed(state))
         or (current_step == 33 and maximum_current_step in {31, 32} and step32_compatibility_closed(state))
+        or (current_step == 34 and maximum_current_step == 33 and _step33_completion_evidence(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -215,7 +217,7 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     compatibility = specialist.get("step32_compatibility", {})
     current_gates = gates(state)
     content_commit = compatibility.get("content_commit") if isinstance(compatibility, dict) else None
-    return (
+    direct_closure = (
         isinstance(compatibility, dict)
         and is_authorized_specialist_handoff(state, minimum_current_step=33, maximum_current_step=33)
         and _step31_completion_evidence(state)
@@ -242,6 +244,44 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G15_RELEASE") == "PENDING"
         and state.get("blocked") is False
     )
+    return direct_closure or _step33_completion_evidence(state)
+
+
+def _step33_completion_evidence(state: dict[str, Any]) -> bool:
+    """Keep accepted Step33 evidence valid after the Step34 handoff."""
+
+    specialist = execution(state)
+    appsec = specialist.get("step33_application_security", {})
+    current_gates = gates(state)
+    content_commit = appsec.get("content_commit") if isinstance(appsec, dict) else None
+    return (
+        isinstance(appsec, dict)
+        and _step31_completion_evidence(state)
+        and specialist.get("last_completed_step") == 33
+        and specialist.get("last_completed_role") == "application_security_engineer"
+        and specialist.get("last_completed_specialist") == "Step33 - Application Security Engineer"
+        and specialist.get("last_completed_content_commit") == content_commit
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("step33_started") is True
+        and specialist.get("step33_status") == "COMPLETED_APPLICATION_SECURITY_G10_PASS"
+        and specialist.get("step34_started") is False
+        and specialist.get("step34_status") == "NOT_STARTED"
+        and appsec.get("step33_started") is True
+        and appsec.get("status") == "PASS"
+        and appsec.get("g10_status") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
+    )
+
+
+def step33_application_security_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step33/G10 closure and Step34 handoff."""
+
+    return is_authorized_specialist_handoff(state, minimum_current_step=34, maximum_current_step=34) and _step33_completion_evidence(state)
 
 
 def step31_external_ci_blocked(state: dict[str, Any]) -> bool:
@@ -300,6 +340,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             or (key == "G7_END_TO_END_PRODUCT" and step29_g7_closed(state))
             or (key == "G8_REPRODUCIBLE_BUILD" and (step30_g8_closed(state) or step31_external_ci_blocked(state)))
             or (key == "G9_FUNCTIONAL_SUPPORT" and step32_compatibility_closed(state))
+            or (key == "G10_APPLICATION_SECURITY" and step33_application_security_closed(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )

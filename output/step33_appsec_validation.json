@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "step": 33,
+  "gate": "G10_APPLICATION_SECURITY",
+  "phase": "STEP33_CONTENT",
+  "assessed_commit": "788bb4bdeed9341278194a3e67adf84dfc88f7ba",
+  "scope": "local reference application security surface; exact-head CI reruns the listed tests",
+  "evidence_gate_status": "PASS",
+  "findings": {
+    "critical_found": 0,
+    "critical_open": 0,
+    "high_found": 4,
+    "high_open": 0,
+    "medium_found": 4,
+    "medium_open": 0,
+    "low_found": 1,
+    "low_open": 0
+  },
+  "scenarios": [
+    {"id": "SEC-AUTH-001", "title": "cross-project read denial", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_auth_001_002_004_cross_project_reads_mutations_and_run_isolation", "result": "PASS"}},
+    {"id": "SEC-AUTH-002", "title": "cross-project mutation denial", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_auth_001_002_004_cross_project_reads_mutations_and_run_isolation", "result": "PASS"}},
+    {"id": "SEC-AUTH-003", "title": "trusted-proxy spoof rejection", "severity": "Medium", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_auth_003_trusted_proxy_ignores_client_identity_and_requires_trusted_source", "result": "PASS"}},
+    {"id": "SEC-AUTH-004", "title": "cross-run artifact/job isolation", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_auth_001_002_004_cross_project_reads_mutations_and_run_isolation", "result": "PASS"}},
+    {"id": "SEC-REV-001", "title": "stale review rejection", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_rev_001_002_003_stale_cross_run_and_mutated_subjects_are_rejected", "result": "PASS"}},
+    {"id": "SEC-REV-002", "title": "cross-run/project review replay rejection", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_rev_001_002_003_stale_cross_run_and_mutated_subjects_are_rejected", "result": "PASS"}},
+    {"id": "SEC-REV-003", "title": "mutated review subject rejection", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_rev_001_002_003_stale_cross_run_and_mutated_subjects_are_rejected", "result": "PASS"}},
+    {"id": "SEC-SQL-001", "title": "hostile identifiers stay structural", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_sql_001_002_003_structural_sql_and_values_are_separate", "result": "PASS"}},
+    {"id": "SEC-SQL-002", "title": "value injection does not alter structure", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_sql_001_002_003_structural_sql_and_values_are_separate", "result": "PASS"}},
+    {"id": "SEC-SQL-003", "title": "DuckDB file-function escape rejected", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_sql_001_002_003_structural_sql_and_values_are_separate", "result": "PASS"}},
+    {"id": "SEC-NET-001", "title": "unsupported scheme rejected", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_net_001_002_unsupported_runtime_scheme_and_credentials_are_not_exposed", "result": "PASS"}},
+    {"id": "SEC-NET-002", "title": "credentials redacted on connection failure", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_net_001_002_unsupported_runtime_scheme_and_credentials_are_not_exposed", "result": "PASS"}},
+    {"id": "SEC-FS-001", "title": "filesystem traversal rejected", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_fs_001_002_003_file_sources_cannot_escape_project_root", "result": "PASS"}},
+    {"id": "SEC-FS-002", "title": "absolute outside-root path rejected", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_fs_001_002_003_file_sources_cannot_escape_project_root", "result": "PASS"}},
+    {"id": "SEC-FS-003", "title": "symlink escape rejected", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_fs_001_002_003_file_sources_cannot_escape_project_root", "result": "PASS"}},
+    {"id": "SEC-FS-004", "title": "unauthorized cleanup rejected", "severity": "High", "status": "PASS", "evidence": {"test": "tests/integration/test_step23_platform.py cleanup authorization tests", "result": "PASS"}},
+    {"id": "SEC-DESER-001", "title": "unsafe deserialization", "severity": "Informational", "status": "NOT_APPLICABLE", "evidence": {"architecture_evidence": "FastAPI/backend request paths contain no pickle loader, unsafe YAML loader, or arbitrary object deserializer; durable jobs are typed records.", "result": "NOT_APPLICABLE"}},
+    {"id": "SEC-JOB-001", "title": "command/job replay isolation", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_auth_001_002_004_cross_project_reads_mutations_and_run_isolation and tests/integration/test_step28_job_processing.py", "result": "PASS"}},
+    {"id": "SEC-JOB-002", "title": "unauthorized cancel/resume rejection", "severity": "High", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_auth_001_002_004_cross_project_reads_mutations_and_run_isolation and tests/integration/test_step28_job_processing.py", "result": "PASS"}},
+    {"id": "SEC-JOB-003", "title": "stale/unauthorized result publication", "severity": "High", "status": "PASS", "evidence": {"test": "tests/integration/test_step28_job_processing.py durable lifecycle and fencing tests; no public callback publisher exists", "result": "PASS"}},
+    {"id": "SEC-XSS-001", "title": "frontend text rendering", "severity": "Medium", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_xss_001_deser_001_and_sec_001_source_surface_has_no_html_or_command_sink and frontend/src/main.test.tsx", "result": "PASS"}},
+    {"id": "SEC-API-001", "title": "malformed/oversized/unbounded requests bounded", "severity": "Medium", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_api_001_002_bounded_requests_and_safe_errors", "result": "PASS"}},
+    {"id": "SEC-API-002", "title": "errors omit secrets and tracebacks", "severity": "Medium", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_api_001_002_bounded_requests_and_safe_errors", "result": "PASS"}},
+    {"id": "SEC-SEC-001", "title": "secret redaction", "severity": "Medium", "status": "PASS", "evidence": {"test": "tests/security/test_step33_application_security.py::test_sec_net_001_002_unsupported_runtime_scheme_and_credentials_are_not_exposed and database redaction tests", "result": "PASS"}},
+    {"id": "SEC-DEP-001", "title": "dependency reconciliation", "severity": "High", "status": "PASS", "evidence": {"test": "uv run --locked ... python -m pip_audit --local; npm audit --json", "result": "PASS"}}
+  ],
+  "tests": [
+    {"command": "python -m pytest tests/security/test_step33_application_security.py -q", "status": "PASS", "passed": 9, "failed": 0},
+    {"command": "python -m pytest tests/unit/test_step33_state_classification.py tests/unit/test_step33_appsec_validator.py -q", "status": "PASS", "passed": 8, "failed": 0}
+  ],
+  "dependencies": {
+    "python_locked_audit": {"command": "uv run --locked --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python -m pip_audit --local --format columns --progress-spinner off", "status": "PASS", "unresolved_applicable_high_or_critical": 0},
+    "frontend_runtime_audit": {"command": "npm audit --omit=dev --json", "status": "PASS", "vulnerabilities": 0},
+    "frontend_full_audit": {"command": "npm audit --json", "status": "PASS", "vulnerabilities": 0}
+  },
+  "scope_guard": {"protected_paths": ["tests/quality_unit_artifacts/"], "protected_paths_touched": false, "executable_product_scope_reviewed": true}
+}

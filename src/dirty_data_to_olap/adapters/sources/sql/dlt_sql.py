@@ -12,6 +12,7 @@ import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence, Protocol
+from urllib.parse import urlsplit
 
 from dirty_data_to_olap.adapters.sources.sql.sqlite import SQLiteReadOnlySource, configure_sqlite_connection
 from dirty_data_to_olap.application.database_security import (
@@ -153,6 +154,30 @@ def _source_type_metadata(record: SourceRegistryRecord) -> SourceType:
     return record.source_type
 
 
+_RUNTIME_SCHEMES = {
+    DatabaseEngine.POSTGRESQL: {"postgresql", "postgresql+psycopg"},
+    DatabaseEngine.MYSQL: {"mysql", "mysql+pymysql"},
+    DatabaseEngine.MARIADB: {"mariadb", "mariadb+pymysql"},
+    DatabaseEngine.SQLSERVER: {"mssql", "mssql+pyodbc"},
+}
+
+
+def _validate_runtime_connection_url(profile: Any, connection_url: str) -> None:
+    """Accept only the driver family and host bound by the non-secret profile."""
+
+    try:
+        parsed = urlsplit(connection_url)
+        scheme = parsed.scheme.casefold()
+        hostname = parsed.hostname
+    except ValueError as exc:
+        raise ValueError("runtime connection URL is malformed") from exc
+    if scheme not in _RUNTIME_SCHEMES.get(profile.database_engine, set()) or not hostname:
+        raise ValueError("runtime connection URL uses an unsupported scheme")
+    expected_host = getattr(profile, "host", None)
+    if expected_host is not None and hostname.casefold() != expected_host.casefold():
+        raise ValueError("runtime connection URL host is not bound to the source profile")
+
+
 def _close_dlt_resource_iterator(iterator: Any) -> None:
     """Close dlt's managed pipe before the SQLAlchemy engine is disposed.
 
@@ -202,7 +227,7 @@ class DltSqlSourceAdapter(SourceAdapter):
         return record.connection_profile
 
     def _sqlite_metadata(self, profile: Any) -> DatabaseMetadata:
-        source = SQLiteReadOnlySource(profile)
+        source = SQLiteReadOnlySource(profile, project_root=self.project_root)
         try:
             with source.open_readonly_session() as session:
                 return session.inspect_database_metadata()
@@ -326,6 +351,10 @@ class DltSqlSourceAdapter(SourceAdapter):
             from sqlalchemy.pool import NullPool, StaticPool
             if profile.database_engine is DatabaseEngine.SQLITE:
                 path = Path(profile.database_name).expanduser().resolve()
+                try:
+                    path.relative_to(self.project_root)
+                except ValueError as exc:
+                    raise ValueError("SQLite source file is outside the project-owned source root") from exc
                 if not path.is_file():
                     raise FileNotFoundError("SQLite source file is not accessible")
                 uri = f"{path.as_uri()}?mode=ro"
@@ -344,6 +373,7 @@ class DltSqlSourceAdapter(SourceAdapter):
                 raise ValueError("non-SQLite engine creation requires an assured runtime credential")
             if runtime_credentials.credential_purpose is not CredentialPurpose.SOURCE_READ_ONLY or runtime_credentials.source_id != scoped_source_id:
                 raise ValueError("runtime source credential is not bound to this read-only source")
+            _validate_runtime_connection_url(profile, runtime_credentials.connection_url)
             return create_engine(runtime_credentials.connection_url, poolclass=NullPool)
         except SourceIngestionError:
             raise
@@ -536,6 +566,10 @@ class DltSqlSourceAdapter(SourceAdapter):
             version = credentials.credential_version
             if purpose is not CredentialPurpose.SOURCE_READ_ONLY or credentials.source_id != source_id:
                 raise _failure(SourceFailureKind.ACCESS_FAILED, "database_security_assurance", "source runtime credential binding did not pass")
+            try:
+                _validate_runtime_connection_url(profile, credentials.connection_url)
+            except ValueError:
+                raise _failure(SourceFailureKind.ACCESS_FAILED, "database_security_assurance", "source runtime connection URL is not allowed") from None
             try:
                 verification = self.security_verifier.verify(profile=profile, credentials=credentials, source_id=source_id, profile_id=profile.profile_id, selection_fingerprint=reference.config_fingerprint, policy=self.security.policy)
             except Exception:

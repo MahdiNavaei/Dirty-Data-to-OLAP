@@ -203,7 +203,7 @@ def test_multi_instance_same_key_has_one_review_revision_and_changed_payload_con
 
     store2 = SQLiteControlStore(platform.control_store.path, project_root=tmp_path)
     backend2 = BackendService(control_store=store2, artifact_store=platform.artifact_store, configuration_fingerprint=platform.config.configuration_fingerprint)
-    principal = Principal("multi-reviewer", frozenset({"reviews:write"}), "LOCAL_TEST_AUTH")
+    principal = Principal("repair-reviewer", frozenset({"reviews:write"}), "LOCAL_TEST_AUTH")
 
     def submit(backend: BackendService):
         return backend.review(run_id=run_id, checkpoint=ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS, context=None, subject_artifact_id=ref.artifact_id, subject_content_hash=ref.content_hash, decision=ReviewDecisionStatus.ACCEPTED, rationale="same logical review", expected_revision=0, principal=principal, idempotency_key="same-review-key")
@@ -251,7 +251,7 @@ def test_execution_command_identity_survives_completion_failure_without_exactly_
         return original(record)
 
     monkeypatch.setattr(platform.control_store, "complete_idempotency", fail_completion)
-    principal = Principal("execution-user", frozenset({"runs:write"}), "LOCAL_TEST_AUTH")
+    principal = Principal("repair-reviewer", frozenset({"runs:write"}), "LOCAL_TEST_AUTH")
     try:
         first, replayed = backend.submit(run_id=run_id, principal=principal, idempotency_key="execution-key")
         second, second_replayed = backend.submit(run_id=run_id, principal=principal, idempotency_key="execution-key")
@@ -274,7 +274,7 @@ def test_execution_reservation_race_delivers_at_most_one_command_identity(tmp_pa
 
     store2 = SQLiteControlStore(platform.control_store.path, project_root=tmp_path)
     backend2 = BackendService(control_store=store2, artifact_store=platform.artifact_store, execution=executor, configuration_fingerprint=platform.config.configuration_fingerprint)
-    principal = Principal("execution-race", frozenset({"runs:write"}), "LOCAL_TEST_AUTH")
+    principal = Principal("repair-reviewer", frozenset({"runs:write"}), "LOCAL_TEST_AUTH")
 
     def submit(backend: BackendService):
         return backend.submit(run_id=run_id, principal=principal, idempotency_key="execution-race-key")[0]
@@ -297,7 +297,7 @@ def test_trusted_proxy_requires_read_scopes_while_health_stays_public(tmp_path: 
         assert anonymous.get(f"/api/v1/runs/{run_id}").status_code == 401
         insufficient = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset(), "TRUSTED_PROXY")), raise_server_exceptions=False)
         assert insufficient.get(f"/api/v1/runs/{run_id}").status_code == 403
-        read_only = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset({"runs:read"}), "TRUSTED_PROXY")), raise_server_exceptions=False)
+        read_only = TestClient(create_app(backend, auth_mode="trusted_proxy", principal_resolver=lambda _request: Principal("reader", frozenset({"runs:read"}), "TRUSTED_PROXY", frozenset({"repair-project"}))), raise_server_exceptions=False)
         response = read_only.get(f"/api/v1/runs/{run_id}")
         assert response.status_code == 200
         assert "scopes" not in response.text and "TRUSTED_PROXY" not in response.text

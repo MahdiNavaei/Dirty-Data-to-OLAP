@@ -267,13 +267,20 @@ class FileSourceAdapter(SourceAdapter):
         self.source_type = source_type
         self.project_root = project_root.resolve()
 
+    def _confined_path(self, locator: str | Path, *, operation: str) -> Path:
+        try:
+            path = Path(locator).expanduser().resolve(strict=True)
+            path.relative_to(self.project_root)
+        except (OSError, ValueError) as exc:
+            raise _failure(SourceFailureKind.ACCESS_FAILED, operation, "source file is outside the project-owned source root") from exc
+        if not path.is_file():
+            raise _failure(SourceFailureKind.ACCESS_FAILED, operation, "source file is not accessible")
+        return path
+
     def _path(self, record: SourceRegistryRecord) -> Path:
         if not record.file_locator:
             raise _failure(SourceFailureKind.INVALID_SELECTION, "resolve_file", "file locator is missing")
-        path = Path(record.file_locator).expanduser().resolve()
-        if not path.is_file():
-            raise _failure(SourceFailureKind.ACCESS_FAILED, "resolve_file", "source file is not accessible")
-        return path
+        return self._confined_path(record.file_locator, operation="resolve_file")
 
     def _object_name(self, path: Path, scope: SelectionScope) -> str:
         if self.source_type is SourceType.XLSX:
@@ -418,7 +425,7 @@ class FileSourceAdapter(SourceAdapter):
         execution_context_id: str,
         staging_root: Path,
     ) -> SourceSnapshotResult:
-        path = Path(catalog.source.file_locator or "")
+        path = self._confined_path(catalog.source.file_locator or "", operation="resolve_snapshot_file")
         table = catalog.tables[0]
         columns = tuple(column for column in catalog.columns if column.table_id == table.table_id)
         snapshot_id = snapshot_id_for(catalog.source_id, catalog.source.schema_fingerprint, catalog.source.selection_scope, selection.extraction, execution_context_id)

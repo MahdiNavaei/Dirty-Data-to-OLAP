@@ -37,7 +37,7 @@ AUTH = {"X-Local-Principal": "step28-plan-review-test"}
 def _stores(tmp_path: Path, name: str = "run"):
     control = SQLiteControlStore(tmp_path / f"{name}.sqlite", project_root=tmp_path)
     artifacts = LocalArtifactStore(tmp_path / f"{name}-artifacts", project_root=tmp_path)
-    run = control.create_run(RunRecord(run_id=f"run-{name}", project_id="step28", configuration_fingerprint="cfg"))
+    run = control.create_run(RunRecord(run_id=f"run-{name}", project_id="step28", configuration_fingerprint="cfg", metadata={"_owner_subject": "step28-plan-review-test"}))
     return control, artifacts, run
 
 

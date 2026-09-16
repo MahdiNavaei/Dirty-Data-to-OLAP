@@ -102,7 +102,7 @@ def test_real_dataprofiler_full_profile_is_project_owned_and_privacy_safe(profil
     assert result.tables[0].observation_scope.profiling_mode is ProfileMode.FULL
     assert result.tables[0].observation_scope.completeness is ProfileObservationStatus.FULLY_OBSERVED
     assert result.columns
-    assert all(column.provenance.dataprofiler_version == "0.13.4" for column in result.columns)
+    assert all(column.provenance.dataprofiler_version == "0.14.0" for column in result.columns)
     note_id = next(column.column_id for column in catalog.columns if column.physical_name == "note")
     note = next(column for column in result.columns if column.column_id == note_id)
     assert note.physical_null_count == 0
