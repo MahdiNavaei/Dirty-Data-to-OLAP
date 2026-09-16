@@ -3,7 +3,7 @@
   "step": 33,
   "gate": "G10_APPLICATION_SECURITY",
   "phase": "STEP33_CONTENT",
-  "assessed_commit": "788bb4bdeed9341278194a3e67adf84dfc88f7ba",
+  "assessed_commit": "8d3691cc00ebebb16ccb3695ec27dd52372584c2",
   "scope": "local reference application security surface; exact-head CI reruns the listed tests",
   "evidence_gate_status": "PASS",
   "findings": {

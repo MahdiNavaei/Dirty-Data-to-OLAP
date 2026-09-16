@@ -128,6 +128,29 @@ def _validate_tests(document: dict[str, Any]) -> None:
             raise ValidationFailure("test evidence is not a passing non-empty run")
 
 
+def _validate_content_commit_binding(document: dict[str, Any], state: dict[str, Any], phase: str) -> None:
+    """Bind a closure receipt to the content commit recorded by execution state."""
+
+    if phase != "STEP33_CLOSURE":
+        return
+    execution = _mapping(state.get("specialist_execution"), "specialist_execution")
+    appsec = _mapping(execution.get("step33_application_security"), "step33_application_security")
+    assessed_commit = document.get("assessed_commit")
+    content_commit = appsec.get("content_commit")
+    last_completed_content_commit = execution.get("last_completed_content_commit")
+    if not (
+        isinstance(content_commit, str)
+        and SHA.fullmatch(content_commit)
+        and isinstance(last_completed_content_commit, str)
+        and SHA.fullmatch(last_completed_content_commit)
+        and assessed_commit == content_commit == last_completed_content_commit
+    ):
+        raise ValidationFailure(
+            "receipt assessed_commit must equal specialist_execution.step33_application_security.content_commit "
+            "and specialist_execution.last_completed_content_commit"
+        )
+
+
 def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[str, str]:
     if document.get("schema_version") != "1.0" or document.get("step") != 33 or document.get("gate") != "G10_APPLICATION_SECURITY":
         raise ValidationFailure("receipt identity is invalid")
@@ -139,6 +162,7 @@ def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[s
     phase = _validate_state(state)
     if document.get("phase") != "STEP33_CONTENT":
         raise ValidationFailure("Step33 receipt must remain a content-phase evidence receipt")
+    _validate_content_commit_binding(document, state, phase)
     _validate_scenarios(document)
     _validate_findings(document)
     _validate_dependencies(document)
