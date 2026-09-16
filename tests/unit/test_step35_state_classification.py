@@ -3,7 +3,14 @@ from pathlib import Path
 
 import yaml
 
-from tools.execution_state import is_authorized_specialist_handoff, prior_gate_state_is_coherent, step35_sre_closed
+from tools.execution_state import (
+    is_authorized_specialist_handoff,
+    prior_gate_state_is_coherent,
+    step32_compatibility_closed,
+    step33_application_security_closed,
+    step34_observability_closed,
+    step35_sre_closed,
+)
 
 
 STATE_PATH = Path(__file__).parents[2] / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -58,6 +65,9 @@ def _closed_step35_state() -> dict:
 def test_step35_closure_requires_exact_step36_handoff() -> None:
     state = _closed_step35_state()
     assert step35_sre_closed(state) is True
+    assert step32_compatibility_closed(state) is True
+    assert step33_application_security_closed(state) is True
+    assert step34_observability_closed(state) is True
     assert is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) is True
     assert prior_gate_state_is_coherent(state) is True
 

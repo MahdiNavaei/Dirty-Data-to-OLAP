@@ -12,6 +12,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "dirty_data_to_olap"
+sys.path.insert(0, str(ROOT))
+from tools.execution_state import step35_sre_closed
 
 
 def main() -> int:
@@ -36,7 +38,7 @@ def main() -> int:
     try:
         state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
         execution = state["specialist_execution"]
-        if execution["current_step"] not in range(8, 36):
+        if execution["current_step"] not in range(8, 36) and not (execution["current_step"] == 36 and step35_sre_closed(state)):
             errors.append("state is not in Step08 implementation or a later specialist handoff")
         if execution["current_step"] == 9 and execution["last_completed_step"] != 8:
             errors.append("Step09 state must record Step08 completion")

@@ -1723,6 +1723,8 @@ handoff_to:
 - starting_baseline: accepted Step34 observability closure at `4d2df706b773550c7b7609e706f0c3c8bef8cf77`; `step35_started=false`; `step35_status=NOT_STARTED`
 - content_commit: `38fec1d3b8850df11c2431b995fe6897aca2ffd5`
 - content_exact_head_ci: run `35150365609`; result `PASS`; Secret scan, clean-room G8/build/runtime, image scan, Step31 independent QA/browser, Step32 compatibility/G9, Step33 AppSec/G10, Step34 observability and Step35 SRE all passed
+- closure_commit: `05f83e6a22e45a2ba349dc90ccf0012c8f165b7a`; its first exact-head CI exposed six historical validators that did not preserve the valid current36 handoff
+- final_repair_scope: historical validator handoff predicates in `tools/` plus positive/negative Step35 state propagation coverage; no product or Step36 implementation change
 - reliability_result: SQLite backup/restore, durable restart recovery, bounded retry/reconciliation, fail-closed control-store handling, safe degradation and graceful shutdown verified; `29` recovery scenarios and `10` executable runbooks
 - candidate_objectives: `docs/sre/slo.md`; reference objectives only, no production SLO, exactly-once or capacity claim
 - protected_quality_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted

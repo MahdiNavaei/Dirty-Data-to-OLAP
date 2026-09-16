@@ -54,7 +54,7 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any]) -> str:
-    from tools.execution_state import step33_application_security_closed, step34_observability_closed
+    from tools.execution_state import step33_application_security_closed, step34_observability_closed, step35_sre_closed
 
     specialist = mapping(state.get("specialist_execution"), "specialist_execution")
     gates = mapping(state.get("gates"), "gates")
@@ -71,6 +71,10 @@ def validate_state(state: dict[str, Any]) -> str:
     if specialist.get("current_step") == 35:
         if not step34_observability_closed(state):
             raise ValidationFailure("state is not the authorized Step34 -> Step35 handoff")
+        return "STEP34_CLOSURE"
+    if specialist.get("current_step") == 36:
+        if not step35_sre_closed(state):
+            raise ValidationFailure("state is not the authorized Step35 -> Step36 handoff")
         return "STEP34_CLOSURE"
     raise ValidationFailure("state is neither Step34 content phase nor authorized Step35 handoff")
 
@@ -147,6 +151,8 @@ def run_executable_suite() -> dict[str, Any]:
 
 
 def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    from tools.execution_state import step35_sre_closed
+
     if document.get("schema_version") != "1.0" or document.get("step") != 34 or document.get("overall_result") != "PASS":
         raise ValidationFailure("Step34 machine receipt identity/result is invalid")
     assessed = document.get("assessed_commit")
@@ -158,7 +164,10 @@ def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[s
     if phase == "STEP34_CLOSURE":
         observability = mapping(observability, "step34_observability")
         content_commit = observability.get("content_commit")
-        if not isinstance(content_commit, str) or not SHA.fullmatch(content_commit) or assessed != content_commit or execution.get("last_completed_content_commit") != content_commit:
+        pointer_matches = execution.get("last_completed_content_commit") == content_commit
+        if execution.get("current_step") == 36:
+            pointer_matches = step35_sre_closed(state)
+        if not isinstance(content_commit, str) or not SHA.fullmatch(content_commit) or assessed != content_commit or not pointer_matches:
             raise ValidationFailure("receipt SHA is not bound to authoritative Step34 content commit")
         if observability.get("content_ci_result") != "PASS" or observability.get("status") != "PASS":
             raise ValidationFailure("Step34 closure evidence is not marked PASS")

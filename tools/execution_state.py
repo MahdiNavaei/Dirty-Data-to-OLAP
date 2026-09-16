@@ -254,6 +254,9 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=35, maximum_current_step=35)
         and _step34_completion_evidence(state)
+    ) or (
+        is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
+        and _step35_completion_evidence(state)
     )
 
 
@@ -304,6 +307,9 @@ def step33_application_security_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=35, maximum_current_step=35)
         and _step34_completion_evidence(state)
+    ) or (
+        is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
+        and _step35_completion_evidence(state)
     )
 
 
