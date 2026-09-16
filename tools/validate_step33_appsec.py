@@ -138,12 +138,13 @@ def _validate_content_commit_binding(document: dict[str, Any], state: dict[str, 
     assessed_commit = document.get("assessed_commit")
     content_commit = appsec.get("content_commit")
     last_completed_content_commit = execution.get("last_completed_content_commit")
+    later_handoff = execution.get("current_step", 0) >= 35
     if not (
         isinstance(content_commit, str)
         and SHA.fullmatch(content_commit)
-        and isinstance(last_completed_content_commit, str)
-        and SHA.fullmatch(last_completed_content_commit)
-        and assessed_commit == content_commit == last_completed_content_commit
+        and (later_handoff or (isinstance(last_completed_content_commit, str) and SHA.fullmatch(last_completed_content_commit)))
+        and assessed_commit == content_commit
+        and (later_handoff or assessed_commit == last_completed_content_commit)
     ):
         raise ValidationFailure(
             "receipt assessed_commit must equal specialist_execution.step33_application_security.content_commit "

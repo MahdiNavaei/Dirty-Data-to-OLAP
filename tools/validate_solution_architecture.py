@@ -15,7 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed
 ARCH = ROOT / "docs" / "architecture"
 SPECS = ARCH / "specs"
 KB = ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base"
@@ -913,6 +913,13 @@ def check_state() -> None:
         require(execution.get("current_role") == "observability_engineer", "post-Step 33 state must hand off to Step34")
         require("Observability Engineer" in str(execution.get("current_specialist")), "current specialist must be Step34")
         require("Observability Engineer" in str(execution.get("next_step")), "next step must be Step34")
+    elif execution.get("current_step") == 35:
+        require(step34_observability_closed(state), "Step34/observability closure must be sequential and coherent")
+        require(execution.get("last_completed_step") == 34, "post-Step 34 state must record completed Step 34")
+        require(execution.get("last_completed_role") == "observability_engineer", "post-Step 34 role must be observability_engineer")
+        require(execution.get("current_role") == "sre", "post-Step 34 state must hand off to Step35")
+        require("Site Reliability Engineer" in str(execution.get("current_specialist")), "current specialist must be Step35")
+        require("Site Reliability Engineer" in str(execution.get("next_step")), "next step must be Step35")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")

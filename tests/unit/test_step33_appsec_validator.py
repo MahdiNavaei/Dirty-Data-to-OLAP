@@ -82,7 +82,6 @@ def test_step33_closure_rejects_receipt_when_state_content_commit_changes() -> N
     receipt, state = _fixtures()
     changed_commit = "b" * 40
     state["specialist_execution"]["step33_application_security"]["content_commit"] = changed_commit
-    state["specialist_execution"]["last_completed_content_commit"] = changed_commit
     with pytest.raises(ValidationFailure, match="assessed_commit"):
         validate_document(receipt, state)
 
@@ -100,7 +99,7 @@ def test_step33_closure_rejects_disagreeing_state_content_commits() -> None:
         lambda receipt, state: receipt["scenarios"].pop(),
         lambda receipt, state: receipt["scenarios"][0].update({"evidence": {"result": "PASS"}}),
         lambda receipt, state: receipt["findings"].update({"high_open": 1}),
-        lambda receipt, state: state["specialist_execution"].update({"current_step": 35}),
+        lambda receipt, state: state["specialist_execution"].update({"step35_status": "STARTED"}),
     ),
 )
 def test_step33_receipt_rejects_missing_evidence_or_open_state(mutation) -> None:
