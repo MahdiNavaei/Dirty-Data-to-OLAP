@@ -226,6 +226,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Diagnostics */
+        get: operations["run_diagnostics_api_v1_runs__run_id__diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/execution": {
         parameters: {
             query?: never;
@@ -595,7 +612,7 @@ export interface components {
         };
         /** InvalidateReviewRequest */
         InvalidateReviewRequest: {
-            context?: components["schemas"]["ReviewCompatibilityContext"] | null;
+            context?: components["schemas"]["ReviewCompatibilityContext-Input"] | null;
             /** Expected Revision */
             expected_revision: number;
             /** Reason */
@@ -693,12 +710,12 @@ export interface components {
              * @default 0
              */
             retry_count: number;
-            review_context?: components["schemas"]["ReviewCompatibilityContext"] | null;
+            review_context?: components["schemas"]["ReviewCompatibilityContext-Output"] | null;
             /**
              * Review Contexts
              * @default []
              */
-            review_contexts: components["schemas"]["ReviewCompatibilityContext"][];
+            review_contexts: components["schemas"]["ReviewCompatibilityContext-Output"][];
             /**
              * Revision
              * @default 0
@@ -969,7 +986,7 @@ export interface components {
         ProductReviewView: {
             /** Checkpoint */
             checkpoint: string;
-            context: components["schemas"]["ReviewCompatibilityContext"];
+            context: components["schemas"]["ReviewCompatibilityContext-Output"];
             /** Decision */
             decision?: string | null;
             /**
@@ -1169,7 +1186,7 @@ export interface components {
         ReviewActionDecision: "ACCEPTED" | "REJECTED" | "DEFERRED";
         /** ReviewActionRequest */
         ReviewActionRequest: {
-            context?: components["schemas"]["ReviewCompatibilityContext"] | null;
+            context?: components["schemas"]["ReviewCompatibilityContext-Input"] | null;
             decision: components["schemas"]["ReviewActionDecision"];
             /**
              * Expected Revision
@@ -1189,7 +1206,42 @@ export interface components {
          */
         ReviewCheckpoint: "REVIEW_EVIDENCE_DECISIONS" | "REVIEW_CANONICAL_IDENTITY" | "REVIEW_ANALYTICAL_PLAN" | "REVIEW_MATERIALIZATION_PLAN";
         /** ReviewCompatibilityContext */
-        ReviewCompatibilityContext: {
+        "ReviewCompatibilityContext-Input": {
+            /** Applicability Fingerprint */
+            applicability_fingerprint: string;
+            /**
+             * Domain Assertion Refs
+             * @default []
+             */
+            domain_assertion_refs: string[];
+            /** Model Version */
+            model_version: string;
+            /** Policy Version */
+            policy_version: string;
+            review_checkpoint_id: components["schemas"]["ReviewCheckpoint"];
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            skip_authorization?: components["schemas"]["ReviewSkipAuthorization"] | null;
+            /** Source Schema Fingerprints */
+            source_schema_fingerprints?: {
+                [key: string]: string;
+            };
+            /** Subject Artifact Id */
+            subject_artifact_id: string;
+            /** Subject Content Hash */
+            subject_content_hash: string;
+            /** Subject Schema Version */
+            subject_schema_version: string;
+            /** Subject Semantic Id */
+            subject_semantic_id: string;
+            /** Subject Stage */
+            subject_stage: string;
+        };
+        /** ReviewCompatibilityContext */
+        "ReviewCompatibilityContext-Output": {
             /** Applicability Fingerprint */
             applicability_fingerprint: string;
             /**
@@ -1358,10 +1410,6 @@ export interface components {
         StageStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "NEEDS_REVIEW" | "BLOCKED" | "FAILED" | "CANCELLED" | "INVALIDATED" | "SKIPPED";
         /** ValidationError */
         ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
@@ -1812,6 +1860,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_diagnostics_api_v1_runs__run_id__diagnostics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
