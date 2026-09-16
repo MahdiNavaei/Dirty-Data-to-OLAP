@@ -42,6 +42,8 @@ def _closed_step32_state() -> dict:
         }
     )
     state["gates"]["G9_FUNCTIONAL_SUPPORT"] = "PASS"
+    state["gates"]["G10_APPLICATION_SECURITY"] = "PENDING"
+    execution.pop("step33_application_security", None)
     state["blocked"] = False
     return state
 
