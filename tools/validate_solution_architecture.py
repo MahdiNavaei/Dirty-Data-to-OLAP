@@ -15,7 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed
 ARCH = ROOT / "docs" / "architecture"
 SPECS = ARCH / "specs"
 KB = ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base"
@@ -906,6 +906,13 @@ def check_state() -> None:
         require(execution.get("current_role") == "application_security_engineer", "post-Step 32 state must hand off to Step33")
         require("Application Security Engineer" in str(execution.get("current_specialist")), "current specialist must be Step33")
         require("Application Security Engineer" in str(execution.get("next_step")), "next step must be Step33")
+    elif execution.get("current_step") == 34:
+        require(step33_application_security_closed(state), "Step33/application-security closure must be sequential and coherent")
+        require(execution.get("last_completed_step") == 33, "post-Step 33 state must record completed Step 33")
+        require(execution.get("last_completed_role") == "application_security_engineer", "post-Step 33 role must be application_security_engineer")
+        require(execution.get("current_role") == "observability_engineer", "post-Step 33 state must hand off to Step34")
+        require("Observability Engineer" in str(execution.get("current_specialist")), "current specialist must be Step34")
+        require("Observability Engineer" in str(execution.get("next_step")), "next step must be Step34")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -931,7 +938,8 @@ def check_state() -> None:
     step29_pass = step29_g7_closed(state) or (execution.get("current_step") == 29 and execution.get("current_role") == "frontend_engineer" and execution.get("step29_status") == "PASS" and gates.get("G7_END_TO_END_PRODUCT") == "PASS")
     step30_pass = step30_g8_closed(state)
     step32_pass = step32_compatibility_closed(state)
-    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) for key in later_gate_keys[4:]), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7/G8/G9 decisions")
+    step33_pass = step33_application_security_closed(state)
+    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) for key in later_gate_keys[4:]), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7/G8/G9/G10 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 

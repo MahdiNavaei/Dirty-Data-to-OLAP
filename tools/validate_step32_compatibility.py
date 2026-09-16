@@ -19,6 +19,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.execution_state import step33_application_security_closed
 REPORT = ROOT / "output" / "step32_compatibility_validation.json"
 REQUIRED_DATABASES = {
     "PostgreSQL": ("DDO_STEP32_POSTGRES_ADMIN_URL", "DDO_STEP32_POSTGRES_URL"),
@@ -58,7 +60,9 @@ def _state() -> dict[str, object]:
         and gates.get("G9_FUNCTIONAL_SUPPORT") == "PENDING"
         and state.get("blocked") is False
     )
-    post = closed and gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS" and current == 33
+    post = closed and gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS" and (
+        current == 33 or (current == 34 and step33_application_security_closed(state))
+    )
     if not (pre or post):
         raise ValidationFailure("authoritative execution state is neither the Step32 handoff nor the closed Step32/G9 handoff")
     return {"phase": "pre-Step32" if pre else "post-Step32", "current_step": current, "g9": gates.get("G9_FUNCTIONAL_SUPPORT"), "blocked": state.get("blocked")}

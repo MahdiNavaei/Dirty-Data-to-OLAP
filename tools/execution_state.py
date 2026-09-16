@@ -77,7 +77,7 @@ def is_authorized_specialist_handoff(
     beyond_declared_ceiling = (
         (current_step == 32 and maximum_current_step == 31 and step31_qa_closed(state))
         or (current_step == 33 and maximum_current_step in {31, 32} and step32_compatibility_closed(state))
-        or (current_step == 34 and maximum_current_step == 33 and _step33_completion_evidence(state))
+        or (current_step == 34 and maximum_current_step <= 33 and _step33_completion_evidence(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -244,7 +244,10 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G15_RELEASE") == "PENDING"
         and state.get("blocked") is False
     )
-    return direct_closure or _step33_completion_evidence(state)
+    return direct_closure or (
+        is_authorized_specialist_handoff(state, minimum_current_step=34, maximum_current_step=34)
+        and _step33_completion_evidence(state)
+    )
 
 
 def _step33_completion_evidence(state: dict[str, Any]) -> bool:
