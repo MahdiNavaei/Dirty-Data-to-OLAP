@@ -2,10 +2,10 @@
 
 Status: PASS for the bounded local reliability evidence.
 
-Content commit: PENDING_CONTENT_COMMIT
-Content exact-head CI: PENDING_CONTENT_CI
-Closure commit: PENDING_CLOSURE_COMMIT
-Final exact-head CI: PENDING_FINAL_CI
+Content commit: 38fec1d3b8850df11c2431b995fe6897aca2ffd5
+Content exact-head CI: 35150365609 - PASS
+Closure commit: THIS_METADATA_COMMIT
+Final exact-head CI: REQUIRED_AFTER_CLOSURE_HEAD
 
 ## Scope
 
@@ -17,9 +17,8 @@ capacity completion or external-provider completion.
 
 ## Handoff
 
-Before closure, the authoritative pointer is Step35 / SRE with
-`step35_started=false` and `step35_status=NOT_STARTED`. After the content and
-closure receipts are bound, the only authorized next pointer is Step36 / Chaos
-/ Resilience Engineer with `step36_started=false` and `step36_status=NOT_STARTED`.
+After the content receipt is bound, the authoritative pointer is Step36 / Chaos
+/ Resilience Engineer with `step35_started=true`, `step35_status=COMPLETED_SRE`,
+`step36_started=false` and `step36_status=NOT_STARTED`.
 
 G6-G10 remain `PASS`; G11-G15 remain `PENDING`; `blocked=false`.

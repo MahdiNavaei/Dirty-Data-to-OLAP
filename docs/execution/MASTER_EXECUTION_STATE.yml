@@ -57,14 +57,14 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 35
-  current_role: "sre"
-  current_specialist: "Step35 - Site Reliability Engineer"
-  last_completed_step: 34
-  last_completed_role: "observability_engineer"
-  last_completed_specialist: "Step34 - Observability Engineer"
-  last_completed_content_commit: "993f36bf7c1660f79f8d9fcd6fe190bd4b45d9a5"
-  next_step: "Step35 - Site Reliability Engineer"
+  current_step: 36
+  current_role: "chaos_resilience"
+  current_specialist: "Step36 - Chaos / Resilience Engineer"
+  last_completed_step: 35
+  last_completed_role: "sre"
+  last_completed_specialist: "Step35 - Site Reliability Engineer"
+  last_completed_content_commit: "38fec1d3b8850df11c2431b995fe6897aca2ffd5"
+  next_step: "Step36 - Chaos / Resilience Engineer"
   step30_started: true
   step30_status: "COMPLETED_DEVOPS_G8_PASS"
   step31_started: true
@@ -75,8 +75,10 @@ specialist_execution:
   step33_status: "COMPLETED_APPLICATION_SECURITY_G10_PASS"
   step34_started: true
   step34_status: "COMPLETED_OBSERVABILITY"
-  step35_started: false
-  step35_status: "NOT_STARTED"
+  step35_started: true
+  step35_status: "COMPLETED_SRE"
+  step36_started: false
+  step36_status: "NOT_STARTED"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
   step23_started: true
@@ -365,6 +367,21 @@ specialist_execution:
     scenarios: 25
     metrics: 13
     dashboard_panels: 9
+    g11_status: "PENDING"
+    protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
+  step35_sre:
+    step35_started: true
+    status: "PASS"
+    content_commit: "38fec1d3b8850df11c2431b995fe6897aca2ffd5"
+    content_ci_run: "35150365609"
+    content_ci_head: "38fec1d3b8850df11c2431b995fe6897aca2ffd5"
+    content_ci_result: "PASS"
+    report_assessed_commit: "38fec1d3b8850df11c2431b995fe6897aca2ffd5"
+    receipt: "docs/execution/STEP35_SRE_REVIEW.md"
+    validator: "tools/validate_step35_sre.py"
+    recovery_matrix: "docs/sre/recovery-matrix.json"
+    scenarios: 29
+    runbooks: 10
     g11_status: "PENDING"
     protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
   step22_content_commit: "f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2"

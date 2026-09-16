@@ -1716,3 +1716,17 @@ handoff_to:
 - final_state: `last_completed_step=34`; `last_completed_role=observability_engineer`; `current_step=35`; `current_role=sre`; `step35_started=false`; `step35_status=NOT_STARTED`
 - gate_state: `G6=PASS`; `G7=PASS`; `G8=PASS`; `G9=PASS`; `G10=PASS`; `G11-G15=PENDING`; `blocked=false`
 - no_step35_implementation: true
+
+## PRIMARY PROMPT 35/41 - Site Reliability Engineer
+
+- execution_step: `35`; bounded local SRE reliability implementation and evidence closure completed; Step36 was not started
+- starting_baseline: accepted Step34 observability closure at `4d2df706b773550c7b7609e706f0c3c8bef8cf77`; `step35_started=false`; `step35_status=NOT_STARTED`
+- content_commit: `38fec1d3b8850df11c2431b995fe6897aca2ffd5`
+- content_exact_head_ci: run `35150365609`; result `PASS`; Secret scan, clean-room G8/build/runtime, image scan, Step31 independent QA/browser, Step32 compatibility/G9, Step33 AppSec/G10, Step34 observability and Step35 SRE all passed
+- reliability_result: SQLite backup/restore, durable restart recovery, bounded retry/reconciliation, fail-closed control-store handling, safe degradation and graceful shutdown verified; `29` recovery scenarios and `10` executable runbooks
+- candidate_objectives: `docs/sre/slo.md`; reference objectives only, no production SLO, exactly-once or capacity claim
+- protected_quality_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11-G15=PENDING`, `blocked=false`
+- final_state: `last_completed_step=35`, `last_completed_role=sre`, `current_step=36`, `current_role=chaos_resilience`, `step35_started=true`, `step35_status=COMPLETED_SRE`, `step36_started=false`, `step36_status=NOT_STARTED`
+- receipts: `docs/execution/STEP35_SRE_REVIEW.md`; `output/step35_sre_validation.json`; `docs/sre/recovery-matrix.json`; `tools/validate_step35_sre.py`
+- no_step36_implementation: true
