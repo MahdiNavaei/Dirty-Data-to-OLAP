@@ -61,7 +61,8 @@ def _state() -> dict[str, object]:
         and state.get("blocked") is False
     )
     post = closed and gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS" and (
-        current == 33 or (current == 34 and step33_application_security_closed(state))
+        current == 33
+        or (current in {34, 35} and step33_application_security_closed(state))
     )
     if not (pre or post):
         raise ValidationFailure("authoritative execution state is neither the Step32 handoff nor the closed Step32/G9 handoff")
