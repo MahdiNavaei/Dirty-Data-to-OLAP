@@ -328,3 +328,38 @@ jobs:
         run: |
           git diff --check
           test -z "$(git status --porcelain)"
+
+  performance:
+    name: Step37 performance / baseline / regression
+    needs: [chaos-resilience]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute bounded Step37 performance evidence
+        run: |
+          mkdir -p "${RUNNER_TEMP}/step37-performance/evidence"
+          uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/run_step37_performance.py \
+            --output-root "${RUNNER_TEMP}/step37-performance/evidence" \
+            --report-path "${RUNNER_TEMP}/step37-performance/STEP37_PERFORMANCE_REPORT.md" \
+            --assessed-commit "${GITHUB_SHA}" --ci
+      - name: Validate Step37 evidence and exact-head binding
+        run: |
+          uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step37_performance.py \
+            --evidence "${RUNNER_TEMP}/step37-performance/evidence/step37_performance_validation.json" \
+            --report "${RUNNER_TEMP}/step37-performance/STEP37_PERFORMANCE_REPORT.md" \
+            --expected-commit "${GITHUB_SHA}" --ci
+      - name: Verify Step37 content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
