@@ -243,7 +243,13 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
         and compatibility.get("g9_status") == "PASS"
         and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
         and current_gates.get("G10_APPLICATION_SECURITY") == "PENDING"
-        and current_gates.get("G11_RESILIENCE") == "PENDING"
+        and (
+            current_gates.get("G11_RESILIENCE") == "PENDING"
+            or (
+                current_gates.get("G11_RESILIENCE") == "PASS"
+                and _step36_receipt_evidence(state)
+            )
+        )
         and current_gates.get("G12_CAPACITY") == "PENDING"
         and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PENDING"
         and current_gates.get("G14_USABILITY") == "PENDING"
@@ -597,6 +603,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             or (key == "G8_REPRODUCIBLE_BUILD" and (step30_g8_closed(state) or step31_external_ci_blocked(state)))
             or (key == "G9_FUNCTIONAL_SUPPORT" and step32_compatibility_closed(state))
             or (key == "G10_APPLICATION_SECURITY" and step33_application_security_closed(state))
+            or (key == "G11_RESILIENCE" and current_gates.get(key) == "PASS" and _step36_receipt_evidence(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )
