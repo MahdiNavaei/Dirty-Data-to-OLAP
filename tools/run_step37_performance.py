@@ -429,7 +429,9 @@ def run(args: argparse.Namespace) -> int:
     truth_ids = tuple(item["truth_fixture_id"] for item in truth_links)
     refs = _reference_inputs()
     benchmarks: list[dict[str, Any]] = []
-    temp_dir = Path(tempfile.mkdtemp(prefix="step37-materialization-", dir=str(ROOT / "workspace" / "runs")))
+    runtime_root = ROOT / "workspace" / "runs"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    temp_dir = Path(tempfile.mkdtemp(prefix="step37-materialization-", dir=str(runtime_root)))
     try:
         materialization_results, materialized = _materialization_benchmarks(temp_dir, refs, truth_ids)
         benchmarks.extend(materialization_results)
