@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "step": 36,
+  "overall_result": "PASS",
+  "phase": "STEP36_CONTENT",
+  "assessed_commit": "PENDING_CONTENT_COMMIT",
+  "required_scenarios": 29,
+  "passed_scenarios": 29,
+  "g11_resilience": "PENDING",
+  "g12_capacity": "PENDING",
+  "g13_adversarial_security": "PENDING",
+  "g14_usability": "PENDING",
+  "g15_release": "PENDING",
+  "test_command": "python -m pytest tests/chaos/test_step36_chaos.py -q",
+  "test_result": "29 passed",
+  "content_ci": "PENDING",
+  "limitations": [
+    "Local disposable runtime evidence only; no production HA or capacity claim.",
+    "G11 remains pending until exact content-head CI and closure metadata."
+  ]
+}

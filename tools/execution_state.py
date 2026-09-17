@@ -43,6 +43,7 @@ CURRENT_ROLE_BY_STEP = {
     34: "observability_engineer",
     35: "sre",
     36: "chaos_resilience",
+    37: "performance_engineer",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -82,6 +83,7 @@ def is_authorized_specialist_handoff(
         or (current_step == 34 and maximum_current_step <= 33 and _step33_completion_evidence(state))
         or (current_step == 35 and maximum_current_step <= 34 and step34_observability_closed(state))
         or (current_step == 36 and maximum_current_step <= 35 and step35_sre_closed(state))
+        or (current_step == 37 and maximum_current_step <= 36 and step36_resilience_closed(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -270,24 +272,28 @@ def _step33_completion_evidence(state: dict[str, Any]) -> bool:
     current_step = specialist.get("current_step")
     step34_is_next = current_step == 34 and specialist.get("step34_started") is False and specialist.get("step34_status") == "NOT_STARTED"
     step34_is_closed = current_step == 35 and specialist.get("step34_started") is True and specialist.get("step34_status") == "COMPLETED_OBSERVABILITY"
-    step35_is_closed = current_step == 36 and specialist.get("step35_started") is True and specialist.get("step35_status") == "COMPLETED_SRE"
+    step35_is_closed = (
+        (current_step == 36 and specialist.get("step35_started") is True and specialist.get("step35_status") == "COMPLETED_SRE")
+        or (current_step == 37 and specialist.get("step35_started") is True and specialist.get("step35_status") == "COMPLETED_SRE" and specialist.get("step36_started") is True and specialist.get("step36_status") == "COMPLETED_RESILIENCE_G11_PASS")
+    )
     pointer_preserves_step33 = (
         (current_step == 34 and specialist.get("last_completed_step") == 33 and specialist.get("last_completed_role") == "application_security_engineer" and specialist.get("last_completed_content_commit") == content_commit)
         or (current_step == 35 and specialist.get("last_completed_step") == 34 and specialist.get("last_completed_role") == "observability_engineer")
         or (current_step == 36 and specialist.get("last_completed_step") == 35 and specialist.get("last_completed_role") == "sre")
+        or (current_step == 37 and specialist.get("last_completed_step") == 36 and specialist.get("last_completed_role") == "chaos_resilience" and _step36_receipt_evidence(state))
     )
     return (
         isinstance(appsec, dict)
         and _step31_completion_evidence(state)
         and pointer_preserves_step33
-        and (current_step in {35, 36} or specialist.get("last_completed_specialist") == "Step33 - Application Security Engineer")
-        and (current_step in {35, 36} or specialist.get("last_completed_content_commit") == content_commit)
+        and (current_step in {35, 36, 37} or specialist.get("last_completed_specialist") == "Step33 - Application Security Engineer")
+        and (current_step in {35, 36, 37} or specialist.get("last_completed_content_commit") == content_commit)
         and isinstance(content_commit, str)
         and len(content_commit) == 40
         and all(character in "0123456789abcdef" for character in content_commit.lower())
         and specialist.get("step33_started") is True
         and specialist.get("step33_status") == "COMPLETED_APPLICATION_SECURITY_G10_PASS"
-        and (step34_is_next or step34_is_closed or step35_is_closed)
+        and (step34_is_next or step34_is_closed or step35_is_closed or (current_step == 37 and specialist.get("step36_started") is True and specialist.get("step36_status") == "COMPLETED_RESILIENCE_G11_PASS"))
         and appsec.get("step33_started") is True
         and appsec.get("status") == "PASS"
         and appsec.get("g10_status") == "PASS"
@@ -374,7 +380,32 @@ def _step34_completion_evidence(state: dict[str, Any]) -> bool:
         and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
-    return direct_handoff or later_handoff
+    final_handoff = (
+        isinstance(observability, dict)
+        and _step33_completion_evidence(state)
+        and _step36_receipt_evidence(state)
+        and specialist.get("current_step") == 37
+        and specialist.get("current_role") == "performance_engineer"
+        and specialist.get("current_specialist") == "Step37 - Performance Engineer"
+        and specialist.get("last_completed_step") == 36
+        and specialist.get("last_completed_role") == "chaos_resilience"
+        and specialist.get("last_completed_specialist") == "Step36 - Chaos / Resilience Engineer"
+        and specialist.get("step34_started") is True
+        and specialist.get("step34_status") == "COMPLETED_OBSERVABILITY"
+        and observability.get("step34_started") is True
+        and observability.get("status") == "PASS"
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and current_gates.get("G11_RESILIENCE") == "PASS"
+        and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and specialist.get("step37_started") is False
+        and specialist.get("step37_status") == "NOT_STARTED"
+        and state.get("blocked") is False
+    )
+    return direct_handoff or later_handoff or final_handoff
 
 
 def step34_observability_closed(state: dict[str, Any]) -> bool:
@@ -416,17 +447,12 @@ def _step35_completion_evidence(state: dict[str, Any]) -> bool:
     return (
         _step34_completion_evidence(state)
         and _step35_receipt_evidence(state)
-        and specialist.get("current_step") == 36
-        and specialist.get("current_role") == "chaos_resilience"
-        and specialist.get("current_specialist") == "Step36 - Chaos / Resilience Engineer"
-        and specialist.get("last_completed_step") == 35
-        and specialist.get("last_completed_role") == "sre"
-        and specialist.get("last_completed_specialist") == "Step35 - Site Reliability Engineer"
-        and specialist.get("last_completed_content_commit") == content_commit
+        and specialist.get("current_step") in {36, 37}
+        and ((specialist.get("current_step") == 36 and specialist.get("current_role") == "chaos_resilience" and specialist.get("current_specialist") == "Step36 - Chaos / Resilience Engineer") or (specialist.get("current_step") == 37 and specialist.get("current_role") == "performance_engineer" and specialist.get("current_specialist") == "Step37 - Performance Engineer"))
+        and ((specialist.get("current_step") == 36 and specialist.get("last_completed_step") == 35 and specialist.get("last_completed_role") == "sre" and specialist.get("last_completed_specialist") == "Step35 - Site Reliability Engineer" and specialist.get("last_completed_content_commit") == content_commit) or (specialist.get("current_step") == 37 and specialist.get("last_completed_step") == 36 and specialist.get("last_completed_role") == "chaos_resilience" and _step36_receipt_evidence(state)))
         and specialist.get("step35_started") is True
         and specialist.get("step35_status") == "COMPLETED_SRE"
-        and specialist.get("step36_started") is False
-        and specialist.get("step36_status") == "NOT_STARTED"
+        and ((specialist.get("current_step") == 36 and specialist.get("step36_started") is False and specialist.get("step36_status") == "NOT_STARTED") or (specialist.get("current_step") == 37 and specialist.get("step36_started") is True and specialist.get("step36_status") == "COMPLETED_RESILIENCE_G11_PASS"))
         and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
         and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
         and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
@@ -441,6 +467,58 @@ def step35_sre_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step35 -> Step36 SRE handoff."""
 
     return is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)
+
+
+def _step36_receipt_evidence(state: dict[str, Any]) -> bool:
+    """Validate Step36 receipt and exact content-CI binding."""
+
+    specialist = execution(state)
+    chaos = specialist.get("step36_chaos_resilience", {})
+    content_commit = chaos.get("content_commit") if isinstance(chaos, dict) else None
+    return (
+        isinstance(chaos, dict)
+        and chaos.get("step36_started") is True
+        and chaos.get("status") == "PASS"
+        and chaos.get("g11_status") == "PASS"
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and chaos.get("content_ci_result") == "PASS"
+        and chaos.get("content_ci_head") == content_commit
+        and chaos.get("report_assessed_commit") == content_commit
+        and chaos.get("receipt") == "docs/execution/STEP36_CHAOS_RESILIENCE_REVIEW.md"
+        and chaos.get("gate_receipt") == "docs/execution/gates/G11_RESILIENCE.md"
+    )
+
+
+def _step36_completion_evidence(state: dict[str, Any]) -> bool:
+    specialist = execution(state)
+    current_gates = gates(state)
+    chaos = specialist.get("step36_chaos_resilience", {})
+    return (
+        _step35_completion_evidence(state)
+        and _step36_receipt_evidence(state)
+        and specialist.get("current_step") == 37
+        and specialist.get("current_role") == "performance_engineer"
+        and specialist.get("current_specialist") == "Step37 - Performance Engineer"
+        and specialist.get("last_completed_step") == 36
+        and specialist.get("last_completed_role") == "chaos_resilience"
+        and specialist.get("last_completed_specialist") == "Step36 - Chaos / Resilience Engineer"
+        and specialist.get("last_completed_content_commit") == chaos.get("content_commit")
+        and specialist.get("step36_started") is True
+        and specialist.get("step36_status") == "COMPLETED_RESILIENCE_G11_PASS"
+        and specialist.get("step37_started") is False
+        and specialist.get("step37_status") == "NOT_STARTED"
+        and current_gates.get("G11_RESILIENCE") == "PASS"
+        and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
+    )
+
+
+def step36_resilience_closed(state: dict[str, Any]) -> bool:
+    """Recognize only the exact Step36 -> Step37 resilience handoff."""
+
+    return is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)
 
 
 def step31_external_ci_blocked(state: dict[str, Any]) -> bool:

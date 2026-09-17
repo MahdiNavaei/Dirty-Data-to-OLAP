@@ -64,9 +64,9 @@ class DuckDBMaterializer:
             "target": target_config.config_fingerprint,
         })
         temp = target.with_name("." + target.name + "." + artifact_id[-16:] + ".tmp")
-        target.parent.mkdir(parents=True, exist_ok=True)
         connection = None
         try:
+            target.parent.mkdir(parents=True, exist_ok=True)
             runtime_sql = generated_sql
             if not input_data.allow_literal_sql and any("?" in statement for statement in (generated_sql.load_date_sql, generated_sql.load_dimensions_sql, generated_sql.load_facts_sql)):
                 runtime_sql = AnalyticalCompilerService()._generate_sql(
