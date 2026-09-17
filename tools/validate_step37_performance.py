@@ -56,6 +56,8 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
         _fail("receipt assessed_commit is not a full SHA")
     if expected_commit and assessed != expected_commit:
         _fail("receipt assessed_commit is not bound to the expected content commit")
+    if expected_commit and _head() != expected_commit:
+        _fail("expected commit is not the checked-out HEAD")
     if report_path is not None and not report_path.is_file():
         _fail("performance report is missing")
     environment = payload["environment"]
@@ -116,7 +118,14 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
             _fail("content-phase Step37 state changed prematurely")
     elif specialist.get("current_step") == 38:
         receipt = specialist.get("step37_performance", {})
-        if specialist.get("last_completed_step") != 37 or specialist.get("last_completed_role") != "performance_engineer" or specialist.get("current_role") != "load_stress" or specialist.get("step38_started") is not False or specialist.get("step38_status") != "NOT_STARTED" or receipt.get("content_commit") != assessed:
+        if (
+            specialist.get("last_completed_step") != 37
+            or specialist.get("last_completed_role") != "performance_engineer"
+            or specialist.get("current_role") != "load_stress"
+            or specialist.get("step38_started") is not False
+            or specialist.get("step38_status") != "NOT_STARTED"
+            or receipt.get("content_commit") != specialist.get("last_completed_content_commit")
+        ):
             _fail("final Step37 to Step38 handoff is inconsistent")
     else:
         _fail("unsupported authoritative current step")
