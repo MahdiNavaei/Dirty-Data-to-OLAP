@@ -1270,11 +1270,30 @@ Measure:
 - evidence fusion;
 - OLAP materialization.
 
+Step37 MUST reuse the existing benchmark estate and truth fixtures, with
+`base_reports/08_BENCHMARK_AND_VALIDATION_PLAN.md` owning the canonical V1
+scale definitions. The `1M/10M/100M` wording is feasibility exploration, not
+a mandatory acceptance ladder: execute `1M` or several-million-row local
+benchmarks where practical, treat `10M` as optional when resource-safe, and
+treat `100M` as design/feasibility unless it can genuinely be executed.
+
+Any optimization affecting inference search space, candidate sets, matching,
+entity resolution, evidence coverage, or confidence inputs requires a rerun of
+the relevant truth-backed empirical quality evaluation; semantic hashes alone
+do not establish correctness. Every accepted optimization must reference a
+concrete `PERF-FIND-*` bottleneck finding and use the smallest coherent change.
+
 ### Required output
 
 Pre/post optimization measurements.
 
 No unsupported speedup claims.
+
+Step37 produces single-run baselines and bottleneck evidence only. It does not
+close G12 or claim capacity. Concurrency, arrival rates, saturation, soak,
+capacity breakpoints, overload recovery, and the capacity envelope belong to
+Step38. The Step37 handoff therefore preserves `G11=PASS`, `G12=PENDING`, and
+`Step38=NOT_STARTED`.
 
 ---
 

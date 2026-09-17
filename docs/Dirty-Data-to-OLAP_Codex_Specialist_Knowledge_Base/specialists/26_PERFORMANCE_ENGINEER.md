@@ -63,6 +63,144 @@ The system is **evidence-first**. External engines generate evidence; internal c
 
 For any task that changes architecture, contracts, confidence semantics, canonical modeling, or V1 scope, Codex MUST inspect the relevant source-of-truth report before editing code.
 
+## 3A. Authoritative Step37 overrides
+
+The following rules are authoritative for Step37 and override any broader or
+more aggressive wording elsewhere in this playbook. They preserve the
+existing benchmark semantics, correctness gates, and specialist boundaries.
+
+### Reuse the existing benchmark estate
+
+Before designing performance datasets, inspect and reuse the existing:
+
+- `benchmarks/inference_evaluation/`;
+- `benchmarks/entity_resolution/`;
+- `benchmarks/schema_matching/`;
+- `benchmarks/evidence_fusion/`;
+- `benchmarks/validation/`;
+- `benchmarks/applied_ml/`;
+- `benchmarks/semantic_ai/`.
+
+In particular, reuse the established relationship, schema, entity, scenario,
+provider, and validation truth fixtures and expected outputs. Step37 may add a
+deterministic scale generator or a small performance fixture specification only
+when it remains compatible with those semantics. It MUST NOT create a second
+truth model or a disconnected synthetic benchmark universe.
+
+### Base Report 08 owns V1 scale definitions
+
+`../base_reports/08_BENCHMARK_AND_VALIDATION_PLAN.md` is authoritative for
+the V1 benchmark estate:
+
+- Tiny: approximately `1k–10k` rows per table;
+- Medium: approximately `100k–1M` rows in major fact tables;
+- Large-local: several million fact rows.
+
+The playbook's `1M/10M/100M` wording is feasibility exploration, not a
+mandatory Step37 acceptance ladder. Therefore:
+
+- execute `1M` where practical;
+- execute several-million-row local/reference runs where practical;
+- treat `10M` as an optional executed reference benchmark when resource-safe;
+- treat `100M` as design/feasibility only unless it can genuinely and safely
+  be executed.
+
+An unexecuted scale MUST never be reported as measured. Routine push CI MUST
+NOT generate `10M` or `100M` fixtures merely to satisfy exploratory wording.
+
+### Measure broadly; optimize narrowly
+
+Characterize the important single-run product path sufficiently to identify
+material bottlenecks, but do not optimize every measured stage by default. The
+required loop is:
+
+```text
+measure → profile → identify material bottleneck
+       → smallest coherent optimization
+       → rerun the identical benchmark
+       → verify semantics and empirical quality
+```
+
+Every implemented optimization MUST reference a concrete `PERF-FIND-*`
+profiling finding. If a stage has no material bottleneck, record its baseline
+and leave its implementation unchanged.
+
+### Inference quality is an optimization gate
+
+For any optimization that can alter candidate generation, candidate pruning,
+blocking, top-K selection, sampling, relationship discovery, schema matching,
+entity-resolution candidate pairs, entity clustering, evidence coverage, or
+confidence inputs, semantic artifact hashes alone are insufficient. Rerun the
+relevant existing truth-backed evaluation and report the empirical delta using
+the project's established metrics, including where applicable:
+
+- relationship precision, recall, and F1;
+- false-positive behavior by trap type;
+- schema matching precision@1, precision@K, and recall;
+- entity-resolution pairwise or cluster quality;
+- false-merge and false-split rates.
+
+The optimization fails if it gains speed by silently reducing required recall,
+increasing harmful false merges, weakening conflict detection, or changing
+accepted analytical truth outside an explicitly approved policy change.
+
+### No approximation without contract authority
+
+Sampling, blocking, pruning, sketching, approximate algorithms, and reduced
+validation may be added only when already permitted by an authoritative
+project contract or through a deliberate, documented policy change. Performance
+pressure alone is not permission. Step37 MUST NOT turn sampled evidence into
+full truth, matcher scores into probabilities, IND evidence into FK truth, or
+candidate reduction into accepted semantic equivalence.
+
+### Correctness and performance remain linked
+
+Every performance result MUST identify the corresponding correctness/truth
+fixture or semantic oracle where applicable. The evidence chain is:
+
+```text
+truth fixture / semantic oracle
+→ baseline correctness
+→ baseline performance
+→ optimization
+→ optimized performance
+→ correctness re-evaluation
+→ accepted performance finding
+```
+
+Reuse existing benchmark runners, Step34 telemetry, project contracts,
+product runtime, and validation/evaluation utilities. Add only the smallest
+missing harness needed to capture wall time, CPU time, peak memory, I/O,
+candidate counts, and environment metadata. Do not build a generic benchmark
+orchestration platform without concrete repository evidence that it is needed.
+
+### Step37 does not close G12
+
+Step37 may produce single-run performance baselines and bottleneck evidence,
+but it MUST NOT claim capacity from those results. Concurrency, arrival rates,
+worker saturation, connection-pool exhaustion, soak behavior, capacity
+breakpoints, overload recovery, and the capacity envelope remain Step38
+responsibilities. A successful Step37 handoff requires `G11=PASS`,
+`G12=PENDING`, and `Step38=NOT_STARTED`.
+
+### Required project-owner self-review
+
+Before Step37 completion, explicitly answer:
+
+- Did any optimization improve latency because the inference search space
+  became less complete?
+- Did candidate recall change?
+- Did relationship, schema, or entity-resolution benchmark quality change?
+- Did false-merge rate increase?
+- Did I create a second benchmark truth model unnecessarily?
+- Did I optimize a stage with no measured bottleneck?
+- Did I treat `10M/100M` as mandatory despite the canonical V1 scale?
+- Did I replace correctness evidence with semantic hashes where empirical
+  ground truth was available?
+
+Any material regression or unsupported shortcut MUST be repaired before
+Step37 can pass.
+
 ## 4. This specialist owns
 
 - performance benchmarks
@@ -81,10 +219,12 @@ If a task crosses these boundaries, keep the role's own analysis but route the d
 
 ## 6. Decisions this specialist is expected to make
 
-- representative dataset sizes
+- representative dataset sizes from Base Report 08's V1 tiers, with larger
+  scales treated only as explicit feasibility exploration
 - stage-specific performance SLO targets after baseline
 - CPU/memory/disk metrics
-- when approximation/sampling is justified
+- whether an approximation is already authorized by a project contract or
+  requires a deliberate policy change
 - optimization priority by bottleneck
 
 Every material decision must be linked to evidence: code behavior, benchmark result, source metadata, internal contract, test, or an explicit human/domain assertion.
@@ -111,25 +251,36 @@ Every material decision must be linked to evidence: code behavior, benchmark res
 - measure DuckDB materialization/query performance
 - prevent optimizations from changing semantics
 - track baselines in CI where feasible
+- link performance records to correctness fixtures and semantic oracles
+- reuse Step34 telemetry and existing validation/evaluation utilities
 
 ## 9. Expected artifacts / likely repository areas
 
-- benchmarks/performance/
+- existing benchmark estate and runners before adding any new path
 - reports/performance/
 - docs/performance/budgets.md
 - profiling scripts
 
-Paths are recommended ownership zones, not permission to duplicate existing files. If the current repository uses a different established path, follow the existing architecture.
+Paths are recommended ownership zones, not permission to duplicate existing
+files. If the current repository uses a different established path, follow the
+existing architecture.
 
 ## 10. Test and validation obligations
 
-At minimum, this specialist must consider:
+At minimum, this specialist must consider the canonical V1 tiers from Base
+Report 08:
 
-- 1M/10M/100M-row scenarios as feasible
+- Tiny: approximately 1k–10k rows/table;
+- Medium: approximately 100k–1M rows in major fact tables;
+- Large-local: several million fact rows;
+- optional 10M executed reference runs only when resource-safe;
+- 100M design/feasibility only unless genuinely and safely executed;
 - wide-table candidate explosion
 - memory ceiling tests
 - cold/warm cache comparisons
 - performance regression tests
+- truth-linked empirical quality regression for inference-affecting changes
+- candidate counts and environment metadata alongside timing and memory
 
 A change is not complete because its own unit test passes if it changes an internal contract or downstream semantics.
 
@@ -138,6 +289,11 @@ A change is not complete because its own unit test passes if it changes an inter
 - optimize before measuring
 - benchmark only tiny demo
 - drop validation to get speed
+- optimize without a concrete `PERF-FIND-*` finding
+- treat semantic hashes as a substitute for truth-backed quality regression
+- create a second benchmark truth model or disconnected performance estate
+- claim capacity, concurrency, soak, or overload behavior from a single-run
+  benchmark
 - compare timings across different hardware without metadata
 - ignore peak memory
 
@@ -168,6 +324,10 @@ Work owned by this role is DONE only when all applicable items are true:
 - no raw credential or unnecessary sensitive data is introduced into artifacts/logs;
 - documentation or contract schemas are updated when behavior changes;
 - benchmark/performance/security claims are backed by executed evidence;
+- performance records identify their correctness fixture or semantic oracle;
+- inference-affecting optimizations include empirical quality regression;
+- every accepted optimization references a `PERF-FIND-*` bottleneck finding;
+- no capacity/G12 claim is made from Step37 single-run evidence;
 - unresolved limitations are written down rather than hidden.
 
 ## 14. Example tasks that should retrieve this playbook
@@ -188,6 +348,11 @@ Work owned by this role is DONE only when all applicable items are true:
 - [ ] Did I run the tests I am reporting as passed?
 - [ ] Is the resulting user/data artifact inspected and semantically correct?
 - [ ] Is any remaining uncertainty explicitly represented?
+- [ ] Did I answer every required project-owner self-review question?
+- [ ] Did I preserve the existing truth fixtures and avoid a second truth model?
+- [ ] Did I rerun empirical quality metrics for every inference-affecting
+      optimization?
+- [ ] Did I keep G12 pending and leave Step38 unstarted?
 
 ## 16. Codex activation instruction
 
