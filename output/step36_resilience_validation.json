@@ -2,20 +2,23 @@
   "schema_version": "1.0",
   "step": 36,
   "overall_result": "PASS",
-  "phase": "STEP36_CONTENT",
-  "assessed_commit": "PENDING_CONTENT_COMMIT",
+  "phase": "STEP36_CLOSURE",
+  "assessed_commit": "6907e21f3b810b16a418c9af2e05847199630acc",
   "required_scenarios": 29,
   "passed_scenarios": 29,
-  "g11_resilience": "PENDING",
+  "g11_resilience": "PASS",
   "g12_capacity": "PENDING",
   "g13_adversarial_security": "PENDING",
   "g14_usability": "PENDING",
   "g15_release": "PENDING",
   "test_command": "python -m pytest tests/chaos/test_step36_chaos.py -q",
   "test_result": "29 passed",
-  "content_ci": "PENDING",
+  "content_ci": "35215419546",
+  "content_ci_head": "6907e21f3b810b16a418c9af2e05847199630acc",
+  "content_ci_result": "PASS",
+  "closure_ci": "PENDING",
   "limitations": [
     "Local disposable runtime evidence only; no production HA or capacity claim.",
-    "G11 remains pending until exact content-head CI and closure metadata."
+    "G11 is accepted only for the bounded local evidence scope after exact content-head CI and closure metadata."
   ]
 }

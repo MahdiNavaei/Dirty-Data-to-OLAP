@@ -54,7 +54,7 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any]) -> str:
-    from tools.execution_state import step33_application_security_closed, step34_observability_closed, step35_sre_closed
+    from tools.execution_state import step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed
 
     specialist = mapping(state.get("specialist_execution"), "specialist_execution")
     gates = mapping(state.get("gates"), "gates")
@@ -62,7 +62,8 @@ def validate_state(state: dict[str, Any]) -> str:
         raise ValidationFailure("Step34 requires blocked=false")
     if gates.get("G6_DATA_CORRECTNESS") != "PASS" or gates.get("G7_END_TO_END_PRODUCT") != "PASS" or gates.get("G8_REPRODUCIBLE_BUILD") != "PASS" or gates.get("G9_FUNCTIONAL_SUPPORT") != "PASS" or gates.get("G10_APPLICATION_SECURITY") != "PASS":
         raise ValidationFailure("G6-G10 must remain PASS")
-    if any(gates.get(name) != "PENDING" for name in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
+    later_step36_closure = specialist.get("current_step") == 37 and gates.get("G11_RESILIENCE") == "PASS" and all(gates.get(name) == "PENDING" for name in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+    if not later_step36_closure and any(gates.get(name) != "PENDING" for name in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
         raise ValidationFailure("G11-G15 must remain PENDING")
     if specialist.get("current_step") == 34:
         if not step33_application_security_closed(state) or specialist.get("current_role") != "observability_engineer" or specialist.get("step34_started") is not False or specialist.get("step34_status") != "NOT_STARTED":
@@ -75,6 +76,10 @@ def validate_state(state: dict[str, Any]) -> str:
     if specialist.get("current_step") == 36:
         if not step35_sre_closed(state):
             raise ValidationFailure("state is not the authorized Step35 -> Step36 handoff")
+        return "STEP34_CLOSURE"
+    if specialist.get("current_step") == 37:
+        if not step36_resilience_closed(state):
+            raise ValidationFailure("state is not the authorized later Step36 closure")
         return "STEP34_CLOSURE"
     raise ValidationFailure("state is neither Step34 content phase nor authorized Step35 handoff")
 
@@ -151,7 +156,7 @@ def run_executable_suite() -> dict[str, Any]:
 
 
 def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    from tools.execution_state import step35_sre_closed
+    from tools.execution_state import step35_sre_closed, step36_resilience_closed
 
     if document.get("schema_version") != "1.0" or document.get("step") != 34 or document.get("overall_result") != "PASS":
         raise ValidationFailure("Step34 machine receipt identity/result is invalid")
@@ -167,6 +172,8 @@ def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[s
         pointer_matches = execution.get("last_completed_content_commit") == content_commit
         if execution.get("current_step") == 36:
             pointer_matches = step35_sre_closed(state)
+        if execution.get("current_step") == 37:
+            pointer_matches = step36_resilience_closed(state)
         if not isinstance(content_commit, str) or not SHA.fullmatch(content_commit) or assessed != content_commit or not pointer_matches:
             raise ValidationFailure("receipt SHA is not bound to authoritative Step34 content commit")
         if observability.get("content_ci_result") != "PASS" or observability.get("status") != "PASS":

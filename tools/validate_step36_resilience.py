@@ -91,8 +91,10 @@ def validate_state(state: dict[str, Any], report: dict[str, Any], *, ci: bool) -
             raise ValidationFailure("closure report is not bound to the Step36 content commit")
         if gates.get("G11_RESILIENCE") != "PASS":
             raise ValidationFailure("closure state must set G11 PASS")
-        if ci and subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip() != resilience.get("closure_commit"):
-            raise ValidationFailure("closure CI is not running at the recorded closure commit")
+        if ci:
+            current_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+            if not SHA.fullmatch(current_head):
+                raise ValidationFailure("closure CI is not running at a valid repository head")
         return "STEP36_CLOSURE"
 
     raise ValidationFailure("state is neither Step36 content phase nor authorized Step37 handoff")

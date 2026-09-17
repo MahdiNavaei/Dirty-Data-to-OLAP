@@ -21,16 +21,19 @@ exactly-once execution.
 The 29 required scenario IDs are represented by deterministic parameterized or
 focused tests. The suite exercises production implementations rather than
 mock-only stand-ins and asserts explicit durable transitions, recovery policy,
-telemetry behavior, and artifact integrity. The checked-in validation report
-records the content-phase result while G11 is still pending exact CI closure.
+telemetry behavior, and artifact integrity. The local suite passed `29 passed`,
+and exact content-head CI run `35215419546` passed on
+`6907e21f3b810b16a418c9af2e05847199630acc`.
 
 ## State boundary
 
-Before the exact content-head CI run, the authoritative state remains
-`current_step=36`, `current_role=chaos_resilience`,
-`step36_started=false`, `step36_status=NOT_STARTED`, `G11=PENDING`, and
-`blocked=false`. Only after the content CI receipt is verified may closure
-metadata advance the pointer to Step37 and set the resilience gate to `PASS`.
+After the exact content-head CI receipt, the authoritative state advances to
+`current_step=37`, `current_role=performance_engineer`,
+`last_completed_step=36`, `last_completed_role=chaos_resilience`,
+`step36_started=true`, `step36_status=COMPLETED_RESILIENCE_G11_PASS`,
+`step37_started=false`, `step37_status=NOT_STARTED`, `G11=PASS`, and
+`blocked=false`. Step37 implementation has not started. The gate receipt is
+`docs/execution/gates/G11_RESILIENCE.md`.
 
 ## Limitations
 

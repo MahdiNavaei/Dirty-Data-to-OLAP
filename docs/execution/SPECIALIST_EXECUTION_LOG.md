@@ -1732,3 +1732,17 @@ handoff_to:
 - final_state: `last_completed_step=35`, `last_completed_role=sre`, `current_step=36`, `current_role=chaos_resilience`, `step35_started=true`, `step35_status=COMPLETED_SRE`, `step36_started=false`, `step36_status=NOT_STARTED`
 - receipts: `docs/execution/STEP35_SRE_REVIEW.md`; `output/step35_sre_validation.json`; `docs/sre/recovery-matrix.json`; `tools/validate_step35_sre.py`
 - no_step36_implementation: true
+
+## PRIMARY PROMPT 36/41 - Chaos / Resilience Engineer
+
+- execution_step: `36`; bounded local chaos/resilience implementation and evidence closure completed; Step37 was not started
+- starting_baseline: accepted Step35 SRE closure with `step36_started=false` and `step36_status=NOT_STARTED`
+- content_commit: `6907e21f3b810b16a418c9af2e05847199630acc`
+- content_exact_head_ci: run `35215419546`; head `6907e21f3b810b16a418c9af2e05847199630acc`; result `PASS`
+- scenarios: `29` required; `29 passed`; matrix `docs/resilience/step36-fault-matrix.json`; validator `tools/validate_step36_resilience.py`
+- resilience_result: deterministic fault injection and recovery assertions passed at the real local worker, control-store, source, provider, queue, artifact, materialization, review, cancellation, telemetry and recovery boundaries
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`, `G12-G15=PENDING`, `blocked=false`
+- final_state: `last_completed_step=36`; `last_completed_role=chaos_resilience`; `current_step=37`; `current_role=performance_engineer`; `step36_started=true`; `step36_status=COMPLETED_RESILIENCE_G11_PASS`; `step37_started=false`; `step37_status=NOT_STARTED`
+- receipts: `docs/execution/STEP36_CHAOS_RESILIENCE_REVIEW.md`; `docs/execution/gates/G11_RESILIENCE.md`; `output/step36_resilience_validation.json`
+- limitations: local disposable evidence only; no production HA, randomized chaos, capacity, exactly-once, or public-release claim; protected `tests/quality_unit_artifacts/` remained unread and untouched
+- no_step37_implementation: true

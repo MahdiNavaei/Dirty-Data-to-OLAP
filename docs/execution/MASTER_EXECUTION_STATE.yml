@@ -57,14 +57,14 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 36
-  current_role: "chaos_resilience"
-  current_specialist: "Step36 - Chaos / Resilience Engineer"
-  last_completed_step: 35
-  last_completed_role: "sre"
-  last_completed_specialist: "Step35 - Site Reliability Engineer"
-  last_completed_content_commit: "38fec1d3b8850df11c2431b995fe6897aca2ffd5"
-  next_step: "Step36 - Chaos / Resilience Engineer"
+  current_step: 37
+  current_role: "performance_engineer"
+  current_specialist: "Step37 - Performance Engineer"
+  last_completed_step: 36
+  last_completed_role: "chaos_resilience"
+  last_completed_specialist: "Step36 - Chaos / Resilience Engineer"
+  last_completed_content_commit: "6907e21f3b810b16a418c9af2e05847199630acc"
+  next_step: "Step37 - Performance Engineer"
   step30_started: true
   step30_status: "COMPLETED_DEVOPS_G8_PASS"
   step31_started: true
@@ -77,8 +77,10 @@ specialist_execution:
   step34_status: "COMPLETED_OBSERVABILITY"
   step35_started: true
   step35_status: "COMPLETED_SRE"
-  step36_started: false
-  step36_status: "NOT_STARTED"
+  step36_started: true
+  step36_status: "COMPLETED_RESILIENCE_G11_PASS"
+  step37_started: false
+  step37_status: "NOT_STARTED"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
   step23_started: true
@@ -384,6 +386,24 @@ specialist_execution:
     runbooks: 10
     g11_status: "PENDING"
     protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
+  step36_chaos_resilience:
+    step36_started: true
+    status: "PASS"
+    g11_status: "PASS"
+    content_commit: "6907e21f3b810b16a418c9af2e05847199630acc"
+    content_ci_run: "35215419546"
+    content_ci_head: "6907e21f3b810b16a418c9af2e05847199630acc"
+    content_ci_result: "PASS"
+    report_assessed_commit: "6907e21f3b810b16a418c9af2e05847199630acc"
+    receipt: "docs/execution/STEP36_CHAOS_RESILIENCE_REVIEW.md"
+    gate_receipt: "docs/execution/gates/G11_RESILIENCE.md"
+    validator: "tools/validate_step36_resilience.py"
+    matrix: "docs/resilience/step36-fault-matrix.json"
+    scenarios: 29
+    test_result: "29 passed"
+    closure_ci_run: "PENDING"
+    closure_ci_result: "PENDING"
+    protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
   step22_content_commit: "f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2"
   step22_validation_report: "docs/execution/STEP22_DATA_CORRECTNESS_REVIEW.md"
   step22_blocking_reason: ""
@@ -399,7 +419,7 @@ gates:
   G8_REPRODUCIBLE_BUILD: "PASS"
   G9_FUNCTIONAL_SUPPORT: "PASS"
   G10_APPLICATION_SECURITY: "PASS"
-  G11_RESILIENCE: "PENDING"
+  G11_RESILIENCE: "PASS"
   G12_CAPACITY: "PENDING"
   G13_ADVERSARIAL_SECURITY: "PENDING"
   G14_USABILITY: "PENDING"

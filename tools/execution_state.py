@@ -259,6 +259,9 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step35_completion_evidence(state)
+    ) or (
+        is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37)
+        and step36_resilience_closed(state)
     )
 
 
@@ -299,7 +302,11 @@ def _step33_completion_evidence(state: dict[str, Any]) -> bool:
         and appsec.get("g10_status") == "PASS"
         and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
         and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
-        and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and (
+            (current_step == 37 and current_gates.get("G11_RESILIENCE") == "PASS")
+            or (current_step != 37 and current_gates.get("G11_RESILIENCE") == "PENDING")
+        )
+        and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
 
@@ -351,7 +358,11 @@ def _step34_completion_evidence(state: dict[str, Any]) -> bool:
         and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
         and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
         and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
-        and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and (
+            (specialist.get("current_step") == 37 and current_gates.get("G11_RESILIENCE") == "PASS")
+            or (specialist.get("current_step") != 37 and current_gates.get("G11_RESILIENCE") == "PENDING")
+        )
+        and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
     later_handoff = (
@@ -377,7 +388,11 @@ def _step34_completion_evidence(state: dict[str, Any]) -> bool:
         and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
         and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
         and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
-        and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and (
+            (specialist.get("current_step") == 37 and current_gates.get("G11_RESILIENCE") == "PASS")
+            or (specialist.get("current_step") != 37 and current_gates.get("G11_RESILIENCE") == "PENDING")
+        )
+        and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
     final_handoff = (
@@ -458,7 +473,11 @@ def _step35_completion_evidence(state: dict[str, Any]) -> bool:
         and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
         and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
         and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
-        and all(current_gates.get(key) == "PENDING" for key in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and (
+            (specialist.get("current_step") == 37 and current_gates.get("G11_RESILIENCE") == "PASS")
+            or (specialist.get("current_step") != 37 and current_gates.get("G11_RESILIENCE") == "PENDING")
+        )
+        and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
 
