@@ -57,8 +57,8 @@ def main() -> int:
     state = yaml.safe_load((ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     execution = state.get("specialist_execution", {})
     checks.append(("formal G3 is pending, blocked, or evidenced PASS", state.get("gates", {}).get("G3_SOURCE_SAFETY") in {"PENDING", "BLOCKED", "PASS"}))
-    from tools.execution_state import step35_sre_closed
-    checks.append(("execution remains at Step11 through later specialist handoff", execution.get("current_step") in set(range(11, 36)) or (execution.get("current_step") == 36 and step35_sre_closed(state))))
+    from tools.execution_state import step35_sre_closed, step36_resilience_closed
+    checks.append(("execution remains at Step11 through later specialist handoff", execution.get("current_step") in set(range(11, 36)) or (execution.get("current_step") == 36 and step35_sre_closed(state)) or (execution.get("current_step") == 37 and step36_resilience_closed(state))))
     checks.append(("Step11 database security implementation is present", (SRC / "dirty_data_to_olap" / "application" / "database_security.py").exists()))
     privacy_component = yaml.safe_load((ROOT / "docs" / "architecture" / "specs" / "components.yml").read_text(encoding="utf-8"))
     component = next((item for item in privacy_component["components"] if item.get("component_id") == "application.privacy_policy"), {})
