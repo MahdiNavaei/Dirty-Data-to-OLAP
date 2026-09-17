@@ -1746,3 +1746,16 @@ handoff_to:
 - receipts: `docs/execution/STEP36_CHAOS_RESILIENCE_REVIEW.md`; `docs/execution/gates/G11_RESILIENCE.md`; `output/step36_resilience_validation.json`
 - limitations: local disposable evidence only; no production HA, randomized chaos, capacity, exactly-once, or public-release claim; protected `tests/quality_unit_artifacts/` remained unread and untouched
 - no_step37_implementation: true
+
+## PRIMARY PROMPT 37/41 - Performance Engineer
+
+- execution_step: `37`; bounded single-run performance characterization completed; Step38 was not started
+- starting_baseline: accepted Step36/G11 closure with `step37_started=false` and `step37_status=NOT_STARTED`
+- implementation_content_commit: `4bae2a0cacf62fa232fd1c5a881d2dd55491de2f`; ci-repair commits: `2b9b37f208471c7b7fa14f3a48adeda9b4d06fa2`, `72a363a0a4fb30a165626eebbec848b7686de8ad`
+- content_exact_head_ci: run `35264896822`; result `PASS`; exact head `72a363a0a4fb30a165626eebbec848b7686de8ad`; Step37 job `105366000415`
+- benchmark_suite: `step37-performance-v1`; receipt `reports/performance/STEP37_PERFORMANCE_REPORT.md`; artifact `output/step37_performance_validation.json`; validator `tools/validate_step37_performance.py`
+- observed_scales: Tiny `EXECUTED_REFERENCE_ONLY`; 1M `NOT_EXECUTED`; several-million `NOT_EXECUTED`; 10M `NOT_EXECUTED_OPTIONAL`; 100M `FEASIBILITY_DESIGNED`
+- optional_providers: `UNAVAILABLE` (Desbordante/Valentine/Splink); E2E benchmark `UNAVAILABLE` at Dependency Discovery; no fabricated success
+- gate_state: `G6-G11 PASS`; `G12-G15 PENDING`; `blocked=false`
+- final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step37_started=true`; `step37_status=COMPLETED_PERFORMANCE`; `step38_started=false`; `step38_status=NOT_STARTED`
+- no_step38_implementation: true

@@ -57,14 +57,14 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 37
-  current_role: "performance_engineer"
-  current_specialist: "Step37 - Performance Engineer"
-  last_completed_step: 36
-  last_completed_role: "chaos_resilience"
-  last_completed_specialist: "Step36 - Chaos / Resilience Engineer"
-  last_completed_content_commit: "6907e21f3b810b16a418c9af2e05847199630acc"
-  next_step: "Step37 - Performance Engineer"
+  current_step: 38
+  current_role: "load_stress"
+  current_specialist: "Step38 - Load / Stress Test Engineer"
+  last_completed_step: 37
+  last_completed_role: "performance_engineer"
+  last_completed_specialist: "Step37 - Performance Engineer"
+  last_completed_content_commit: "72a363a0a4fb30a165626eebbec848b7686de8ad"
+  next_step: "Step38 - Load / Stress Test Engineer"
   step30_started: true
   step30_status: "COMPLETED_DEVOPS_G8_PASS"
   step31_started: true
@@ -79,8 +79,10 @@ specialist_execution:
   step35_status: "COMPLETED_SRE"
   step36_started: true
   step36_status: "COMPLETED_RESILIENCE_G11_PASS"
-  step37_started: false
-  step37_status: "NOT_STARTED"
+  step37_started: true
+  step37_status: "COMPLETED_PERFORMANCE"
+  step38_started: false
+  step38_status: "NOT_STARTED"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
   step23_started: true
@@ -404,6 +406,23 @@ specialist_execution:
     closure_ci_run: "PENDING"
     closure_ci_result: "PENDING"
     protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
+  step37_performance:
+    step37_started: true
+    status: "PASS"
+    content_commit: "72a363a0a4fb30a165626eebbec848b7686de8ad"
+    content_ci_run: "35264896822"
+    content_ci_result: "PASS"
+    content_ci_head: "72a363a0a4fb30a165626eebbec848b7686de8ad"
+    report_assessed_commit: "72a363a0a4fb30a165626eebbec848b7686de8ad"
+    receipt: "reports/performance/STEP37_PERFORMANCE_REPORT.md"
+    artifact: "output/step37_performance_validation.json"
+    validator: "tools/validate_step37_performance.py"
+    benchmark_suite_version: "step37-performance-v1"
+    overall_result: "PASS"
+    large_scale_status: "1M=NOT_EXECUTED; several-million=NOT_EXECUTED; 10M=NOT_EXECUTED_OPTIONAL; 100M=FEASIBILITY_DESIGNED"
+    g12_status: "PENDING"
+    step38_started: false
+    limitations: "Optional Desbordante/Valentine/Splink unavailable; no capacity claim"
   step22_content_commit: "f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2"
   step22_validation_report: "docs/execution/STEP22_DATA_CORRECTNESS_REVIEW.md"
   step22_blocking_reason: ""

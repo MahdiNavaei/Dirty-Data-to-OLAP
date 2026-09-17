@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step33_application_security_closed, step35_sre_closed, step36_resilience_closed
+from tools.execution_state import step33_application_security_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed
 REPORT = ROOT / "output" / "step32_compatibility_validation.json"
 REQUIRED_DATABASES = {
     "PostgreSQL": ("DDO_STEP32_POSTGRES_ADMIN_URL", "DDO_STEP32_POSTGRES_URL"),
@@ -65,6 +65,7 @@ def _state() -> dict[str, object]:
         or (current in {34, 35} and step33_application_security_closed(state))
         or (current == 36 and step35_sre_closed(state))
         or (current == 37 and step36_resilience_closed(state))
+        or (current == 38 and step37_performance_closed(state))
     )
     if not (pre or post):
         raise ValidationFailure("authoritative execution state is neither the Step32 handoff nor the closed Step32/G9 handoff")
