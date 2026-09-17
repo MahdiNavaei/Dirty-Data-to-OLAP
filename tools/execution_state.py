@@ -599,7 +599,7 @@ def step37_performance_closed(state: dict[str, Any]) -> bool:
     content_commit = performance.get("content_commit") if isinstance(performance, dict) else None
     return (
         is_authorized_specialist_handoff(state, minimum_current_step=38, maximum_current_step=38)
-        and _step36_receipt_evidence(state)
+        and _step36_completion_evidence(state)
         and _step37_receipt_evidence(state)
         and specialist.get("current_step") == 38
         and specialist.get("current_role") == "load_stress"
