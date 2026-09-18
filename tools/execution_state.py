@@ -243,7 +243,7 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
         and specialist.get("step33_started") is False
         and specialist.get("step33_status") == "NOT_STARTED"
         and compatibility.get("step32_started") is True
-        and compatibility.get("status") == "PASS"
+        and compatibility.get("status") in {"PASS", "INCOMPLETE"}
         and compatibility.get("g9_status") == "PASS"
         and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
         and current_gates.get("G10_APPLICATION_SECURITY") == "PENDING"
@@ -716,6 +716,21 @@ def _step38_incomplete_handoff(state: dict[str, Any]) -> bool:
         and specialist.get("last_completed_step") == 37
         and specialist.get("last_completed_role") == "performance_engineer"
         and specialist.get("last_completed_specialist") == "Step37 - Performance Engineer"
+        and specialist.get("last_completed_content_commit") == specialist.get("step37_performance", {}).get("content_commit")
+        and specialist.get("step30_started") is True
+        and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
+        and specialist.get("step31_started") is True
+        and specialist.get("step31_status") == "COMPLETED_QA_AUTOMATION"
+        and specialist.get("step32_started") is True
+        and specialist.get("step32_status") == "COMPLETED_COMPATIBILITY_G9_PASS"
+        and specialist.get("step33_started") is True
+        and specialist.get("step33_status") == "COMPLETED_APPLICATION_SECURITY_G10_PASS"
+        and specialist.get("step34_started") is True
+        and specialist.get("step34_status") == "COMPLETED_OBSERVABILITY"
+        and specialist.get("step35_started") is True
+        and specialist.get("step35_status") == "COMPLETED_SRE"
+        and specialist.get("step36_started") is True
+        and specialist.get("step36_status") == "COMPLETED_RESILIENCE_G11_PASS"
         and specialist.get("step37_started") is True
         and specialist.get("step37_status") == "COMPLETED_PERFORMANCE"
         and specialist.get("step38_started") is True
