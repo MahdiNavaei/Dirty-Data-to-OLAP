@@ -275,7 +275,7 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37)
         and step36_resilience_closed(state)
-    ) or step38_load_stress_closed(state)
+    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
 
 
 def _step33_completion_evidence(state: dict[str, Any]) -> bool:
@@ -338,7 +338,7 @@ def step33_application_security_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step35_completion_evidence(state)
-    ) or step38_load_stress_closed(state)
+    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
 
 
 def _step34_completion_evidence(state: dict[str, Any]) -> bool:
@@ -471,7 +471,7 @@ def step34_observability_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step34_completion_evidence(state)
-    ) or step38_load_stress_closed(state)
+    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
 
 
 def _step35_receipt_evidence(state: dict[str, Any]) -> bool:
@@ -525,7 +525,7 @@ def _step35_completion_evidence(state: dict[str, Any]) -> bool:
 def step35_sre_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step35 -> Step36 SRE handoff."""
 
-    return (is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)) or step38_load_stress_closed(state)
+    return (is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
 
 
 def _step36_receipt_evidence(state: dict[str, Any]) -> bool:
@@ -609,7 +609,7 @@ def _step36_completion_evidence(state: dict[str, Any]) -> bool:
 def step36_resilience_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step36 -> Step37 resilience handoff."""
 
-    return (is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)) or step38_load_stress_closed(state)
+    return (is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
 
 
 def step37_performance_closed(state: dict[str, Any]) -> bool:
@@ -645,7 +645,7 @@ def step37_performance_closed(state: dict[str, Any]) -> bool:
         and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
-    return direct_closure or step38_load_stress_closed(state)
+    return direct_closure or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
 
 
 def step38_load_stress_closed(state: dict[str, Any]) -> bool:
@@ -700,6 +700,38 @@ def step38_load_stress_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G12_CAPACITY") == "PASS"
         and all(current_gates.get(key) == "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
+    )
+
+
+def _step38_incomplete_handoff(state: dict[str, Any]) -> bool:
+    """Recognize an active Step38 run whose formal G12 closure is pending."""
+
+    specialist = execution(state)
+    current_gates = gates(state)
+    return (
+        is_authorized_specialist_handoff(state, minimum_current_step=38, maximum_current_step=38)
+        and specialist.get("current_step") == 38
+        and specialist.get("current_role") == "load_stress"
+        and specialist.get("current_specialist") == "Step38 - Load / Stress Test Engineer"
+        and specialist.get("last_completed_step") == 37
+        and specialist.get("last_completed_role") == "performance_engineer"
+        and specialist.get("last_completed_specialist") == "Step37 - Performance Engineer"
+        and specialist.get("step37_started") is True
+        and specialist.get("step37_status") == "COMPLETED_PERFORMANCE"
+        and specialist.get("step38_started") is True
+        and specialist.get("step38_status") == "INCOMPLETE_FULL_REGRESSION_BLOCKER"
+        and specialist.get("step39_started") is False
+        and specialist.get("step39_status") == "NOT_STARTED"
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and current_gates.get("G11_RESILIENCE") == "PASS"
+        and current_gates.get("G12_CAPACITY") == "PENDING"
+        and all(current_gates.get(key) == "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
+        and _step37_receipt_evidence(state)
     )
 
 

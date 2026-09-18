@@ -189,7 +189,7 @@ def archive_head(runner: Runner, target: Path) -> str:
 
 
 def validate_state(checks: list[dict[str, Any]]) -> dict[str, Any]:
-    from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_external_ci_blocked, step31_qa_closed
+    from tools.execution_state import _step38_incomplete_handoff, step29_g7_closed, step30_g8_closed, step30_handoff, step31_external_ci_blocked, step31_qa_closed
 
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     specialist = state.get("specialist_execution", {})
@@ -209,10 +209,11 @@ def validate_state(checks: list[dict[str, Any]]) -> dict[str, Any]:
     pre_closure = values["step29_g7_closed"] and values["step30_handoff"] and values["g8"] == "PENDING"
     post_closure = values["step29_g7_closed"] and values["step30_g8_closed"] and values["g8"] == "PASS"
     post_step31 = values["step29_g7_closed"] and values["step31_qa_closed"] and values["g8"] == "PASS"
+    step38_incomplete = values["step29_g7_closed"] and _step38_incomplete_handoff(state)
     blocked_external = values["step31_external_ci_blocked"]
-    if not (pre_closure or post_closure or post_step31 or blocked_external):
+    if not (pre_closure or post_closure or post_step31 or step38_incomplete or blocked_external):
         raise ValidationFailure("authoritative state is neither an accepted handoff nor the explicit Step31 final-head external blocker state")
-    phase = "pre-G8" if pre_closure else "blocked-external-final-ci" if blocked_external else "post-Step31" if post_step31 else "post-G8"
+    phase = "pre-G8" if pre_closure else "blocked-external-final-ci" if blocked_external else "post-Step31" if post_step31 else "step38-incomplete" if step38_incomplete else "post-G8"
     checks.append({"name": "authoritative execution state", "status": "BLOCKED_EXTERNAL" if blocked_external else "PASS", "phase": phase, "values": values})
     return state
 

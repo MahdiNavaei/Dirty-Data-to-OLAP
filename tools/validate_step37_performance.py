@@ -236,8 +236,14 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
             specialist.get("last_completed_step") != 37
             or specialist.get("last_completed_role") != "performance_engineer"
             or specialist.get("current_role") != "load_stress"
-            or specialist.get("step38_started") is not False
-            or specialist.get("step38_status") != "NOT_STARTED"
+            or not (
+                (specialist.get("step38_started") is False and specialist.get("step38_status") == "NOT_STARTED")
+                or (
+                    specialist.get("step38_started") is True
+                    and specialist.get("step38_status") == "INCOMPLETE_FULL_REGRESSION_BLOCKER"
+                    and state_gates.get("G12_CAPACITY") == "PENDING"
+                )
+            )
             or (
                 receipt.get("content_commit") != specialist.get("last_completed_content_commit")
                 and assessed not in {_head(), _parent_head()}
