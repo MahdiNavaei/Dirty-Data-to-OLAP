@@ -375,8 +375,9 @@ jobs:
       - name: Execute real Valentine schema-matching stage baseline
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-matching
-        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra matching --extra files python tools/run_step37_stage_baselines.py \
-          --stage schema_matching --output "${RUNNER_TEMP}/step37-stage-baselines/schema_matching.json"
+        run: |
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra matching --extra files python tools/run_step37_stage_baselines.py \
+            --stage schema_matching --output "${RUNNER_TEMP}/step37-stage-baselines/schema_matching.json"
       - name: Install locked Step37 entity-resolution environment
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-entity
@@ -384,8 +385,9 @@ jobs:
       - name: Execute real Splink entity-resolution stage baseline
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-entity
-        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra entity_resolution --extra files python tools/run_step37_stage_baselines.py \
-          --stage entity_resolution --output "${RUNNER_TEMP}/step37-stage-baselines/entity_resolution.json"
+        run: |
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra entity_resolution --extra files python tools/run_step37_stage_baselines.py \
+            --stage entity_resolution --output "${RUNNER_TEMP}/step37-stage-baselines/entity_resolution.json"
       - name: Execute bounded Step37 E2E / Medium performance evidence
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
