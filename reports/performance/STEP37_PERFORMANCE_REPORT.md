@@ -3,7 +3,7 @@
 ## Result
 
 - Overall result: `PASS`
-- Assessed content commit: `72a363a0a4fb30a165626eebbec848b7686de8ad`
+- Assessed content commit: `8ca39fe565830debc319feebe3ee23631dd6a240`
 - Scope: single-run/stage performance only; G12 capacity remains pending.
 
 ## Environment
@@ -182,7 +182,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
   {
     "benchmark_id": "PERF-MAT-001",
     "cold_warm": "COLD",
-    "cpu_seconds": 0.21875,
+    "cpu_seconds": 0.140625,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "dimension_rows": {
@@ -194,7 +194,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "fact_rows": 3,
       "materialization_mode": "PROJECT_DUCKDB_MATERIALIZER",
       "run": "first materialization",
-      "semantic_artifact_content_hash": "85b9deed5bcee2d17f0a6748619f09fcd4ef7eba5c979980cd8b2f16745602d7",
+      "semantic_artifact_content_hash": "9c4d943f8e5eeb4d3de4b10c754f8925dda38c63c968e4be48ab97ce499264c0",
       "table_count": 5,
       "target_sha256": "88ba6c6b4f223dfee9d49d8f5524dd50921a6e8ba85ecfcc4040aa5865bea794"
     },
@@ -207,71 +207,71 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "temporary_bytes_observed": null
     },
     "peak_memory": {
-      "bytes": 5456823,
+      "bytes": 5456770,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
     },
     "profile_top_functions": [
       {
-        "calls": 7,
-        "cumulative_seconds": 0.0003503,
-        "function": "pathlib.py:484:_parse_args"
-      },
-      {
         "calls": 150,
-        "cumulative_seconds": 0.0002038,
+        "cumulative_seconds": 0.0001849,
         "function": "enum.py:193:__get__"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0047834,
+        "cumulative_seconds": 0.0053799,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 4.36e-05,
+        "cumulative_seconds": 4.59e-05,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.7881418,
-        "function": "run_step37_performance.py:210:materialize"
+        "cumulative_seconds": 0.4154335,
+        "function": "run_step37_performance.py:236:materialize"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.7808183,
+        "cumulative_seconds": 0.408115,
         "function": "materialization.py:47:materialize"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0046677,
+        "cumulative_seconds": 0.0052298,
         "function": "encoder.py:205:iterencode"
       },
       {
         "calls": 150,
-        "cumulative_seconds": 4.61e-05,
+        "cumulative_seconds": 3.92e-05,
         "function": "enum.py:1255:value"
       },
       {
-        "calls": 109,
-        "cumulative_seconds": 0.0019037,
-        "function": "main.py:253:__init__"
-      },
-      {
         "calls": 22,
-        "cumulative_seconds": 0.0050119,
+        "cumulative_seconds": 0.0056112,
         "function": "__init__.py:183:dumps"
       },
       {
+        "calls": 2,
+        "cumulative_seconds": 0.0001433,
+        "function": "pathlib.py:703:relative_to"
+      },
+      {
         "calls": 1,
-        "cumulative_seconds": 3.23e-05,
+        "cumulative_seconds": 3.32e-05,
         "function": "pathlib.py:667:with_name"
       },
       {
         "calls": 15,
-        "cumulative_seconds": 6.27e-05,
+        "cumulative_seconds": 3.85e-05,
         "function": "pathlib.py:147:splitroot"
+      },
+      {
+        "calls": 7,
+        "cumulative_seconds": 0.0003008,
+        "function": "pathlib.py:484:_parse_args"
       }
     ],
     "status": "PASS",
@@ -290,12 +290,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.7882069
+    "wall_seconds": 0.4155294
   },
   {
     "benchmark_id": "PERF-MAT-002",
     "cold_warm": "WARM",
-    "cpu_seconds": 0.09375,
+    "cpu_seconds": 0.140625,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "dimension_rows": {
@@ -307,7 +307,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "fact_rows": 3,
       "materialization_mode": "PROJECT_DUCKDB_MATERIALIZER",
       "run": "identical repeated materialization",
-      "semantic_artifact_content_hash": "85b9deed5bcee2d17f0a6748619f09fcd4ef7eba5c979980cd8b2f16745602d7",
+      "semantic_artifact_content_hash": "9c4d943f8e5eeb4d3de4b10c754f8925dda38c63c968e4be48ab97ce499264c0",
       "table_count": 5,
       "target_sha256": "88ba6c6b4f223dfee9d49d8f5524dd50921a6e8ba85ecfcc4040aa5865bea794"
     },
@@ -320,7 +320,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "temporary_bytes_observed": null
     },
     "peak_memory": {
-      "bytes": 5082784,
+      "bytes": 5083204,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -342,12 +342,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.6056555
+    "wall_seconds": 0.3707407
   },
   {
     "benchmark_id": "PERF-REG-001",
     "cold_warm": "COLD",
-    "cpu_seconds": 0.21875,
+    "cpu_seconds": 0.140625,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "dimension_rows": {
@@ -361,7 +361,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "optimization_status": "NONE_ACCEPTED",
       "run": "first materialization",
       "same_fixture": true,
-      "semantic_artifact_content_hash": "85b9deed5bcee2d17f0a6748619f09fcd4ef7eba5c979980cd8b2f16745602d7",
+      "semantic_artifact_content_hash": "9c4d943f8e5eeb4d3de4b10c754f8925dda38c63c968e4be48ab97ce499264c0",
       "table_count": 5,
       "target_sha256": "88ba6c6b4f223dfee9d49d8f5524dd50921a6e8ba85ecfcc4040aa5865bea794"
     },
@@ -374,71 +374,71 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "temporary_bytes_observed": null
     },
     "peak_memory": {
-      "bytes": 5456823,
+      "bytes": 5456770,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
     },
     "profile_top_functions": [
       {
-        "calls": 7,
-        "cumulative_seconds": 0.0003503,
-        "function": "pathlib.py:484:_parse_args"
-      },
-      {
         "calls": 150,
-        "cumulative_seconds": 0.0002038,
+        "cumulative_seconds": 0.0001849,
         "function": "enum.py:193:__get__"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0047834,
+        "cumulative_seconds": 0.0053799,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 4.36e-05,
+        "cumulative_seconds": 4.59e-05,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.7881418,
-        "function": "run_step37_performance.py:210:materialize"
+        "cumulative_seconds": 0.4154335,
+        "function": "run_step37_performance.py:236:materialize"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.7808183,
+        "cumulative_seconds": 0.408115,
         "function": "materialization.py:47:materialize"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0046677,
+        "cumulative_seconds": 0.0052298,
         "function": "encoder.py:205:iterencode"
       },
       {
         "calls": 150,
-        "cumulative_seconds": 4.61e-05,
+        "cumulative_seconds": 3.92e-05,
         "function": "enum.py:1255:value"
       },
       {
-        "calls": 109,
-        "cumulative_seconds": 0.0019037,
-        "function": "main.py:253:__init__"
-      },
-      {
         "calls": 22,
-        "cumulative_seconds": 0.0050119,
+        "cumulative_seconds": 0.0056112,
         "function": "__init__.py:183:dumps"
       },
       {
+        "calls": 2,
+        "cumulative_seconds": 0.0001433,
+        "function": "pathlib.py:703:relative_to"
+      },
+      {
         "calls": 1,
-        "cumulative_seconds": 3.23e-05,
+        "cumulative_seconds": 3.32e-05,
         "function": "pathlib.py:667:with_name"
       },
       {
         "calls": 15,
-        "cumulative_seconds": 6.27e-05,
+        "cumulative_seconds": 3.85e-05,
         "function": "pathlib.py:147:splitroot"
+      },
+      {
+        "calls": 7,
+        "cumulative_seconds": 0.0003008,
+        "function": "pathlib.py:484:_parse_args"
       }
     ],
     "status": "PASS",
@@ -457,7 +457,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.7882069
+    "wall_seconds": 0.4155294
   },
   {
     "benchmark_id": "PERF-QUERY-001",
@@ -496,7 +496,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0005463
+    "wall_seconds": 0.000417
   },
   {
     "benchmark_id": "PERF-QUERY-001-WARM",
@@ -535,12 +535,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0003316
+    "wall_seconds": 0.0002721
   },
   {
     "benchmark_id": "PERF-QUERY-002",
     "cold_warm": "COLD",
-    "cpu_seconds": 0.03125,
+    "cpu_seconds": 0.0,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "query_index": 1,
@@ -574,12 +574,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0053641
+    "wall_seconds": 0.003916
   },
   {
     "benchmark_id": "PERF-QUERY-002-WARM",
     "cold_warm": "WARM",
-    "cpu_seconds": 0.0,
+    "cpu_seconds": 0.015625,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "query_index": 1,
@@ -613,7 +613,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0028103
+    "wall_seconds": 0.0024716
   },
   {
     "benchmark_id": "PERF-QUERY-003",
@@ -652,12 +652,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0024467
+    "wall_seconds": 0.0021555
   },
   {
     "benchmark_id": "PERF-QUERY-003-WARM",
     "cold_warm": "WARM",
-    "cpu_seconds": 0.015625,
+    "cpu_seconds": 0.0,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "query_index": 2,
@@ -691,7 +691,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0013076
+    "wall_seconds": 0.001277
   },
   {
     "benchmark_id": "PERF-VAL-001",
@@ -709,7 +709,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "READ_ONLY_TARGET"
     },
     "peak_memory": {
-      "bytes": 5023779,
+      "bytes": 5024361,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -731,12 +731,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.1613265
+    "wall_seconds": 0.1582829
   },
   {
     "benchmark_id": "PERF-FUSION-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.109375,
+    "cpu_seconds": 0.09375,
     "dataset_id": "step17-evidence-fusion-runtime",
     "details": {
       "cases": 23,
@@ -748,71 +748,71 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "NOT_APPLICABLE"
     },
     "peak_memory": {
-      "bytes": 1291885,
+      "bytes": 1291773,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
     },
     "profile_top_functions": [
       {
-        "calls": 23,
-        "cumulative_seconds": 0.0005957,
-        "function": "pathlib.py:484:_parse_args"
-      },
-      {
         "calls": 2412,
-        "cumulative_seconds": 0.0039759,
+        "cumulative_seconds": 0.0036993,
         "function": "enum.py:193:__get__"
       },
       {
         "calls": 407,
-        "cumulative_seconds": 0.0279485,
+        "cumulative_seconds": 0.0291088,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 23,
-        "cumulative_seconds": 0.0030424,
+        "cumulative_seconds": 0.0038818,
         "function": "decoder.py:332:decode"
       },
       {
         "calls": 407,
-        "cumulative_seconds": 0.0007378,
+        "cumulative_seconds": 0.0007461,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 71,
-        "cumulative_seconds": 0.0003348,
+        "cumulative_seconds": 0.0003247,
         "function": "copy.py:243:_keep_alive"
       },
       {
         "calls": 23,
-        "cumulative_seconds": 0.0026273,
+        "cumulative_seconds": 0.003243,
         "function": "decoder.py:343:raw_decode"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.1232918,
-        "function": "run_step37_performance.py:270:<dictcomp>"
+        "cumulative_seconds": 0.133792,
+        "function": "run_step37_performance.py:296:<dictcomp>"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.1232982,
-        "function": "run_step37_performance.py:270:<lambda>"
+        "cumulative_seconds": 0.1337982,
+        "function": "run_step37_performance.py:296:<lambda>"
+      },
+      {
+        "calls": 1,
+        "cumulative_seconds": 2.9e-06,
+        "function": "enum.py:1093:__new__"
       },
       {
         "calls": 387,
-        "cumulative_seconds": 0.0260871,
+        "cumulative_seconds": 0.0269041,
         "function": "encoder.py:205:iterencode"
       },
       {
-        "calls": 23,
-        "cumulative_seconds": 0.0031876,
-        "function": "__init__.py:299:loads"
+        "calls": 26,
+        "cumulative_seconds": 0.0020974,
+        "function": "main.py:393:model_copy"
       },
       {
-        "calls": 1,
-        "cumulative_seconds": 2e-06,
-        "function": "enum.py:1093:__new__"
+        "calls": 26,
+        "cumulative_seconds": 4.6e-06,
+        "function": "copy.py:107:_copy_immutable"
       }
     ],
     "status": "PASS",
@@ -831,12 +831,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.1233159
+    "wall_seconds": 0.1338146
   },
   {
     "benchmark_id": "PERF-SCALE-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.140625,
+    "cpu_seconds": 0.171875,
     "dataset_id": "step24-orders-input-v1",
     "details": {
       "policy": "step24-test-policy-v1",
@@ -849,7 +849,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "NOT_APPLICABLE"
     },
     "peak_memory": {
-      "bytes": 273411,
+      "bytes": 272977,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -857,63 +857,63 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0781013,
+        "cumulative_seconds": 0.0786047,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0055663,
+        "cumulative_seconds": 0.0045695,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.1605316,
-        "function": "run_step37_performance.py:283:<lambda>"
+        "cumulative_seconds": 0.1676334,
+        "function": "run_step37_performance.py:309:<lambda>"
       },
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0655389,
+        "cumulative_seconds": 0.0654098,
         "function": "encoder.py:205:iterencode"
       },
       {
-        "calls": 4,
-        "cumulative_seconds": 0.0011591,
-        "function": "main.py:253:__init__"
-      },
-      {
         "calls": 3072,
-        "cumulative_seconds": 0.0987471,
+        "cumulative_seconds": 0.0996591,
         "function": "__init__.py:183:dumps"
       },
       {
         "calls": 4,
-        "cumulative_seconds": 0.001143,
+        "cumulative_seconds": 0.0016775,
+        "function": "main.py:253:__init__"
+      },
+      {
+        "calls": 4,
+        "cumulative_seconds": 0.001658,
         "function": "~:0:<method 'validate_python' of 'pydantic_core._pydantic_core.SchemaValidator' objects>"
       },
       {
         "calls": 1024,
-        "cumulative_seconds": 0.0102691,
+        "cumulative_seconds": 0.0099984,
         "function": "~:0:<method 'to_python' of 'pydantic_core._pydantic_core.SchemaSerializer' objects>"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.0005652,
-        "function": "distributed.py:438:_candidate_pairs"
-      },
-      {
-        "calls": 1,
-        "cumulative_seconds": 0.1224712,
-        "function": "distributed.py:464:_output_for_rows"
+        "cumulative_seconds": 0.0407811,
+        "function": "distributed.py:637:_merge_outputs"
       },
       {
         "calls": 1024,
-        "cumulative_seconds": 0.0117133,
+        "cumulative_seconds": 0.0114433,
         "function": "main.py:427:model_dump"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 4.15e-05,
+        "cumulative_seconds": 6.05e-05,
         "function": "distributed.py:23:_content_hash"
+      },
+      {
+        "calls": 2048,
+        "cumulative_seconds": 0.0524827,
+        "function": "source.py:437:_canonical_json"
       }
     ],
     "status": "PASS",
@@ -932,7 +932,174 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.1605488
+    "wall_seconds": 0.1676499
+  },
+  {
+    "benchmark_id": "PERF-MEDIUM-001",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": 268.171875,
+    "dataset_id": "step37-medium-100k-v1",
+    "details": {
+      "container_read_only": true,
+      "dependency_search": {
+        "candidate_column_pairs": 0,
+        "candidate_pairs_before_pruning": 0,
+        "columns_excluded_by_bound": 0,
+        "completeness": "COMPLETE",
+        "emitted_candidates": 3,
+        "evaluated_pairs": 0,
+        "fd_arity_bounded": true,
+        "fd_search_arity": 1,
+        "ind_arity_bounded": true,
+        "ind_search_arity": 1,
+        "input_columns": 2,
+        "input_tables": 1,
+        "output_truncation": false,
+        "provider_calls": 2,
+        "pruned_by_budget": 0,
+        "pruned_by_scope": 0,
+        "pruned_by_type": 0,
+        "pruned_column_pairs": 0,
+        "runtime_timeout": false,
+        "schema_version": "1.0",
+        "searched_determinants": 2,
+        "tables_excluded_by_bound": 0,
+        "truncated": false,
+        "truncation_reasons": [],
+        "ucc_arity_bounded": true,
+        "ucc_search_arity": 1
+      },
+      "input_bytes": 1700022,
+      "input_mount": "bind-readonly:/input",
+      "network_allowed": false,
+      "output_db_bytes": 16789504,
+      "provider_boundary": "desbordante-docker",
+      "provider_image": "dirty-data-to-olap-desbordante-step37:local",
+      "provider_image_id": "sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638",
+      "provider_source_revision": "b211961f3f272ed8815ef1ffbda90573b11e1116",
+      "row_count": 100000,
+      "scale_class": "Medium",
+      "semantic_oracle": {
+        "expected_fact_rows": 100000,
+        "expected_quantity_sum": 300000,
+        "observed_fact_rows": 100000,
+        "observed_quantity_sum": 300000,
+        "status": "PASS"
+      },
+      "staged_bytes": 256658,
+      "stages": {
+        "dependency_candidate_generation": {
+          "cpu_seconds": 13.609375,
+          "peak_memory": {
+            "bytes": 81711510,
+            "method": "python_tracemalloc_peak",
+            "process_rss_after_bytes": null,
+            "process_rss_before_bytes": null
+          },
+          "profile_top_functions": [],
+          "status": "PASS",
+          "wall_seconds": 24.1330075
+        },
+        "duckdb_materialization": {
+          "cpu_seconds": 109.765625,
+          "peak_memory": {
+            "bytes": 473756778,
+            "method": "python_tracemalloc_peak",
+            "process_rss_after_bytes": null,
+            "process_rss_before_bytes": null
+          },
+          "profile_top_functions": [],
+          "status": "PASS",
+          "wall_seconds": 93.520386
+        },
+        "extraction_staging": {
+          "cpu_seconds": 24.109375,
+          "peak_memory": {
+            "bytes": 466769367,
+            "method": "python_tracemalloc_peak",
+            "process_rss_after_bytes": null,
+            "process_rss_before_bytes": null
+          },
+          "profile_top_functions": [],
+          "status": "PASS",
+          "wall_seconds": 27.5307384
+        },
+        "profiling": {
+          "cpu_seconds": 120.53125,
+          "peak_memory": {
+            "bytes": 141400732,
+            "method": "python_tracemalloc_peak",
+            "process_rss_after_bytes": null,
+            "process_rss_before_bytes": null
+          },
+          "profile_top_functions": [],
+          "status": "PASS",
+          "wall_seconds": 131.0418663
+        },
+        "source_discovery": {
+          "cpu_seconds": 0.0,
+          "peak_memory": {
+            "bytes": 2138493,
+            "method": "python_tracemalloc_peak",
+            "process_rss_after_bytes": null,
+            "process_rss_before_bytes": null
+          },
+          "profile_top_functions": [],
+          "status": "PASS",
+          "wall_seconds": 0.0154085
+        },
+        "validation": {
+          "cpu_seconds": 0.15625,
+          "peak_memory": {
+            "bytes": 5456,
+            "method": "python_tracemalloc_peak",
+            "process_rss_after_bytes": null,
+            "process_rss_before_bytes": null
+          },
+          "profile_top_functions": [],
+          "status": "PASS",
+          "wall_seconds": 0.1620927
+        }
+      },
+      "validation": {
+        "duplicate_grain": 0,
+        "expected_quantity_sum": 300000,
+        "fact_rows": 100000,
+        "quantity_sum": 300000,
+        "status": "PASS",
+        "unresolved_foreign_keys": 0
+      }
+    },
+    "family": "medium_production_boundary",
+    "io": {
+      "input_source_bytes": 1700022,
+      "output_db_bytes": 16789504,
+      "output_files": 1,
+      "staged_parquet_bytes": 256658,
+      "status": "MEASURED"
+    },
+    "peak_memory": {
+      "bytes": 473756778,
+      "method": "max_python_tracemalloc_peak_over_stage_measurements"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [
+      "step18-relationship-truth-v1",
+      "step18-schema-truth-v1",
+      "step18-entity-truth-v1",
+      "step18-runtime-inputs-v1",
+      "benchmarks/inference_evaluation/scenario_groups.json",
+      "benchmarks/inference_evaluation/scenario_groups_v4.json",
+      "step17-evidence-fusion-controls-v1",
+      "step13-cross-source-hard-negatives-v1",
+      "step14-entity-resolution-cases-v2",
+      "step22-retail-source-truth-v2",
+      "step22-generic-source-truth-v2",
+      "step15-relationship-ranker-v1",
+      "step16-semantic-safety-v2"
+    ],
+    "wall_seconds": 276.4034994
   },
   {
     "benchmark_id": "PERF-API-001",
@@ -948,7 +1115,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "HTTP_LOCAL"
     },
     "peak_memory": {
-      "bytes": 162497,
+      "bytes": 195540,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -956,19 +1123,34 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.021529
+    "wall_seconds": 0.0132162
   },
   {
     "benchmark_id": "PERF-E2E-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 3.125,
+    "cpu_seconds": 18.328125,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "current_stage": "DEPENDENCY_DISCOVERY",
-      "provider_boundary": "Desbordante optional provider",
-      "provider_policy": "UNAVAILABLE is explicit; no G6/G7 upgrade",
+      "accepted_review_checkpoints": [
+        "REVIEW_ANALYTICAL_PLAN",
+        "REVIEW_CANONICAL_IDENTITY",
+        "REVIEW_EVIDENCE_DECISIONS",
+        "REVIEW_MATERIALIZATION_PLAN"
+      ],
+      "container_read_only": true,
+      "current_stage": null,
+      "g6_eligible": true,
+      "g6_status": "PASS",
+      "input_mount": "bind-readonly:/input",
+      "network_allowed": false,
+      "provider_boundary": "DesbordanteDependencyAdapter -> DesbordanteDockerEngine",
+      "provider_image": "dirty-data-to-olap-desbordante-step37:local",
+      "provider_image_id": "sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638",
+      "provider_source_revision": "b211961f3f272ed8815ef1ffbda90573b11e1116",
       "run_id_present": true,
-      "terminal_status": "FAILED"
+      "terminal_required": "SUCCEEDED",
+      "terminal_status": "SUCCEEDED",
+      "validated_output": true
     },
     "family": "real_product_path",
     "io": {
@@ -976,13 +1158,13 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "LOCAL_PRODUCT_RUNTIME"
     },
     "peak_memory": {
-      "bytes": 3182014,
+      "bytes": 9774564,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
     },
     "profile_top_functions": [],
-    "status": "UNAVAILABLE",
+    "status": "PASS",
     "truth_fixture_ids": [
       "step18-relationship-truth-v1",
       "step18-schema-truth-v1",
@@ -998,24 +1180,24 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 6.7764333
+    "wall_seconds": 43.5255596
   },
   {
     "benchmark_id": "PERF-API-002",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.046875,
+    "cpu_seconds": 0.171875,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "endpoint": "/api/v1/runs/run_c3ae4947faeba3f5a17b49bfbb554794/product-summary",
+      "endpoint": "/api/v1/runs/run_3c1cd1fc481427304f24ed25c88555ae/product-summary",
       "status_code": 200,
-      "terminal_product_status": "FAILED"
+      "terminal_product_status": "SUCCEEDED"
     },
     "family": "api_hot_path",
     "io": {
       "status": "HTTP_LOCAL"
     },
     "peak_memory": {
-      "bytes": 1383676,
+      "bytes": 2363997,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1023,24 +1205,24 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.0775724
+    "wall_seconds": 0.1617192
   },
   {
     "benchmark_id": "PERF-DIAG-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.03125,
+    "cpu_seconds": 0.078125,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "endpoint": "/api/v1/runs/run_c3ae4947faeba3f5a17b49bfbb554794/diagnostics",
+      "endpoint": "/api/v1/runs/run_3c1cd1fc481427304f24ed25c88555ae/diagnostics",
       "status_code": 200,
-      "terminal_product_status": "FAILED"
+      "terminal_product_status": "SUCCEEDED"
     },
     "family": "api_hot_path",
     "io": {
       "status": "HTTP_LOCAL"
     },
     "peak_memory": {
-      "bytes": 1242384,
+      "bytes": 1508251,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1048,7 +1230,122 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.0350113
+    "wall_seconds": 0.0814681
+  },
+  {
+    "benchmark_id": "PERF-STAGE-ANALYTICAL_PLANNING",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "ANALYTICAL_PLANNING",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 1.2650000000139698
+  },
+  {
+    "benchmark_id": "PERF-STAGE-CANONICAL_FINALIZATION",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "CANONICAL_FINALIZATION",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.15600000007543713
+  },
+  {
+    "benchmark_id": "PERF-STAGE-CANONICAL_HYPOTHESES",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "CANONICAL_HYPOTHESES",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.20300000009592623
+  },
+  {
+    "benchmark_id": "PERF-STAGE-CANONICAL_IDENTITY_PREPARATION",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "CANONICAL_IDENTITY_PREPARATION",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.17199999990407377
+  },
+  {
+    "benchmark_id": "PERF-STAGE-COMPILATION",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "COMPILATION",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.5620000000344589
   },
   {
     "benchmark_id": "PERF-STAGE-DEPENDENCY_DISCOVERY",
@@ -1058,7 +1355,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "details": {
       "source": "Step34 TelemetryClient",
       "stage_kind": "DEPENDENCY_DISCOVERY",
-      "terminal_product_status": "FAILED"
+      "terminal_product_status": "SUCCEEDED"
     },
     "family": "runtime_stage_telemetry",
     "io": {
@@ -1069,9 +1366,55 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "method": "telemetry_stage_duration_only"
     },
     "profile_top_functions": [],
-    "status": "UNAVAILABLE",
+    "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.26599999994505197
+    "wall_seconds": 19.719000000040978
+  },
+  {
+    "benchmark_id": "PERF-STAGE-EVIDENCE_FUSION",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "EVIDENCE_FUSION",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.8119999999180436
+  },
+  {
+    "benchmark_id": "PERF-STAGE-MATERIALIZATION",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "MATERIALIZATION",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.4530000000959262
   },
   {
     "benchmark_id": "PERF-STAGE-PROFILING",
@@ -1081,7 +1424,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "details": {
       "source": "Step34 TelemetryClient",
       "stage_kind": "PROFILING",
-      "terminal_product_status": "FAILED"
+      "terminal_product_status": "SUCCEEDED"
     },
     "family": "runtime_stage_telemetry",
     "io": {
@@ -1094,7 +1437,53 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 1.375
+    "wall_seconds": 1.1099999999860302
+  },
+  {
+    "benchmark_id": "PERF-STAGE-QUALITY_ANALYSIS",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "QUALITY_ANALYSIS",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.640999999945052
+  },
+  {
+    "benchmark_id": "PERF-STAGE-SEMANTIC_MODELING",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "SEMANTIC_MODELING",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 0.39099999994505197
   },
   {
     "benchmark_id": "PERF-STAGE-SOURCE_DISCOVERY",
@@ -1104,7 +1493,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "details": {
       "source": "Step34 TelemetryClient",
       "stage_kind": "SOURCE_DISCOVERY",
-      "terminal_product_status": "FAILED"
+      "terminal_product_status": "SUCCEEDED"
     },
     "family": "runtime_stage_telemetry",
     "io": {
@@ -1117,7 +1506,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.20400000002700835
+    "wall_seconds": 0.15700000000651926
   },
   {
     "benchmark_id": "PERF-STAGE-SOURCE_SNAPSHOT_STAGE",
@@ -1127,7 +1516,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "details": {
       "source": "Step34 TelemetryClient",
       "stage_kind": "SOURCE_SNAPSHOT_STAGE",
-      "terminal_product_status": "FAILED"
+      "terminal_product_status": "SUCCEEDED"
     },
     "family": "runtime_stage_telemetry",
     "io": {
@@ -1140,16 +1529,39 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.2970000000204891
+    "wall_seconds": 0.23400000005494803
+  },
+  {
+    "benchmark_id": "PERF-STAGE-VALIDATION_RECONCILIATION",
+    "cold_warm": "NOT_APPLICABLE",
+    "cpu_seconds": null,
+    "dataset_id": "step29-orders-csv-4-rows",
+    "details": {
+      "source": "Step34 TelemetryClient",
+      "stage_kind": "VALIDATION_RECONCILIATION",
+      "terminal_product_status": "SUCCEEDED"
+    },
+    "family": "runtime_stage_telemetry",
+    "io": {
+      "status": "TELEMETRY"
+    },
+    "peak_memory": {
+      "bytes": null,
+      "method": "telemetry_stage_duration_only"
+    },
+    "profile_top_functions": [],
+    "status": "PASS",
+    "truth_fixture_ids": [],
+    "wall_seconds": 1.0
   },
   {
     "benchmark_id": "PERF-TELEMETRY-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.046875,
+    "cpu_seconds": 0.015625,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "disabled_wall_seconds": 0.0335596,
-      "enabled_wall_seconds": 0.0518874,
+      "disabled_wall_seconds": 0.025662,
+      "enabled_wall_seconds": 0.0297385,
       "method": "bounded 250 event/span emissions; diagnostic overhead only",
       "no_telemetry_disable_in_product": true
     },
@@ -1158,7 +1570,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "NOT_APPLICABLE"
     },
     "peak_memory": {
-      "bytes": 900789,
+      "bytes": 907921,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1180,7 +1592,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0518874
+    "wall_seconds": 0.0297385
   }
 ]
 ```
@@ -1190,7 +1602,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
 ```json
 [
   {
-    "baseline_cost": 0.7882069,
+    "baseline_cost": 0.4155294,
     "benchmark_id": "PERF-MAT-001",
     "delta": null,
     "empirical_quality_result": "NOT_APPLICABLE_NO_OPTIMIZATION",
@@ -1204,25 +1616,25 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "status": "OBSERVED_NO_CHANGE"
   },
   {
-    "baseline_cost": 6.7764333,
-    "benchmark_id": "PERF-E2E-001",
+    "baseline_cost": 276.4034994,
+    "benchmark_id": "PERF-MEDIUM-001",
     "delta": null,
-    "empirical_quality_result": "UNAVAILABLE",
+    "empirical_quality_result": "NOT_APPLICABLE_NO_OPTIMIZATION",
     "finding_id": "PERF-FIND-002",
-    "hot_path": "DEPENDENCY_DISCOVERY provider boundary",
-    "measured_result": "UNAVAILABLE at the real product boundary",
-    "proposed_change": "none; provider provisioning is outside Step37 algorithm optimization",
-    "resource_dimension": "provider_availability",
-    "root_cause": "Desbordante binding or provisioned local image is absent",
-    "semantic_result": "PASS_NO_FALSE_SUCCESS",
-    "status": "BLOCKED_BY_OPTIONAL_PROVIDER"
+    "hot_path": "bounded Medium dependency and materialization boundary",
+    "measured_result": "real Medium boundary completed with semantic oracle PASS",
+    "proposed_change": "none accepted; preserve the reviewed provider, hashing, atomic publication and validation boundaries",
+    "resource_dimension": "wall_time_cpu_and_peak_memory",
+    "root_cause": "provider-backed candidate generation plus deterministic DuckDB publication dominate the bounded Medium path",
+    "semantic_result": "PASS",
+    "status": "OBSERVED_NO_CHANGE"
   }
 ]
 ```
 
 ## Optimizations and before/after
 
-No optimization was accepted: the measured safe core path is bounded and optional inference providers are unavailable in this environment. Existing implementations were left unchanged; no unmeasured speedup is claimed.
+No optimization was accepted: the measured safe core path is bounded and the real provider baselines were retained as evidence rather than altered for timing. Existing implementations were left unchanged; no unmeasured speedup is claimed.
 
 ```json
 [
@@ -1246,7 +1658,9 @@ No optimization was accepted: the measured safe core path is bounded and optiona
   "empirical_quality_before_after": {
     "ER": {
       "fixture": "entity_truth.json",
-      "status": "UNAVAILABLE"
+      "provider_stage": "entity_resolution",
+      "provider_stage_status": "PASS",
+      "status": "NOT_APPLICABLE_NO_OPTIMIZATION"
     },
     "evidence_fusion": {
       "control": "expected_control.json",
@@ -1258,7 +1672,9 @@ No optimization was accepted: the measured safe core path is bounded and optiona
     },
     "schema_matching": {
       "fixture": "schema_truth.json",
-      "status": "UNAVAILABLE"
+      "provider_stage": "schema_matching",
+      "provider_stage_status": "PASS",
+      "status": "NOT_APPLICABLE_NO_OPTIMIZATION"
     }
   },
   "semantic_equivalence": {
@@ -1297,104 +1713,259 @@ No optimization was accepted: the measured safe core path is bounded and optiona
 
 ## Candidate growth and large-scale status
 
+Medium is the smallest full production-boundary scale executed here. The several-million decision is a bounded feasibility assessment based on measured Medium wall time, CPU, memory and disk observations; it is not a capacity claim.
+
 ```json
 {
   "candidate_growth": {
     "dependency": [
       {
-        "candidate_pairs_considered": 2500,
-        "candidates_retained": 0,
-        "columns": 50,
-        "reason": "Desbordante binding/Docker image is not provisioned; only the bounded pre-provider search shape is recorded",
-        "status": "UNAVAILABLE"
-      },
-      {
-        "candidate_pairs_considered": 10000,
-        "candidates_retained": 0,
-        "columns": 100,
-        "reason": "Desbordante binding/Docker image is not provisioned; only the bounded pre-provider search shape is recorded",
-        "status": "UNAVAILABLE"
-      },
-      {
-        "candidate_pairs_considered": 62500,
-        "candidates_retained": 0,
-        "columns": 250,
-        "reason": "Desbordante binding/Docker image is not provisioned; only the bounded pre-provider search shape is recorded",
-        "status": "UNAVAILABLE"
-      },
-      {
-        "candidate_pairs_considered": 250000,
-        "candidates_retained": 0,
-        "columns": 500,
-        "reason": "Desbordante binding/Docker image is not provisioned; only the bounded pre-provider search shape is recorded",
-        "status": "UNAVAILABLE"
+        "candidate_pairs_considered": 18,
+        "candidates_retained": 32,
+        "columns": 6,
+        "evaluated_pairs": 18,
+        "input_rows": 20,
+        "provider": "desbordante-docker",
+        "provider_calls": 5,
+        "reason": "real Desbordante UCC/FD provider baseline; bounded project search and output assertions passed",
+        "status": "EXECUTED"
       }
     ],
     "entity_resolution": [
       {
-        "candidate_reduction_ratio": null,
-        "generated_candidate_pairs": 0,
-        "naive_pair_upper_bound": 10000,
-        "reason": "Splink optional runtime is not provisioned in the locked profiling environment",
-        "records": 100,
-        "status": "UNAVAILABLE"
-      },
-      {
-        "candidate_reduction_ratio": null,
-        "generated_candidate_pairs": 0,
-        "naive_pair_upper_bound": 250000,
-        "reason": "Splink optional runtime is not provisioned in the locked profiling environment",
-        "records": 500,
-        "status": "UNAVAILABLE"
-      },
-      {
-        "candidate_reduction_ratio": null,
-        "generated_candidate_pairs": 0,
-        "naive_pair_upper_bound": 1000000,
-        "reason": "Splink optional runtime is not provisioned in the locked profiling environment",
-        "records": 1000,
-        "status": "UNAVAILABLE"
+        "candidate_reduction_ratio": 0.8125,
+        "evaluated_pairs": 3,
+        "generated_candidate_pairs": 3,
+        "naive_pair_upper_bound": 16,
+        "provider": "splink",
+        "provider_calls": 3,
+        "reason": "real Splink adapter baseline; bounded candidate-only assertions passed",
+        "records": 8,
+        "status": "EXECUTED",
+        "wall_seconds": 15.0218196
       }
     ],
+    "provider_runtime": {
+      "dependency": {
+        "candidate_counts": {
+          "column_pairs": 18,
+          "emitted": 32,
+          "key_candidates": 6
+        },
+        "candidate_generation": "real provider/service output asserted by integration",
+        "container_read_only": true,
+        "evaluated_pairs": 18,
+        "execution_boundary": "project-owned adapter and service",
+        "execution_environment": "Docker provider container",
+        "input_mount": "bind-readonly:/input",
+        "input_scale": {
+          "columns": 6,
+          "rows": 20,
+          "tables": 2
+        },
+        "integration": "tests/integration/dependencies/test_step12_real_provider.py",
+        "network_allowed": false,
+        "provider": "desbordante-docker",
+        "provider_calls": 5,
+        "provider_image": "dirty-data-to-olap-desbordante-step37:local",
+        "provider_image_id": "sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638",
+        "provider_search_stats": {
+          "candidate_column_pairs": 18,
+          "candidate_pairs_before_pruning": 18,
+          "columns_excluded_by_bound": 0,
+          "completeness": "COMPLETE",
+          "emitted_candidates": 32,
+          "evaluated_pairs": 18,
+          "fd_arity_bounded": true,
+          "fd_search_arity": 3,
+          "ind_arity_bounded": true,
+          "ind_search_arity": 3,
+          "input_columns": 6,
+          "input_tables": 2,
+          "output_truncation": false,
+          "provider_calls": 5,
+          "pruned_by_budget": 0,
+          "pruned_by_scope": 0,
+          "pruned_by_type": 0,
+          "pruned_column_pairs": 0,
+          "runtime_timeout": false,
+          "schema_version": "1.0",
+          "searched_determinants": 18,
+          "tables_excluded_by_bound": 0,
+          "truncated": false,
+          "truncation_reasons": [],
+          "ucc_arity_bounded": true,
+          "ucc_search_arity": 3
+        },
+        "provider_source_revision": "b211961f3f272ed8815ef1ffbda90573b11e1116",
+        "provider_version": "2.4.1",
+        "rows_or_records": 20,
+        "test_function": "test_step12_real_provider_executes_ucc_fd_ind"
+      },
+      "entity_resolution": {
+        "candidate_counts": {
+          "candidate_pairs": 3,
+          "clusters": 0,
+          "predictions": 3
+        },
+        "candidate_generation": "real adapter/service output asserted by integration",
+        "container_read_only": null,
+        "evaluated_pairs": 3,
+        "execution_boundary": "project-owned adapter and service",
+        "execution_environment": "separate locked Python environment",
+        "input_mount": null,
+        "input_scale": {
+          "all_pairs": 16,
+          "records": 8
+        },
+        "integration": "tests/integration/entity_resolution/test_step14_real_splink.py",
+        "network_allowed": null,
+        "provider": "splink",
+        "provider_calls": 3,
+        "provider_image": null,
+        "provider_image_id": null,
+        "provider_search_stats": {
+          "all_pairs": 16,
+          "available_staged_records": 8,
+          "candidate_pairs": 3,
+          "candidate_pairs_by_rule": {
+            "block-email": 2,
+            "block-phone": 3
+          },
+          "clusters_emitted": 0,
+          "incomplete": false,
+          "pairs_rejected_by_budget": 0,
+          "predictions_emitted": 3,
+          "records_read": 8,
+          "records_sampled": 8,
+          "schema_version": "1.0"
+        },
+        "provider_source_revision": null,
+        "provider_version": "4.0.17",
+        "rows_or_records": 8,
+        "test_function": "test_step14_real_splink_is_bounded_local_and_candidate_only"
+      },
+      "schema_matching": {
+        "candidate_counts": {
+          "emitted": 3,
+          "returned": 3
+        },
+        "candidate_generation": "real adapter/service output asserted by integration",
+        "container_read_only": true,
+        "evaluated_pairs": 9,
+        "execution_boundary": "project-owned adapter and service",
+        "input_mount": null,
+        "input_scale": {
+          "provider_visible_column_pairs": {
+            "coma-schema": 9,
+            "distribution-instance": 9
+          },
+          "source_pairs": 1,
+          "table_pairs": 1
+        },
+        "integration": "tests/integration/matching/test_step13_real_valentine.py",
+        "network_allowed": false,
+        "provider_calls": 2,
+        "provider_image": null,
+        "provider_image_id": null,
+        "provider_search_stats": {
+          "column_pairs_before_pruning": 9,
+          "column_pairs_evaluated": 9,
+          "column_pairs_post_provider_type_rejected": 0,
+          "column_pairs_project_ineligible": 4,
+          "column_pairs_pruned_by_budget": 0,
+          "column_pairs_pruned_by_context": 0,
+          "column_pairs_pruned_by_scope": 0,
+          "column_pairs_pruned_by_type": 0,
+          "column_pairs_workload_avoided": 0,
+          "eligible_column_pairs_by_matcher": {
+            "coma-schema": 5,
+            "distribution-instance": 5
+          },
+          "evaluated_by_matcher": {
+            "coma-schema": 5,
+            "distribution-instance": 5
+          },
+          "matcher_calls": 2,
+          "output_candidates_emitted": 3,
+          "output_truncated": false,
+          "provider_table_pair_calls_by_matcher": {
+            "coma-schema": 1,
+            "distribution-instance": 1
+          },
+          "provider_visible_column_pairs_by_matcher": {
+            "coma-schema": 9,
+            "distribution-instance": 9
+          },
+          "retained_by_matcher": {
+            "coma-schema": 2,
+            "distribution-instance": 3
+          },
+          "returned_by_matcher": {
+            "coma-schema": 2,
+            "distribution-instance": 3
+          },
+          "schema_version": "1.0",
+          "source_pairs_before_bound": 1,
+          "source_pairs_evaluated": 1,
+          "table_pairs_before_bound": 1,
+          "table_pairs_evaluated": 1,
+          "tables_before_bound": 2,
+          "tables_evaluated": 2,
+          "top_k_retained_by_matcher": {
+            "coma-schema": 2,
+            "distribution-instance": 3
+          },
+          "truncation_reasons": []
+        },
+        "provider_source_revision": null,
+        "rows_or_records": 8,
+        "test_function": "test_step13_real_valentine_instance_and_schema_modes_are_bounded_and_aggregate_only"
+      }
+    },
     "schema_matching": [
       {
-        "candidate_pairs": 2500,
-        "reason": "Valentine optional runtime is not provisioned in the locked profiling environment",
-        "retained_candidates": 0,
-        "source_columns": 50,
-        "status": "UNAVAILABLE",
-        "target_columns": 50
-      },
-      {
-        "candidate_pairs": 10000,
-        "reason": "Valentine optional runtime is not provisioned in the locked profiling environment",
-        "retained_candidates": 0,
-        "source_columns": 100,
-        "status": "UNAVAILABLE",
-        "target_columns": 100
-      },
-      {
-        "candidate_pairs": 62500,
-        "reason": "Valentine optional runtime is not provisioned in the locked profiling environment",
-        "retained_candidates": 0,
-        "source_columns": 250,
-        "status": "UNAVAILABLE",
-        "target_columns": 250
-      },
-      {
-        "candidate_pairs": 250000,
-        "reason": "Valentine optional runtime is not provisioned in the locked profiling environment",
-        "retained_candidates": 0,
-        "source_columns": 500,
-        "status": "UNAVAILABLE",
-        "target_columns": 500
+        "candidate_pairs": 9,
+        "evaluated_pairs": 9,
+        "provider": "valentine",
+        "provider_calls": 2,
+        "reason": "real Valentine adapter baseline; aggregate-only candidate assertions passed",
+        "retained_candidates": 3,
+        "status": "EXECUTED",
+        "wall_seconds": 18.9325791
       }
     ]
+  },
+  "large_scale_evidence": {
+    "100M": {
+      "reason": "Future distributed/partitioned design only; not executed and not a Step37 capacity result.",
+      "status": "FEASIBILITY_DESIGNED"
+    },
+    "10M": {
+      "reason": "Optional feasibility only; no execution or capacity claim.",
+      "status": "NOT_EXECUTED_OPTIONAL"
+    },
+    "1M": {
+      "observed_medium_output_db_bytes": 16789504,
+      "observed_medium_peak_memory_bytes": 473756778,
+      "observed_medium_wall_seconds": 276.4034994,
+      "reason": "The 100k Medium boundary is the smallest meaningful full production-boundary benchmark; a 1M run was not started because the bounded CI wall-clock budget must retain room for real provider E2E and independent stage baselines.",
+      "status": "NOT_EXECUTED"
+    },
+    "several-million": {
+      "observed_medium_cpu_seconds": 268.171875,
+      "observed_medium_output_db_bytes": 16789504,
+      "observed_medium_peak_memory_bytes": 473756778,
+      "observed_medium_wall_seconds": 276.4034994,
+      "reason": "A bounded feasibility assessment used the measured Medium wall time, CPU, peak Python allocation and output-database size; a several-million materialization would exceed the Step37 single-run budget and is a capacity experiment reserved for Step38.",
+      "status": "NOT_EXECUTED"
+    }
   },
   "large_scale_execution_status": {
     "100M": "FEASIBILITY_DESIGNED",
     "10M": "NOT_EXECUTED_OPTIONAL",
     "1M": "NOT_EXECUTED",
+    "Medium": "EXECUTED",
     "Tiny": "EXECUTED_REFERENCE_ONLY",
     "several-million": "NOT_EXECUTED"
   }
@@ -1407,10 +1978,237 @@ Single-run cost, stage timing, memory and disk observations are handed to Step38
 
 ## Limitations
 
-- Optional Desbordante, Valentine and Splink runtimes were unavailable; their status is UNAVAILABLE, not PASS.
-- Tiny reference and typed OLAP fixtures are single-run evidence only; Medium, Large-local, 1M and several-million full product scales were not executed.
+- Provider image and optional matching/entity environments are explicit locked execution inputs; no provider result is fabricated when provisioning is absent.
+- Tiny and typed-reference fixtures remain reference evidence; the deterministic Medium benchmark is the smallest full production-boundary scale executed in Step37.
 - No concurrency, arrival-rate, saturation, soak, breakpoint, overload-recovery or capacity claim is made; those belong to Step38.
 - Local benchmark timings are environment-specific and do not establish production SLOs.
+
+## Provider stage baselines
+
+Dependency Discovery, schema matching and entity resolution each ran through their project-owned adapter/service boundaries in separate locked environments. The machine receipt records their measured wall/CPU/memory observations and provider identity.
+
+```json
+{
+  "dependency": {
+    "cpu_seconds": 8.53125,
+    "details": {
+      "candidate_counts": {
+        "column_pairs": 18,
+        "emitted": 32,
+        "key_candidates": 6
+      },
+      "candidate_generation": "real provider/service output asserted by integration",
+      "container_read_only": true,
+      "evaluated_pairs": 18,
+      "execution_boundary": "project-owned adapter and service",
+      "execution_environment": "Docker provider container",
+      "input_mount": "bind-readonly:/input",
+      "input_scale": {
+        "columns": 6,
+        "rows": 20,
+        "tables": 2
+      },
+      "integration": "tests/integration/dependencies/test_step12_real_provider.py",
+      "network_allowed": false,
+      "provider": "desbordante-docker",
+      "provider_calls": 5,
+      "provider_image": "dirty-data-to-olap-desbordante-step37:local",
+      "provider_image_id": "sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638",
+      "provider_search_stats": {
+        "candidate_column_pairs": 18,
+        "candidate_pairs_before_pruning": 18,
+        "columns_excluded_by_bound": 0,
+        "completeness": "COMPLETE",
+        "emitted_candidates": 32,
+        "evaluated_pairs": 18,
+        "fd_arity_bounded": true,
+        "fd_search_arity": 3,
+        "ind_arity_bounded": true,
+        "ind_search_arity": 3,
+        "input_columns": 6,
+        "input_tables": 2,
+        "output_truncation": false,
+        "provider_calls": 5,
+        "pruned_by_budget": 0,
+        "pruned_by_scope": 0,
+        "pruned_by_type": 0,
+        "pruned_column_pairs": 0,
+        "runtime_timeout": false,
+        "schema_version": "1.0",
+        "searched_determinants": 18,
+        "tables_excluded_by_bound": 0,
+        "truncated": false,
+        "truncation_reasons": [],
+        "ucc_arity_bounded": true,
+        "ucc_search_arity": 3
+      },
+      "provider_source_revision": "b211961f3f272ed8815ef1ffbda90573b11e1116",
+      "provider_version": "2.4.1",
+      "rows_or_records": 20,
+      "test_function": "test_step12_real_provider_executes_ucc_fd_ind"
+    },
+    "peak_memory": {
+      "bytes": 58903759,
+      "method": "python_tracemalloc_peak",
+      "process_rss_after_bytes": null,
+      "process_rss_before_bytes": null
+    },
+    "schema_version": "1.0",
+    "stage": "dependency",
+    "status": "PASS",
+    "step": 37,
+    "wall_seconds": 33.3965339
+  },
+  "entity_resolution": {
+    "cpu_seconds": 12.015625,
+    "details": {
+      "candidate_counts": {
+        "candidate_pairs": 3,
+        "clusters": 0,
+        "predictions": 3
+      },
+      "candidate_generation": "real adapter/service output asserted by integration",
+      "container_read_only": null,
+      "evaluated_pairs": 3,
+      "execution_boundary": "project-owned adapter and service",
+      "execution_environment": "separate locked Python environment",
+      "input_mount": null,
+      "input_scale": {
+        "all_pairs": 16,
+        "records": 8
+      },
+      "integration": "tests/integration/entity_resolution/test_step14_real_splink.py",
+      "network_allowed": null,
+      "provider": "splink",
+      "provider_calls": 3,
+      "provider_image": null,
+      "provider_image_id": null,
+      "provider_search_stats": {
+        "all_pairs": 16,
+        "available_staged_records": 8,
+        "candidate_pairs": 3,
+        "candidate_pairs_by_rule": {
+          "block-email": 2,
+          "block-phone": 3
+        },
+        "clusters_emitted": 0,
+        "incomplete": false,
+        "pairs_rejected_by_budget": 0,
+        "predictions_emitted": 3,
+        "records_read": 8,
+        "records_sampled": 8,
+        "schema_version": "1.0"
+      },
+      "provider_source_revision": null,
+      "provider_version": "4.0.17",
+      "rows_or_records": 8,
+      "test_function": "test_step14_real_splink_is_bounded_local_and_candidate_only"
+    },
+    "peak_memory": {
+      "bytes": 79301268,
+      "method": "python_tracemalloc_peak",
+      "process_rss_after_bytes": null,
+      "process_rss_before_bytes": null
+    },
+    "schema_version": "1.0",
+    "stage": "entity_resolution",
+    "status": "PASS",
+    "step": 37,
+    "wall_seconds": 15.0218196
+  },
+  "schema_matching": {
+    "cpu_seconds": 16.90625,
+    "details": {
+      "candidate_counts": {
+        "emitted": 3,
+        "returned": 3
+      },
+      "candidate_generation": "real adapter/service output asserted by integration",
+      "container_read_only": true,
+      "evaluated_pairs": 9,
+      "execution_boundary": "project-owned adapter and service",
+      "input_mount": null,
+      "input_scale": {
+        "provider_visible_column_pairs": {
+          "coma-schema": 9,
+          "distribution-instance": 9
+        },
+        "source_pairs": 1,
+        "table_pairs": 1
+      },
+      "integration": "tests/integration/matching/test_step13_real_valentine.py",
+      "network_allowed": false,
+      "provider_calls": 2,
+      "provider_image": null,
+      "provider_image_id": null,
+      "provider_search_stats": {
+        "column_pairs_before_pruning": 9,
+        "column_pairs_evaluated": 9,
+        "column_pairs_post_provider_type_rejected": 0,
+        "column_pairs_project_ineligible": 4,
+        "column_pairs_pruned_by_budget": 0,
+        "column_pairs_pruned_by_context": 0,
+        "column_pairs_pruned_by_scope": 0,
+        "column_pairs_pruned_by_type": 0,
+        "column_pairs_workload_avoided": 0,
+        "eligible_column_pairs_by_matcher": {
+          "coma-schema": 5,
+          "distribution-instance": 5
+        },
+        "evaluated_by_matcher": {
+          "coma-schema": 5,
+          "distribution-instance": 5
+        },
+        "matcher_calls": 2,
+        "output_candidates_emitted": 3,
+        "output_truncated": false,
+        "provider_table_pair_calls_by_matcher": {
+          "coma-schema": 1,
+          "distribution-instance": 1
+        },
+        "provider_visible_column_pairs_by_matcher": {
+          "coma-schema": 9,
+          "distribution-instance": 9
+        },
+        "retained_by_matcher": {
+          "coma-schema": 2,
+          "distribution-instance": 3
+        },
+        "returned_by_matcher": {
+          "coma-schema": 2,
+          "distribution-instance": 3
+        },
+        "schema_version": "1.0",
+        "source_pairs_before_bound": 1,
+        "source_pairs_evaluated": 1,
+        "table_pairs_before_bound": 1,
+        "table_pairs_evaluated": 1,
+        "tables_before_bound": 2,
+        "tables_evaluated": 2,
+        "top_k_retained_by_matcher": {
+          "coma-schema": 2,
+          "distribution-instance": 3
+        },
+        "truncation_reasons": []
+      },
+      "provider_source_revision": null,
+      "rows_or_records": 8,
+      "test_function": "test_step13_real_valentine_instance_and_schema_modes_are_bounded_and_aggregate_only"
+    },
+    "peak_memory": {
+      "bytes": 135433248,
+      "method": "python_tracemalloc_peak",
+      "process_rss_after_bytes": null,
+      "process_rss_before_bytes": null
+    },
+    "schema_version": "1.0",
+    "stage": "schema_matching",
+    "status": "PASS",
+    "step": 37,
+    "wall_seconds": 18.9325791
+  }
+}
+```
 
 ## Upstream gates
 

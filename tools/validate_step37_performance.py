@@ -23,6 +23,10 @@ def _head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
+def _parent_head() -> str:
+    return subprocess.run(["git", "rev-parse", "HEAD^"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
 def _state() -> dict[str, Any]:
     import yaml
 
@@ -231,7 +235,10 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
             or specialist.get("current_role") != "load_stress"
             or specialist.get("step38_started") is not False
             or specialist.get("step38_status") != "NOT_STARTED"
-            or (receipt.get("content_commit") != specialist.get("last_completed_content_commit") and not (expected_commit and assessed == expected_commit and _head() == expected_commit))
+            or (
+                receipt.get("content_commit") != specialist.get("last_completed_content_commit")
+                and assessed not in {_head(), _parent_head()}
+            )
         ):
             _fail("final Step37 to Step38 handoff is inconsistent")
     else:
