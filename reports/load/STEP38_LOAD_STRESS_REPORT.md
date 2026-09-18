@@ -177,18 +177,17 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
 
 ## Explicit limitations
 
-- The load profile itself is `PASS`, but formal G12 remains `PENDING` until
-  the required repository-wide regression and all relevant validator checks
-  are green. The latest full pytest run was `558 passed, 4 skipped, 15
-  failed` in 638.44 seconds, before the focused Step33 predicate repair;
-  the focused repair now passes 12 Step33 tests and 6 state-classification
-  tests, but a green full rerun is still required.
-- Step30 clean-room checks passed through deterministic OpenAPI generation,
-  frontend typecheck, lint, tests and build, then failed at project-owned
-  Chromium installation with Playwright CDN HTTP 403 (`location access
-  denied`). Step31 passed locked frontend install and deterministic API
-  generation but did not complete its Docker build, so neither validator is
-  a formal G12 PASS.
+- The load profile itself is `PASS`, but formal G12 remains `PENDING` because
+  the post-repair host full pytest run was `561 passed, 4 skipped, 12 failed`
+  in 557.43 seconds. Failures cover unavailable optional provider modules, a
+  host DataProfiler expectation, the accepted Step29 real-provider path
+  unavailable on this host, and system tests without `STEP31_BASE_URL`.
+  Remote CI is tracked separately and is not substituted for this full-
+  regression condition.
+- Exact-head remote CI run `35374242475` on `8a5a2352468e0bf28be6f69d0492ffc27ebf441f`
+  passed G8 clean-room, secret scan, image vulnerability scan, independent
+  Step31 QA, and Steps32-37. The earlier host-only Step30/Step31 limitations
+  are retained as local observations and are not reported as remote failures.
 - No production capacity, deployment, HA, multi-node, 1M, 10M or 100M measured claim.
 - No exactly-once claim; the worker remains at-least-once with durable replay fences.
 - Optional provider availability is reported as observed and fail-closed; it is not silently upgraded.

@@ -54,22 +54,17 @@ result, not a production capacity, SLA, or deployment claim.
 
 ## Closure blockers
 
-- The latest full pytest run was not green: `558 passed, 4 skipped, 15
-  failed` in 638.44 seconds. It included unavailable optional provider
-  modules, missing `STEP31_BASE_URL`, a host-only profiler expectation, and
-  the accepted Step29 real-provider path unavailable on this host. Three
-  Step33 state-predicate failures from that run were repaired afterward and
-  the focused Step33 suite now passes `12` tests plus `6` state-classification
-  tests; a green full rerun is still required.
-- Step30 clean-room validation passed through locked Python/frontend setup,
-  deterministic OpenAPI generation, typecheck, lint, frontend tests and build,
-  but its project-owned Chromium install failed with Playwright CDN HTTP `403`
-  (`location access denied`).
-- Step31 QA validation passed locked frontend install and deterministic API
-  generation, but did not complete the Docker backend/frontend build, so it is
-  not reported as PASS.
-- Steps22-29 and Steps32-37 critical validators passed on the current state;
-  Step30 remains externally blocked and Step31 remains incomplete.
+- The post-repair host full pytest run was not green: `561 passed, 4 skipped,
+  12 failed` in 557.43 seconds. Failures cover unavailable optional provider
+  modules, a host DataProfiler expectation, the accepted Step29 real-provider
+  path unavailable on this host, and system tests without `STEP31_BASE_URL`.
+  This fails the full-regression condition for G12; remote CI is not
+  substituted for this evidence.
+- Exact-head remote CI run `35374242475` on `8a5a2352468e0bf28be6f69d0492ffc27ebf441f`
+  completed successfully: G8 clean-room, secret scan, image vulnerability
+  scan, independent Step31 QA, and Steps32-37 all passed.
+- The local host-only Step30/Step31 limitations remain historical observations;
+  they are not promoted to a remote-CI failure after the clean-room run passed.
 
 ## Gate state
 

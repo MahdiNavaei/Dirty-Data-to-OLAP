@@ -446,7 +446,7 @@ specialist_execution:
     assessed_commit: "69b28bb5521c8d63275be232f783fc8a6d0c8cd2"
     load_profile_result: "PASS"
     g12_status: "PENDING"
-    blocker: "Formal G12 remains pending: latest full pytest was 558 passed, 4 skipped, 15 failed before the focused Step33 predicate repair; Step30 clean-room reached deterministic OpenAPI/frontend checks but Playwright Chromium installation returned HTTP 403 location access denied; Step31 passed locked install and deterministic generation but did not complete its Docker build; optional providers and STEP31_BASE_URL remain unavailable in the host regression."
+    blocker: "Formal G12 remains pending: the post-repair host full pytest was 561 passed, 4 skipped, 12 failed in 557.43s; failures cover unavailable optional providers, a host DataProfiler expectation, the accepted Step29 real-provider path, and system tests without STEP31_BASE_URL. Exact-head remote run 35374242475 on 8a5a235 passed G8, secret, image, Step31, and Steps32-37 gates; no G12 PASS is inferred from that CI result alone."
     real_listener: true
     overload_submissions: 20
     g6_concurrent_successes: 2
