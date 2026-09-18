@@ -87,6 +87,26 @@ RUN sed -i 's/find_package(Boost 1.85.0/find_package(Boost 1.83.0/' \
     && cmake --install /tmp/desbordante/build \
     && test -f /tmp/provider-install/desbordante*.so
 
+# A standalone provider image is used by the Step37 performance boundary. It
+# contains only the pinned native binding and its runtime libraries; the
+# project-owned adapter supplies the read-only, network-disabled input mount
+# and invokes it with the exact inspected image digest.
+FROM ${PYTHON_IMAGE} AS desbordante-provider-runtime
+
+WORKDIR /work
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libboost-container1.83.0 \
+        libboost-graph1.83.0 \
+        libboost-thread1.83.0 \
+        libicu76 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=desbordante-provider-build /tmp/provider-install/desbordante*.so /work/build/src/python_bindings/
+
+CMD ["python"]
+
 FROM ${PYTHON_IMAGE} AS backend
 
 ENV VIRTUAL_ENV=/opt/venv

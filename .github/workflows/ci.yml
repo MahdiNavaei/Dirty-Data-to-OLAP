@@ -333,7 +333,10 @@ jobs:
     name: Step37 performance / baseline / regression
     needs: [chaos-resilience]
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
+    env:
+      DESBORDANTE_PROVIDER_IMAGE: dirty-data-to-olap-desbordante-step37:${{ github.sha }}
+      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
     permissions:
       contents: read
     steps:
@@ -346,16 +349,55 @@ jobs:
           check-latest: false
       - name: Install locked project tooling
         run: python -m pip install --disable-pip-version-check uv==0.11.26
-      - name: Execute bounded Step37 performance evidence
+      - name: Provision pinned Desbordante provider image
+        run: |
+          mkdir -p "${RUNNER_TEMP}/step37-provider-input"
+          docker build --target desbordante-provider-runtime --tag "${DESBORDANTE_PROVIDER_IMAGE}" .
+          provider_id="$(docker image inspect "${DESBORDANTE_PROVIDER_IMAGE}" --format='{{.Id}}')"
+          case "${provider_id}" in sha256:*) ;; *) echo "provider image ID is not immutable: ${provider_id}"; exit 1 ;; esac
+          docker run --rm --network none --read-only \
+            --mount "type=bind,source=${RUNNER_TEMP}/step37-provider-input,target=/input,readonly" \
+            "${DESBORDANTE_PROVIDER_IMAGE}" python -c 'import sys; sys.path.insert(0, "/work/build/src/python_bindings"); import desbordante; print(getattr(desbordante, "__version__", "import-ok"))'
+      - name: Install locked Step37 core / profiling environment
+        run: uv sync --locked --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling
+      - name: Execute real Dependency Discovery stage baseline
+        run: |
+          mkdir -p "${RUNNER_TEMP}/step37-stage-baselines"
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra profiling --extra files python tools/run_step37_stage_baselines.py \
+            --stage dependency --output "${RUNNER_TEMP}/step37-stage-baselines/dependency.json"
+      - name: Install locked Step37 schema-matching environment
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-matching
+        run: uv sync --locked --python "$(command -v python)" --group dev --extra matching --extra files
+      - name: Execute real Valentine schema-matching stage baseline
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-matching
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra matching --extra files python tools/run_step37_stage_baselines.py \
+          --stage schema_matching --output "${RUNNER_TEMP}/step37-stage-baselines/schema_matching.json"
+      - name: Install locked Step37 entity-resolution environment
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-entity
+        run: uv sync --locked --python "$(command -v python)" --group dev --extra entity_resolution --extra files
+      - name: Execute real Splink entity-resolution stage baseline
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-entity
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra entity_resolution --extra files python tools/run_step37_stage_baselines.py \
+          --stage entity_resolution --output "${RUNNER_TEMP}/step37-stage-baselines/entity_resolution.json"
+      - name: Execute bounded Step37 E2E / Medium performance evidence
         run: |
           mkdir -p "${RUNNER_TEMP}/step37-performance/evidence"
-          uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/run_step37_performance.py \
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling python tools/run_step37_performance.py \
             --output-root "${RUNNER_TEMP}/step37-performance/evidence" \
             --report-path "${RUNNER_TEMP}/step37-performance/STEP37_PERFORMANCE_REPORT.md" \
-            --assessed-commit "${GITHUB_SHA}" --ci
+            --stage-baselines-dir "${RUNNER_TEMP}/step37-stage-baselines" \
+            --assessed-commit "${GITHUB_SHA}" --ci --ci-run-id "${GITHUB_RUN_ID}"
+      - name: Execute Step37 performance tests and validator controls
+        env:
+          STEP37_RECEIPT: ${{ runner.temp }}/step37-performance/evidence/step37_performance_validation.json
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/performance/test_step37_performance.py tests/performance/test_step37_performance_validator_controls.py -q
       - name: Validate Step37 evidence and exact-head binding
         run: |
-          uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step37_performance.py \
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step37_performance.py \
             --evidence "${RUNNER_TEMP}/step37-performance/evidence/step37_performance_validation.json" \
             --report "${RUNNER_TEMP}/step37-performance/STEP37_PERFORMANCE_REPORT.md" \
             --expected-commit "${GITHUB_SHA}" --ci
