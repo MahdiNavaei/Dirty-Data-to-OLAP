@@ -249,9 +249,13 @@ class LocalProductStageHandlers:
         domain_assertions = self.product_policy.domain_assertions(catalog, snapshot, candidates)
         fusion_request = EvidenceFusionRequest(request_id=stable_id("fusion-request", {"run": request.run_id, "snapshot": snapshot.snapshot.snapshot_id, "dependency": dependency_ref.content_hash}), execution_context_id=snapshot.snapshot.execution_context_id, cross_source_mapping_scope=False, relationship_candidate_ids=tuple(item.candidate_id for item in candidates), subject_kind=FusionSubjectKind.RELATIONSHIP, policy=EvidenceFusionService.load_policy("relationship", policy_root=self.graph_root / "policies" / "evidence-fusion"))
         result = self.fusion.fuse(fusion_request, inputs=EvidenceFusionInputs(domain_assertions=domain_assertions), profile_result=profile, quality_result=quality, dependency_result=dependency, source_catalogs=(catalog,))
-        assertion_refs = [self._publish(request, "DomainAssertion", item, artifact_id=item.assertion_id, provenance=item.evidence_refs, producer="config.product_policy") for item in domain_assertions]
+        # Domain assertions and relationship decisions are semantic identities
+        # and can be equal for two runs over the same source snapshot.  The
+        # persisted artifact identity must still be run-scoped; otherwise
+        # concurrent real runs collide in the durable artifact registry.
+        assertion_refs = [self._publish(request, "DomainAssertion", item, artifact_id=stable_id("domain-assertion-artifact", {"run": request.run_id, "assertion": item.assertion_id}), provenance=item.evidence_refs, producer="config.product_policy") for item in domain_assertions]
         result_ref = self._publish(request, "EvidenceFusionResult", result, artifact_id=stable_id("evidence-fusion", {"run": request.run_id, "request": fusion_request.request_id}), provenance=(profile_ref.artifact_id, quality_ref.artifact_id, dependency_ref.artifact_id), producer="application.evidence_fusion")
-        decision_refs = [self._publish(request, "RelationshipDecision", item, artifact_id=item.decision_id, provenance=(result_ref.artifact_id, item.input_evidence_fingerprint), producer="application.evidence_fusion") for item in result.relationships]
+        decision_refs = [self._publish(request, "RelationshipDecision", item, artifact_id=stable_id("relationship-decision-artifact", {"run": request.run_id, "decision": item.decision_id}), provenance=(result_ref.artifact_id, item.input_evidence_fingerprint), producer="application.evidence_fusion") for item in result.relationships]
         output_refs = tuple([item.artifact_id for item in assertion_refs] + [result_ref.artifact_id] + [item.artifact_id for item in decision_refs])
         if result.completeness.value != "COMPLETE_REVIEW_READY" or not decision_refs:
             return StageExecutionResult(status=StageResultStatus.FAILED, output_artifact_refs=output_refs, failure_code="EVIDENCE_FUSION_INCOMPLETE", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="evidence fusion did not produce a complete review-ready typed decision")

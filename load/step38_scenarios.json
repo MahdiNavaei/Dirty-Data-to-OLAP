@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "suite": "step38-load-stress-v1",
+  "scope": "bounded-local-reference",
+  "arrival_patterns": ["STEADY", "RAMP", "BURST", "OVERLOAD"],
+  "worker_ramp": [1, 2, 4, 8],
+  "api": {
+    "real_listener": true,
+    "host": "127.0.0.1",
+    "endpoint_family": "/api/v1",
+    "submission_concurrency": 20,
+    "idempotency_replay_cases": 5
+  },
+  "required_controls": [
+    "queue_depth",
+    "queue_wait_latency",
+    "control_store_contention",
+    "source_read_only_protection",
+    "provider_concurrency",
+    "backpressure",
+    "artifact_staging_concurrency",
+    "multi_run_isolation",
+    "review_pause_resume",
+    "cancellation",
+    "controlled_overload_recovery",
+    "bounded_soak_memory",
+    "state_machine_invariants",
+    "at_least_once_replay_safety",
+    "g6_concurrent_correctness",
+    "g11_regression"
+  ]
+}

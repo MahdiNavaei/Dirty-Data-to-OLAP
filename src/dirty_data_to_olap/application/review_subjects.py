@@ -18,7 +18,7 @@ from dirty_data_to_olap.domain.contracts.analytical import AnalyticalPlan, Compi
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext
 from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityProposal, CanonicalModelHypothesis
 from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionResult
-from dirty_data_to_olap.domain.contracts.evidence_fusion import EvidenceFusionResult, RelationshipDecision, SemanticMappingDecision
+from dirty_data_to_olap.domain.contracts.evidence_fusion import DomainAssertion, EvidenceFusionResult, RelationshipDecision, SemanticMappingDecision
 from dirty_data_to_olap.domain.contracts.platform import ArtifactIntegrityState, ArtifactPublicationState, ArtifactRef
 from dirty_data_to_olap.domain.contracts.source import stable_digest
 
@@ -89,19 +89,17 @@ class ReviewCheckpointSubjectResolver:
         verified: list[tuple[ArtifactRef, object]],
         unresolved: list[str],
     ) -> ReviewSubjectDerivation:
-        domain_refs = tuple(sorted(artifact.artifact_id for artifact, _payload in verified if artifact.artifact_kind == "DomainAssertion"))
+        # Keep semantic assertion identities in the review context while the
+        # subject itself is the run-scoped persisted artifact identity.
+        domain_refs = tuple(sorted(payload.assertion_id for artifact, payload in verified if artifact.artifact_kind == "DomainAssertion" and isinstance(payload, DomainAssertion)))
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, payload in verified:
             if artifact.artifact_kind == "RelationshipDecision" and isinstance(payload, RelationshipDecision):
-                if payload.decision_id != artifact.artifact_id:
-                    unresolved.append(artifact.artifact_id)
-                    continue
-                contexts.append(self.review_policy.evidence_context(payload, domain_refs))
+                context = self.review_policy.evidence_context(payload, domain_refs)
+                contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "SemanticMappingDecision" and isinstance(payload, SemanticMappingDecision):
-                if payload.decision_id != artifact.artifact_id:
-                    unresolved.append(artifact.artifact_id)
-                    continue
-                contexts.append(self.review_policy.evidence_context(payload, domain_refs))
+                context = self.review_policy.evidence_context(payload, domain_refs)
+                contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "EvidenceFusionResult" and isinstance(payload, EvidenceFusionResult):
                 # A container with more than one decision is never collapsed
                 # into a fabricated single review subject.  Producers must
@@ -241,6 +239,7 @@ class ReviewCheckpointSubjectResolver:
             raise PlatformError("review input artifact failed integrity verification")
         payload = json.loads(self.artifact_store.read(artifact).decode("utf-8"))
         contract_types = {
+            "DomainAssertion": DomainAssertion,
             "RelationshipDecision": RelationshipDecision,
             "SemanticMappingDecision": SemanticMappingDecision,
             "EvidenceFusionResult": EvidenceFusionResult,
