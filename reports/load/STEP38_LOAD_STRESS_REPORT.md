@@ -2,7 +2,7 @@
 
 - Result: `PASS`
 - Suite: `step38-load-stress-v1`
-- Assessed commit: `0bf205bb215bd3a63f9fade85c0c1d8667165d51`
+- Assessed commit: `69b28bb5521c8d63275be232f783fc8a6d0c8cd2`
 - Evidence class: bounded local-reference only; not production capacity.
 
 ## Environment
@@ -11,14 +11,14 @@
 {
   "api_process": {
     "host": "127.0.0.1",
-    "pid": 5560,
-    "port": 19245,
+    "pid": 27364,
+    "port": 18921,
     "workers": 1
   },
   "architecture": "AMD64",
   "control_store": "project SQLite control store; WAL; synchronous=FULL; busy_timeout=30000ms",
   "cpu_logical_count": 6,
-  "git_head": "0bf205bb215bd3a63f9fade85c0c1d8667165d51",
+  "git_head": "69b28bb5521c8d63275be232f783fc8a6d0c8cd2",
   "os": "Windows-10-10.0.26200-SP0",
   "provider_image": "dirty-data-to-olap-desbordante-step37:local",
   "provider_image_digest": "sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638",
@@ -34,7 +34,7 @@
     "extraction_max_rows": 10000,
     "source_write_policy": "read-only"
   },
-  "started_at_utc": "2026-09-18T14:51:35.467719+00:00",
+  "started_at_utc": "2026-09-18T15:02:25.647297+00:00",
   "worker_ramp": [
     1,
     2,
@@ -55,12 +55,12 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
     "errors": 0,
     "label": "BURST",
     "latency": {
-      "max_ms": 60.048,
-      "mean_ms": 36.981,
-      "p50_ms": 35.01,
-      "p90_ms": 52.694,
-      "p95_ms": 54.322,
-      "p99_ms": 58.457,
+      "max_ms": 67.703,
+      "mean_ms": 42.717,
+      "p50_ms": 40.817,
+      "p90_ms": 63.949,
+      "p95_ms": 67.457,
+      "p99_ms": 67.687,
       "sample_count": 32
     },
     "replayed_responses": 0,
@@ -69,19 +69,19 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
       "200": 32
     },
     "successful_requests": 32,
-    "wall_time_ms": 67.85
+    "wall_time_ms": 84.67
   },
   "OVERLOAD": {
     "concurrency": 20,
     "errors": 0,
     "label": "OVERLOAD_RUN_SUBMISSIONS",
     "latency": {
-      "max_ms": 23733.795,
-      "mean_ms": 17309.015,
-      "p50_ms": 18490.091,
-      "p90_ms": 23730.536,
-      "p95_ms": 23730.86,
-      "p99_ms": 23733.208,
+      "max_ms": 22160.713,
+      "mean_ms": 16525.878,
+      "p50_ms": 17536.406,
+      "p90_ms": 22160.532,
+      "p95_ms": 22160.557,
+      "p99_ms": 22160.682,
       "sample_count": 20
     },
     "replayed_responses": 0,
@@ -90,7 +90,7 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
       "202": 20
     },
     "successful_requests": 20,
-    "wall_time_ms": 23744.599
+    "wall_time_ms": 22170.674
   },
   "RAMP": {
     "concurrency": 8,
@@ -103,12 +103,12 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
     "errors": 0,
     "label": "RAMP",
     "latency": {
-      "max_ms": 29.421,
-      "mean_ms": 12.156,
-      "p50_ms": 9.942,
-      "p90_ms": 25.015,
-      "p95_ms": 27.087,
-      "p99_ms": 28.943,
+      "max_ms": 32.527,
+      "mean_ms": 13.21,
+      "p50_ms": 11.839,
+      "p90_ms": 26.78,
+      "p95_ms": 29.32,
+      "p99_ms": 31.89,
       "sample_count": 24
     },
     "replayed_responses": 0,
@@ -117,24 +117,24 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
       "200": 24
     },
     "successful_requests": 24,
-    "wall_time_ms": 48.803
+    "wall_time_ms": 49.984
   },
   "STEADY": {
     "concurrency": 1,
     "latency": {
-      "max_ms": 21.557,
-      "mean_ms": 7.927,
-      "p50_ms": 3.462,
-      "p90_ms": 17.511,
-      "p95_ms": 17.593,
-      "p99_ms": 20.648,
+      "max_ms": 18.259,
+      "mean_ms": 4.002,
+      "p50_ms": 2.913,
+      "p90_ms": 5.278,
+      "p95_ms": 7.717,
+      "p99_ms": 15.921,
       "sample_count": 24
     },
     "requests": 24,
     "statuses": {
       "200": 24
     },
-    "wall_time_ms": 1244.79
+    "wall_time_ms": 1187.273
   }
 }
 ```
@@ -143,8 +143,8 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
 
 - Worker count: `1`
 - Completed jobs: `2`
-- Measured throughput: `0.674` jobs/s
-- Queue-wait p95: `1615.095` ms
+- Measured throughput: `0.654` jobs/s
+- Queue-wait p95: `1759.497` ms
 - This is a local reference envelope, not a production or public-SLA claim.
 
 ## First saturation region and recovery

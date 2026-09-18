@@ -4,28 +4,28 @@
       {
         "error": null,
         "latency": {
-          "max_ms": 1267.244,
-          "mean_ms": 956.368,
-          "p50_ms": 1089.68,
-          "p90_ms": 1231.731,
-          "p95_ms": 1249.488,
-          "p99_ms": 1263.693,
+          "max_ms": 932.489,
+          "mean_ms": 641.264,
+          "p50_ms": 624.339,
+          "p90_ms": 870.859,
+          "p95_ms": 901.674,
+          "p99_ms": 926.326,
           "sample_count": 3
         },
-        "run_id": "run_f4ee52b570fba7bf50531c9a2f06c160"
+        "run_id": "run_5629047749d2e89a86e39bbffd967984"
       },
       {
         "error": null,
         "latency": {
-          "max_ms": 794.589,
-          "mean_ms": 573.429,
-          "p50_ms": 649.863,
-          "p90_ms": 765.644,
-          "p95_ms": 780.116,
-          "p99_ms": 791.694,
+          "max_ms": 909.697,
+          "mean_ms": 607.068,
+          "p50_ms": 678.057,
+          "p90_ms": 863.369,
+          "p95_ms": 886.533,
+          "p99_ms": 905.064,
           "sample_count": 3
         },
-        "run_id": "run_3c3cb3704570ae96923820dd772dc505"
+        "run_id": "run_44df38a8cbd4fb1527922044d581c04f"
       }
     ],
     "dedicated_submission": {
@@ -33,12 +33,12 @@
       "errors": 0,
       "label": "OVERLOAD_RUN_SUBMISSIONS",
       "latency": {
-        "max_ms": 1980.183,
-        "mean_ms": 1980.166,
-        "p50_ms": 1980.166,
-        "p90_ms": 1980.18,
-        "p95_ms": 1980.181,
-        "p99_ms": 1980.183,
+        "max_ms": 1712.258,
+        "mean_ms": 1711.984,
+        "p50_ms": 1711.984,
+        "p90_ms": 1712.203,
+        "p95_ms": 1712.231,
+        "p99_ms": 1712.253,
         "sample_count": 2
       },
       "replayed_responses": 0,
@@ -47,11 +47,11 @@
         "202": 2
       },
       "successful_requests": 2,
-      "wall_time_ms": 1981.322
+      "wall_time_ms": 1713.082
     },
     "g6_successes": [
-      "run_f4ee52b570fba7bf50531c9a2f06c160",
-      "run_3c3cb3704570ae96923820dd772dc505"
+      "run_5629047749d2e89a86e39bbffd967984",
+      "run_44df38a8cbd4fb1527922044d581c04f"
     ],
     "real_listener": true,
     "retry_load": {
@@ -60,15 +60,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 812.153,
-            "mean_ms": 703.966,
-            "p50_ms": 703.966,
-            "p90_ms": 790.516,
-            "p95_ms": 801.334,
-            "p99_ms": 809.989,
+            "max_ms": 606.973,
+            "mean_ms": 398.184,
+            "p50_ms": 398.184,
+            "p90_ms": 565.215,
+            "p95_ms": 586.094,
+            "p99_ms": 602.797,
             "sample_count": 2
           },
-          "run_id": "run_2636b35fa58391b0ed0c2e756f47cbac",
+          "run_id": "run_ebcecb9a77ba291a46840c628eb25165",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -77,15 +77,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 852.978,
-            "mean_ms": 830.792,
-            "p50_ms": 830.792,
-            "p90_ms": 848.541,
-            "p95_ms": 850.759,
-            "p99_ms": 852.534,
+            "max_ms": 582.462,
+            "mean_ms": 485.338,
+            "p50_ms": 485.338,
+            "p90_ms": 563.037,
+            "p95_ms": 572.75,
+            "p99_ms": 580.52,
             "sample_count": 2
           },
-          "run_id": "run_c53060b3abdd6516dbf330404d2bfaf5",
+          "run_id": "run_b86e415177e95b7f6263b854eb05b70d",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -94,15 +94,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 852.091,
-            "mean_ms": 830.724,
-            "p50_ms": 830.724,
-            "p90_ms": 847.817,
-            "p95_ms": 849.954,
-            "p99_ms": 851.664,
+            "max_ms": 583.387,
+            "mean_ms": 485.46,
+            "p50_ms": 485.46,
+            "p90_ms": 563.802,
+            "p95_ms": 573.594,
+            "p99_ms": 581.428,
             "sample_count": 2
           },
-          "run_id": "run_8a61210ecdcce14d820ed3c2421e280f",
+          "run_id": "run_85b4c2274aacc0dfc356f27d0061e439",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -111,15 +111,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 851.047,
-            "mean_ms": 830.762,
-            "p50_ms": 830.762,
-            "p90_ms": 846.99,
-            "p95_ms": 849.018,
-            "p99_ms": 850.641,
+            "max_ms": 581.482,
+            "mean_ms": 485.58,
+            "p50_ms": 485.58,
+            "p90_ms": 562.302,
+            "p95_ms": 571.892,
+            "p99_ms": 579.564,
             "sample_count": 2
           },
-          "run_id": "run_c34fcb72051af9944bb30f16c37f3fbc",
+          "run_id": "run_b642692f3475aa70a20bf38eb97b87ae",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -128,15 +128,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 1006.511,
-            "mean_ms": 831.354,
-            "p50_ms": 831.354,
-            "p90_ms": 971.48,
-            "p95_ms": 988.995,
-            "p99_ms": 1003.008,
+            "max_ms": 585.197,
+            "mean_ms": 485.495,
+            "p50_ms": 485.495,
+            "p90_ms": 565.256,
+            "p95_ms": 575.227,
+            "p99_ms": 583.203,
             "sample_count": 2
           },
-          "run_id": "run_df2eaea16d9e1a2aba288ae8e1a99143",
+          "run_id": "run_60edb07bf1d84df526c4f7874dadbf76",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -146,139 +146,139 @@
     },
     "run_lifecycle": {
       "accepted_reviews": {
-        "run_07c60221505a14f2122a50c8c48fd5f6": [],
-        "run_2636b35fa58391b0ed0c2e756f47cbac": [],
-        "run_290d1cc54a86796903d282e0e22adf15": [],
-        "run_3c3cb3704570ae96923820dd772dc505": [
+        "run_089908ad6e4c87691aedec7a0ba23220": [],
+        "run_3550108c6d29fa56b8bce02e6b82da5c": [],
+        "run_44df38a8cbd4fb1527922044d581c04f": [
           "REVIEW_EVIDENCE_DECISIONS",
           "REVIEW_CANONICAL_IDENTITY",
           "REVIEW_ANALYTICAL_PLAN",
           "REVIEW_MATERIALIZATION_PLAN"
         ],
-        "run_4027f143c11e92dc4f4978f835df9198": [],
-        "run_4f742be630aa2904ec4184060b31a2ca": [],
-        "run_65d804263d966d46662d558cb0910924": [],
-        "run_6e103de2e4fd95c05bf8595dddf609fc": [],
-        "run_8a61210ecdcce14d820ed3c2421e280f": [],
-        "run_8f00e7b7b3ed8b13441d3626584bb0a6": [],
-        "run_97ba1f0320f210b6a04964f1926bd874": [],
-        "run_9afb2b71ea508c69af1bc5055b6a4525": [],
-        "run_c34fcb72051af9944bb30f16c37f3fbc": [],
-        "run_c53060b3abdd6516dbf330404d2bfaf5": [],
-        "run_c8839659d4318cea51b9f53a8edd1db0": [],
-        "run_cef7c084d429e7a9deb63cbfb24f3141": [],
-        "run_cf693635ba7c2f715ca3a024986a0b64": [],
-        "run_df2eaea16d9e1a2aba288ae8e1a99143": [],
-        "run_e855af28de6591886d71623bb578349d": [],
-        "run_f4ee52b570fba7bf50531c9a2f06c160": [
+        "run_4737c2a4349d59004a498719f1f7cfe2": [],
+        "run_5629047749d2e89a86e39bbffd967984": [
           "REVIEW_EVIDENCE_DECISIONS",
           "REVIEW_CANONICAL_IDENTITY",
           "REVIEW_ANALYTICAL_PLAN",
           "REVIEW_MATERIALIZATION_PLAN"
         ],
-        "run_f516a0e56330cfd70ad822aab8ed2365": [],
-        "run_fc307f7b00bed3749bb405a9fcb77130": []
+        "run_5a1c6f1579984b03a95ce5c85fe783f9": [],
+        "run_60edb07bf1d84df526c4f7874dadbf76": [],
+        "run_703210aed8076e2d679c290e05010087": [],
+        "run_85b4c2274aacc0dfc356f27d0061e439": [],
+        "run_85db483625dffd48bdbc60b5bd5b1230": [],
+        "run_8f0b8f363632147172e4cc65d8c5301e": [],
+        "run_b642692f3475aa70a20bf38eb97b87ae": [],
+        "run_b86e415177e95b7f6263b854eb05b70d": [],
+        "run_bb9e6daf99a1c02e76c760d7d0b5350d": [],
+        "run_cbe1b6e300dbb7333767df367439a208": [],
+        "run_deda1c7c936706d88bc5f1233599b67e": [],
+        "run_df7759507bc5f67fcedbb8887c3c94dd": [],
+        "run_ebcecb9a77ba291a46840c628eb25165": [],
+        "run_f0cc62f4dad6f21a024c07a51f38d2fe": [],
+        "run_f816e854abac834b6d5085989b8d837e": [],
+        "run_fc2578b498b0246012b67b98679f4919": [],
+        "run_fd2df5973efac2d2942015cd835d9be2": []
       },
       "cancelled_runs": [
-        "run_2636b35fa58391b0ed0c2e756f47cbac",
-        "run_c53060b3abdd6516dbf330404d2bfaf5",
-        "run_8a61210ecdcce14d820ed3c2421e280f",
-        "run_df2eaea16d9e1a2aba288ae8e1a99143",
-        "run_c34fcb72051af9944bb30f16c37f3fbc",
-        "run_07c60221505a14f2122a50c8c48fd5f6",
-        "run_65d804263d966d46662d558cb0910924",
-        "run_4f742be630aa2904ec4184060b31a2ca",
-        "run_fc307f7b00bed3749bb405a9fcb77130",
-        "run_cef7c084d429e7a9deb63cbfb24f3141",
-        "run_f516a0e56330cfd70ad822aab8ed2365",
-        "run_8f00e7b7b3ed8b13441d3626584bb0a6",
-        "run_290d1cc54a86796903d282e0e22adf15",
-        "run_6e103de2e4fd95c05bf8595dddf609fc",
-        "run_4027f143c11e92dc4f4978f835df9198",
-        "run_9afb2b71ea508c69af1bc5055b6a4525",
-        "run_97ba1f0320f210b6a04964f1926bd874",
-        "run_cf693635ba7c2f715ca3a024986a0b64",
-        "run_e855af28de6591886d71623bb578349d",
-        "run_c8839659d4318cea51b9f53a8edd1db0"
+        "run_ebcecb9a77ba291a46840c628eb25165",
+        "run_b86e415177e95b7f6263b854eb05b70d",
+        "run_85b4c2274aacc0dfc356f27d0061e439",
+        "run_b642692f3475aa70a20bf38eb97b87ae",
+        "run_60edb07bf1d84df526c4f7874dadbf76",
+        "run_089908ad6e4c87691aedec7a0ba23220",
+        "run_3550108c6d29fa56b8bce02e6b82da5c",
+        "run_8f0b8f363632147172e4cc65d8c5301e",
+        "run_85db483625dffd48bdbc60b5bd5b1230",
+        "run_4737c2a4349d59004a498719f1f7cfe2",
+        "run_deda1c7c936706d88bc5f1233599b67e",
+        "run_cbe1b6e300dbb7333767df367439a208",
+        "run_fd2df5973efac2d2942015cd835d9be2",
+        "run_5a1c6f1579984b03a95ce5c85fe783f9",
+        "run_f816e854abac834b6d5085989b8d837e",
+        "run_fc2578b498b0246012b67b98679f4919",
+        "run_df7759507bc5f67fcedbb8887c3c94dd",
+        "run_703210aed8076e2d679c290e05010087",
+        "run_f0cc62f4dad6f21a024c07a51f38d2fe",
+        "run_bb9e6daf99a1c02e76c760d7d0b5350d"
       ],
       "failed_or_blocked": {},
       "final_statuses": {
-        "run_07c60221505a14f2122a50c8c48fd5f6": "CANCELLED",
-        "run_2636b35fa58391b0ed0c2e756f47cbac": "CANCELLED",
-        "run_290d1cc54a86796903d282e0e22adf15": "CANCELLED",
-        "run_3c3cb3704570ae96923820dd772dc505": "SUCCEEDED",
-        "run_4027f143c11e92dc4f4978f835df9198": "CANCELLED",
-        "run_4f742be630aa2904ec4184060b31a2ca": "CANCELLED",
-        "run_65d804263d966d46662d558cb0910924": "CANCELLED",
-        "run_6e103de2e4fd95c05bf8595dddf609fc": "CANCELLED",
-        "run_8a61210ecdcce14d820ed3c2421e280f": "CANCELLED",
-        "run_8f00e7b7b3ed8b13441d3626584bb0a6": "CANCELLED",
-        "run_97ba1f0320f210b6a04964f1926bd874": "CANCELLED",
-        "run_9afb2b71ea508c69af1bc5055b6a4525": "CANCELLED",
-        "run_c34fcb72051af9944bb30f16c37f3fbc": "CANCELLED",
-        "run_c53060b3abdd6516dbf330404d2bfaf5": "CANCELLED",
-        "run_c8839659d4318cea51b9f53a8edd1db0": "CANCELLED",
-        "run_cef7c084d429e7a9deb63cbfb24f3141": "CANCELLED",
-        "run_cf693635ba7c2f715ca3a024986a0b64": "CANCELLED",
-        "run_df2eaea16d9e1a2aba288ae8e1a99143": "CANCELLED",
-        "run_e855af28de6591886d71623bb578349d": "CANCELLED",
-        "run_f4ee52b570fba7bf50531c9a2f06c160": "SUCCEEDED",
-        "run_f516a0e56330cfd70ad822aab8ed2365": "CANCELLED",
-        "run_fc307f7b00bed3749bb405a9fcb77130": "CANCELLED"
+        "run_089908ad6e4c87691aedec7a0ba23220": "CANCELLED",
+        "run_3550108c6d29fa56b8bce02e6b82da5c": "CANCELLED",
+        "run_44df38a8cbd4fb1527922044d581c04f": "SUCCEEDED",
+        "run_4737c2a4349d59004a498719f1f7cfe2": "CANCELLED",
+        "run_5629047749d2e89a86e39bbffd967984": "SUCCEEDED",
+        "run_5a1c6f1579984b03a95ce5c85fe783f9": "CANCELLED",
+        "run_60edb07bf1d84df526c4f7874dadbf76": "CANCELLED",
+        "run_703210aed8076e2d679c290e05010087": "CANCELLED",
+        "run_85b4c2274aacc0dfc356f27d0061e439": "CANCELLED",
+        "run_85db483625dffd48bdbc60b5bd5b1230": "CANCELLED",
+        "run_8f0b8f363632147172e4cc65d8c5301e": "CANCELLED",
+        "run_b642692f3475aa70a20bf38eb97b87ae": "CANCELLED",
+        "run_b86e415177e95b7f6263b854eb05b70d": "CANCELLED",
+        "run_bb9e6daf99a1c02e76c760d7d0b5350d": "CANCELLED",
+        "run_cbe1b6e300dbb7333767df367439a208": "CANCELLED",
+        "run_deda1c7c936706d88bc5f1233599b67e": "CANCELLED",
+        "run_df7759507bc5f67fcedbb8887c3c94dd": "CANCELLED",
+        "run_ebcecb9a77ba291a46840c628eb25165": "CANCELLED",
+        "run_f0cc62f4dad6f21a024c07a51f38d2fe": "CANCELLED",
+        "run_f816e854abac834b6d5085989b8d837e": "CANCELLED",
+        "run_fc2578b498b0246012b67b98679f4919": "CANCELLED",
+        "run_fd2df5973efac2d2942015cd835d9be2": "CANCELLED"
       },
       "review_events": [
         {
           "action_status": 200,
           "checkpoint": "REVIEW_EVIDENCE_DECISIONS",
           "resume_status": 202,
-          "run_id": "run_3c3cb3704570ae96923820dd772dc505"
+          "run_id": "run_5629047749d2e89a86e39bbffd967984"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_EVIDENCE_DECISIONS",
           "resume_status": 202,
-          "run_id": "run_f4ee52b570fba7bf50531c9a2f06c160"
+          "run_id": "run_44df38a8cbd4fb1527922044d581c04f"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_CANONICAL_IDENTITY",
           "resume_status": 202,
-          "run_id": "run_3c3cb3704570ae96923820dd772dc505"
+          "run_id": "run_5629047749d2e89a86e39bbffd967984"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_CANONICAL_IDENTITY",
           "resume_status": 202,
-          "run_id": "run_f4ee52b570fba7bf50531c9a2f06c160"
+          "run_id": "run_44df38a8cbd4fb1527922044d581c04f"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_ANALYTICAL_PLAN",
           "resume_status": 202,
-          "run_id": "run_3c3cb3704570ae96923820dd772dc505"
+          "run_id": "run_5629047749d2e89a86e39bbffd967984"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_ANALYTICAL_PLAN",
           "resume_status": 202,
-          "run_id": "run_f4ee52b570fba7bf50531c9a2f06c160"
+          "run_id": "run_44df38a8cbd4fb1527922044d581c04f"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_MATERIALIZATION_PLAN",
           "resume_status": 202,
-          "run_id": "run_3c3cb3704570ae96923820dd772dc505"
+          "run_id": "run_5629047749d2e89a86e39bbffd967984"
         },
         {
           "action_status": 200,
           "checkpoint": "REVIEW_MATERIALIZATION_PLAN",
           "resume_status": 202,
-          "run_id": "run_f4ee52b570fba7bf50531c9a2f06c160"
+          "run_id": "run_44df38a8cbd4fb1527922044d581c04f"
         }
       ],
       "successful_runs": [
-        "run_f4ee52b570fba7bf50531c9a2f06c160",
-        "run_3c3cb3704570ae96923820dd772dc505"
+        "run_5629047749d2e89a86e39bbffd967984",
+        "run_44df38a8cbd4fb1527922044d581c04f"
       ],
       "terminal_runs": 22,
       "timed_out_runs": []
@@ -290,12 +290,12 @@
       "errors": 0,
       "label": "OVERLOAD_RUN_SUBMISSIONS",
       "latency": {
-        "max_ms": 23733.795,
-        "mean_ms": 17309.015,
-        "p50_ms": 18490.091,
-        "p90_ms": 23730.536,
-        "p95_ms": 23730.86,
-        "p99_ms": 23733.208,
+        "max_ms": 22160.713,
+        "mean_ms": 16525.878,
+        "p50_ms": 17536.406,
+        "p90_ms": 22160.532,
+        "p95_ms": 22160.557,
+        "p99_ms": 22160.682,
         "sample_count": 20
       },
       "replayed_responses": 0,
@@ -304,7 +304,7 @@
         "202": 20
       },
       "successful_requests": 20,
-      "wall_time_ms": 23744.599
+      "wall_time_ms": 22170.674
     }
   },
   "arrival_patterns": {
@@ -313,12 +313,12 @@
       "errors": 0,
       "label": "BURST",
       "latency": {
-        "max_ms": 60.048,
-        "mean_ms": 36.981,
-        "p50_ms": 35.01,
-        "p90_ms": 52.694,
-        "p95_ms": 54.322,
-        "p99_ms": 58.457,
+        "max_ms": 67.703,
+        "mean_ms": 42.717,
+        "p50_ms": 40.817,
+        "p90_ms": 63.949,
+        "p95_ms": 67.457,
+        "p99_ms": 67.687,
         "sample_count": 32
       },
       "replayed_responses": 0,
@@ -327,19 +327,19 @@
         "200": 32
       },
       "successful_requests": 32,
-      "wall_time_ms": 67.85
+      "wall_time_ms": 84.67
     },
     "OVERLOAD": {
       "concurrency": 20,
       "errors": 0,
       "label": "OVERLOAD_RUN_SUBMISSIONS",
       "latency": {
-        "max_ms": 23733.795,
-        "mean_ms": 17309.015,
-        "p50_ms": 18490.091,
-        "p90_ms": 23730.536,
-        "p95_ms": 23730.86,
-        "p99_ms": 23733.208,
+        "max_ms": 22160.713,
+        "mean_ms": 16525.878,
+        "p50_ms": 17536.406,
+        "p90_ms": 22160.532,
+        "p95_ms": 22160.557,
+        "p99_ms": 22160.682,
         "sample_count": 20
       },
       "replayed_responses": 0,
@@ -348,7 +348,7 @@
         "202": 20
       },
       "successful_requests": 20,
-      "wall_time_ms": 23744.599
+      "wall_time_ms": 22170.674
     },
     "RAMP": {
       "concurrency": 8,
@@ -361,12 +361,12 @@
       "errors": 0,
       "label": "RAMP",
       "latency": {
-        "max_ms": 29.421,
-        "mean_ms": 12.156,
-        "p50_ms": 9.942,
-        "p90_ms": 25.015,
-        "p95_ms": 27.087,
-        "p99_ms": 28.943,
+        "max_ms": 32.527,
+        "mean_ms": 13.21,
+        "p50_ms": 11.839,
+        "p90_ms": 26.78,
+        "p95_ms": 29.32,
+        "p99_ms": 31.89,
         "sample_count": 24
       },
       "replayed_responses": 0,
@@ -375,27 +375,27 @@
         "200": 24
       },
       "successful_requests": 24,
-      "wall_time_ms": 48.803
+      "wall_time_ms": 49.984
     },
     "STEADY": {
       "concurrency": 1,
       "latency": {
-        "max_ms": 21.557,
-        "mean_ms": 7.927,
-        "p50_ms": 3.462,
-        "p90_ms": 17.511,
-        "p95_ms": 17.593,
-        "p99_ms": 20.648,
+        "max_ms": 18.259,
+        "mean_ms": 4.002,
+        "p50_ms": 2.913,
+        "p90_ms": 5.278,
+        "p95_ms": 7.717,
+        "p99_ms": 15.921,
         "sample_count": 24
       },
       "requests": 24,
       "statuses": {
         "200": 24
       },
-      "wall_time_ms": 1244.79
+      "wall_time_ms": 1187.273
     }
   },
-  "assessed_commit": "0bf205bb215bd3a63f9fade85c0c1d8667165d51",
+  "assessed_commit": "69b28bb5521c8d63275be232f783fc8a6d0c8cd2",
   "claims": {
     "exactly_once": false,
     "production_capacity": false,
@@ -403,19 +403,19 @@
     "public_sla": false,
     "step39_started": false
   },
-  "content_commit": "0bf205bb215bd3a63f9fade85c0c1d8667165d51",
+  "content_commit": "69b28bb5521c8d63275be232f783fc8a6d0c8cd2",
   "controls": {
     "artifact_staging_concurrency": {
       "concurrency": 8,
       "errors": 0,
       "label": "ARTIFACT_STAGING",
       "latency": {
-        "max_ms": 3633.378,
-        "mean_ms": 2430.253,
-        "p50_ms": 2504.106,
-        "p90_ms": 3542.601,
-        "p95_ms": 3584.045,
-        "p99_ms": 3624.661,
+        "max_ms": 2493.881,
+        "mean_ms": 2063.506,
+        "p50_ms": 2314.568,
+        "p90_ms": 2426.307,
+        "p95_ms": 2431.54,
+        "p99_ms": 2476.329,
         "sample_count": 32
       },
       "pass": true,
@@ -426,7 +426,7 @@
         "201": 32
       },
       "successful_requests": 32,
-      "wall_time_ms": 25823.009
+      "wall_time_ms": 24240.46
     },
     "at_least_once_replay_safety": {
       "cases": [
@@ -434,15 +434,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 812.153,
-            "mean_ms": 703.966,
-            "p50_ms": 703.966,
-            "p90_ms": 790.516,
-            "p95_ms": 801.334,
-            "p99_ms": 809.989,
+            "max_ms": 606.973,
+            "mean_ms": 398.184,
+            "p50_ms": 398.184,
+            "p90_ms": 565.215,
+            "p95_ms": 586.094,
+            "p99_ms": 602.797,
             "sample_count": 2
           },
-          "run_id": "run_2636b35fa58391b0ed0c2e756f47cbac",
+          "run_id": "run_ebcecb9a77ba291a46840c628eb25165",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -451,15 +451,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 852.978,
-            "mean_ms": 830.792,
-            "p50_ms": 830.792,
-            "p90_ms": 848.541,
-            "p95_ms": 850.759,
-            "p99_ms": 852.534,
+            "max_ms": 582.462,
+            "mean_ms": 485.338,
+            "p50_ms": 485.338,
+            "p90_ms": 563.037,
+            "p95_ms": 572.75,
+            "p99_ms": 580.52,
             "sample_count": 2
           },
-          "run_id": "run_c53060b3abdd6516dbf330404d2bfaf5",
+          "run_id": "run_b86e415177e95b7f6263b854eb05b70d",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -468,15 +468,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 852.091,
-            "mean_ms": 830.724,
-            "p50_ms": 830.724,
-            "p90_ms": 847.817,
-            "p95_ms": 849.954,
-            "p99_ms": 851.664,
+            "max_ms": 583.387,
+            "mean_ms": 485.46,
+            "p50_ms": 485.46,
+            "p90_ms": 563.802,
+            "p95_ms": 573.594,
+            "p99_ms": 581.428,
             "sample_count": 2
           },
-          "run_id": "run_8a61210ecdcce14d820ed3c2421e280f",
+          "run_id": "run_85b4c2274aacc0dfc356f27d0061e439",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -485,15 +485,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 851.047,
-            "mean_ms": 830.762,
-            "p50_ms": 830.762,
-            "p90_ms": 846.99,
-            "p95_ms": 849.018,
-            "p99_ms": 850.641,
+            "max_ms": 581.482,
+            "mean_ms": 485.58,
+            "p50_ms": 485.58,
+            "p90_ms": 562.302,
+            "p95_ms": 571.892,
+            "p99_ms": 579.564,
             "sample_count": 2
           },
-          "run_id": "run_c34fcb72051af9944bb30f16c37f3fbc",
+          "run_id": "run_b642692f3475aa70a20bf38eb97b87ae",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -502,15 +502,15 @@
           "first_replayed": true,
           "first_status": 202,
           "latency": {
-            "max_ms": 1006.511,
-            "mean_ms": 831.354,
-            "p50_ms": 831.354,
-            "p90_ms": 971.48,
-            "p95_ms": 988.995,
-            "p99_ms": 1003.008,
+            "max_ms": 585.197,
+            "mean_ms": 485.495,
+            "p50_ms": 485.495,
+            "p90_ms": 565.256,
+            "p95_ms": 575.227,
+            "p99_ms": 583.203,
             "sample_count": 2
           },
-          "run_id": "run_df2eaea16d9e1a2aba288ae8e1a99143",
+          "run_id": "run_60edb07bf1d84df526c4f7874dadbf76",
           "same_command": true,
           "second_replayed": true,
           "second_status": 202
@@ -526,24 +526,24 @@
       "queue_depth_observed": 16
     },
     "bounded_soak_memory": {
-      "api_process_rss_before_bytes": 297123840,
+      "api_process_rss_before_bytes": 293494784,
       "bounded_duration_seconds": 180,
       "pass": true,
       "worker_ramp": [
         {
-          "rss_delta_bytes": 159744,
+          "rss_delta_bytes": 167936,
           "worker_count": 1
         },
         {
-          "rss_delta_bytes": 188416,
+          "rss_delta_bytes": 53248,
           "worker_count": 2
         },
         {
-          "rss_delta_bytes": 450560,
+          "rss_delta_bytes": 430080,
           "worker_count": 4
         },
         {
-          "rss_delta_bytes": 368640,
+          "rss_delta_bytes": 434176,
           "worker_count": 8
         }
       ]
@@ -563,12 +563,12 @@
         "errors": 0,
         "label": "OVERLOAD_RUN_SUBMISSIONS",
         "latency": {
-          "max_ms": 23733.795,
-          "mean_ms": 17309.015,
-          "p50_ms": 18490.091,
-          "p90_ms": 23730.536,
-          "p95_ms": 23730.86,
-          "p99_ms": 23733.208,
+          "max_ms": 22160.713,
+          "mean_ms": 16525.878,
+          "p50_ms": 17536.406,
+          "p90_ms": 22160.532,
+          "p95_ms": 22160.557,
+          "p99_ms": 22160.682,
           "sample_count": 20
         },
         "replayed_responses": 0,
@@ -577,7 +577,7 @@
           "202": 20
         },
         "successful_requests": 20,
-        "wall_time_ms": 23744.599
+        "wall_time_ms": 22170.674
       },
       "pass": true,
       "recovery": {
@@ -587,10 +587,10 @@
     },
     "g11_regression": {
       "command": "python -m pytest -q tests/integration/test_step28_job_processing.py tests/integration/test_step29_product_path.py",
-      "elapsed_ms": 165948.487,
+      "elapsed_ms": 160627.583,
       "pass": true,
       "returncode": 0,
-      "tail": ".................. [100%] ============================== warnings summary =============================== tests/integration/test_step29_product_path.py::test_real_csv_reaches_g6_after_four_review_checkpoints C:\\Users\\paran\\AppData\\Roaming\\Python\\Python310\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.6.0)/charset_normalizer (3.4.4) doesn't match a supported version! warnings.warn( tests/integration/test_step29_product_path.py::test_real_csv_reaches_g6_after_four_review_checkpoints C:\\Users\\paran\\AppData\\Roaming\\Python\\Python310\\site-packages\\dataprofiler\\data_readers\\data_utils.py:32: DeprecationWarning: chardet.universaldetector is deprecated, import UniversalDetector from chardet or chardet.detector instead from chardet.universaldetector import UniversalDetector -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html 18 passed, 2 warnings in 163.98s (0:02:43)"
+      "tail": ".................. [100%] ============================== warnings summary =============================== tests/integration/test_step29_product_path.py::test_real_csv_reaches_g6_after_four_review_checkpoints C:\\Users\\paran\\AppData\\Roaming\\Python\\Python310\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.6.0)/charset_normalizer (3.4.4) doesn't match a supported version! warnings.warn( tests/integration/test_step29_product_path.py::test_real_csv_reaches_g6_after_four_review_checkpoints C:\\Users\\paran\\AppData\\Roaming\\Python\\Python310\\site-packages\\dataprofiler\\data_readers\\data_utils.py:32: DeprecationWarning: chardet.universaldetector is deprecated, import UniversalDetector from chardet or chardet.detector instead from chardet.universaldetector import UniversalDetector -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html 18 passed, 2 warnings in 158.71s (0:02:38)"
     },
     "g6_concurrent_correctness": {
       "pass": true,
@@ -618,39 +618,39 @@
       "pass": true,
       "worker_ramp": [
         {
-          "max_ms": 1671.768,
-          "mean_ms": 1105.034,
-          "p50_ms": 1105.034,
-          "p90_ms": 1558.421,
-          "p95_ms": 1615.095,
-          "p99_ms": 1660.433,
+          "max_ms": 1820.969,
+          "mean_ms": 1206.251,
+          "p50_ms": 1206.251,
+          "p90_ms": 1698.025,
+          "p95_ms": 1759.497,
+          "p99_ms": 1808.675,
           "sample_count": 2
         },
         {
-          "max_ms": 3851.424,
-          "mean_ms": 2544.14,
-          "p50_ms": 2520.334,
-          "p90_ms": 3673.177,
-          "p95_ms": 3762.3,
-          "p99_ms": 3833.599,
+          "max_ms": 3803.586,
+          "mean_ms": 2421.328,
+          "p50_ms": 2424.102,
+          "p90_ms": 3666.856,
+          "p95_ms": 3735.221,
+          "p99_ms": 3789.913,
           "sample_count": 4
         },
         {
-          "max_ms": 9277.156,
-          "mean_ms": 6627.128,
-          "p50_ms": 6433.561,
-          "p90_ms": 8833.921,
-          "p95_ms": 9055.538,
-          "p99_ms": 9232.832,
+          "max_ms": 7752.017,
+          "mean_ms": 4933.25,
+          "p50_ms": 4946.614,
+          "p90_ms": 7422.051,
+          "p95_ms": 7587.034,
+          "p99_ms": 7719.02,
           "sample_count": 8
         },
         {
-          "max_ms": 17346.553,
-          "mean_ms": 11155.574,
-          "p50_ms": 11147.793,
-          "p90_ms": 16419.436,
-          "p95_ms": 16897.248,
-          "p99_ms": 17256.692,
+          "max_ms": 18070.187,
+          "mean_ms": 11295.679,
+          "p50_ms": 10996.444,
+          "p90_ms": 17284.789,
+          "p95_ms": 17711.911,
+          "p99_ms": 17998.532,
           "sample_count": 16
         }
       ]
@@ -675,14 +675,14 @@
   "environment": {
     "api_process": {
       "host": "127.0.0.1",
-      "pid": 5560,
-      "port": 19245,
+      "pid": 27364,
+      "port": 18921,
       "workers": 1
     },
     "architecture": "AMD64",
     "control_store": "project SQLite control store; WAL; synchronous=FULL; busy_timeout=30000ms",
     "cpu_logical_count": 6,
-    "git_head": "0bf205bb215bd3a63f9fade85c0c1d8667165d51",
+    "git_head": "69b28bb5521c8d63275be232f783fc8a6d0c8cd2",
     "os": "Windows-10-10.0.26200-SP0",
     "provider_image": "dirty-data-to-olap-desbordante-step37:local",
     "provider_image_digest": "sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638",
@@ -698,7 +698,7 @@
       "extraction_max_rows": 10000,
       "source_write_policy": "read-only"
     },
-    "started_at_utc": "2026-09-18T14:51:35.467719+00:00",
+    "started_at_utc": "2026-09-18T15:02:25.647297+00:00",
     "worker_ramp": [
       1,
       2,
@@ -725,9 +725,9 @@
     "jobs": 2,
     "kind": "local-reference-only",
     "production_claim": false,
-    "queue_wait_p95_ms": 1615.095,
+    "queue_wait_p95_ms": 1759.497,
     "source": "bounded JobWorker/BoundedWorkerPool run",
-    "throughput_jobs_per_second": 0.674,
+    "throughput_jobs_per_second": 0.654,
     "worker_count": 1
   },
   "scale_limits": {
@@ -758,102 +758,102 @@
     "ramp": [
       {
         "artifact_count": 2,
-        "elapsed_ms": 2965.264,
+        "elapsed_ms": 3056.099,
         "jobs": 2,
         "pump_outcomes": 3,
         "queue_depth_peak": 2,
         "queue_wait_latency": {
-          "max_ms": 1671.768,
-          "mean_ms": 1105.034,
-          "p50_ms": 1105.034,
-          "p90_ms": 1558.421,
-          "p95_ms": 1615.095,
-          "p99_ms": 1660.433,
+          "max_ms": 1820.969,
+          "mean_ms": 1206.251,
+          "p50_ms": 1206.251,
+          "p90_ms": 1698.025,
+          "p95_ms": 1759.497,
+          "p99_ms": 1808.675,
           "sample_count": 2
         },
-        "rss_after_bytes": 68247552,
-        "rss_before_bytes": 68087808,
-        "rss_delta_bytes": 159744,
+        "rss_after_bytes": 68399104,
+        "rss_before_bytes": 68231168,
+        "rss_delta_bytes": 167936,
         "statuses": {
           "SUCCEEDED": 2
         },
         "successful_jobs": 2,
-        "throughput_jobs_per_second": 0.674,
+        "throughput_jobs_per_second": 0.654,
         "worker_count": 1
       },
       {
         "artifact_count": 4,
-        "elapsed_ms": 6486.908,
+        "elapsed_ms": 6349.249,
         "jobs": 4,
         "pump_outcomes": 6,
         "queue_depth_peak": 4,
         "queue_wait_latency": {
-          "max_ms": 3851.424,
-          "mean_ms": 2544.14,
-          "p50_ms": 2520.334,
-          "p90_ms": 3673.177,
-          "p95_ms": 3762.3,
-          "p99_ms": 3833.599,
+          "max_ms": 3803.586,
+          "mean_ms": 2421.328,
+          "p50_ms": 2424.102,
+          "p90_ms": 3666.856,
+          "p95_ms": 3735.221,
+          "p99_ms": 3789.913,
           "sample_count": 4
         },
-        "rss_after_bytes": 68452352,
-        "rss_before_bytes": 68263936,
-        "rss_delta_bytes": 188416,
+        "rss_after_bytes": 68460544,
+        "rss_before_bytes": 68407296,
+        "rss_delta_bytes": 53248,
         "statuses": {
           "SUCCEEDED": 4
         },
         "successful_jobs": 4,
-        "throughput_jobs_per_second": 0.617,
+        "throughput_jobs_per_second": 0.63,
         "worker_count": 2
       },
       {
         "artifact_count": 8,
-        "elapsed_ms": 13066.294,
+        "elapsed_ms": 12709.93,
         "jobs": 8,
         "pump_outcomes": 12,
         "queue_depth_peak": 8,
         "queue_wait_latency": {
-          "max_ms": 9277.156,
-          "mean_ms": 6627.128,
-          "p50_ms": 6433.561,
-          "p90_ms": 8833.921,
-          "p95_ms": 9055.538,
-          "p99_ms": 9232.832,
+          "max_ms": 7752.017,
+          "mean_ms": 4933.25,
+          "p50_ms": 4946.614,
+          "p90_ms": 7422.051,
+          "p95_ms": 7587.034,
+          "p99_ms": 7719.02,
           "sample_count": 8
         },
-        "rss_after_bytes": 68902912,
-        "rss_before_bytes": 68452352,
-        "rss_delta_bytes": 450560,
+        "rss_after_bytes": 68894720,
+        "rss_before_bytes": 68464640,
+        "rss_delta_bytes": 430080,
         "statuses": {
           "SUCCEEDED": 8
         },
         "successful_jobs": 8,
-        "throughput_jobs_per_second": 0.612,
+        "throughput_jobs_per_second": 0.629,
         "worker_count": 4
       },
       {
         "artifact_count": 16,
-        "elapsed_ms": 26019.274,
+        "elapsed_ms": 27527.782,
         "jobs": 16,
         "pump_outcomes": 24,
         "queue_depth_peak": 16,
         "queue_wait_latency": {
-          "max_ms": 17346.553,
-          "mean_ms": 11155.574,
-          "p50_ms": 11147.793,
-          "p90_ms": 16419.436,
-          "p95_ms": 16897.248,
-          "p99_ms": 17256.692,
+          "max_ms": 18070.187,
+          "mean_ms": 11295.679,
+          "p50_ms": 10996.444,
+          "p90_ms": 17284.789,
+          "p95_ms": 17711.911,
+          "p99_ms": 17998.532,
           "sample_count": 16
         },
-        "rss_after_bytes": 69275648,
-        "rss_before_bytes": 68907008,
-        "rss_delta_bytes": 368640,
+        "rss_after_bytes": 69369856,
+        "rss_before_bytes": 68935680,
+        "rss_delta_bytes": 434176,
         "statuses": {
           "SUCCEEDED": 16
         },
         "successful_jobs": 16,
-        "throughput_jobs_per_second": 0.615,
+        "throughput_jobs_per_second": 0.581,
         "worker_count": 8
       }
     ]
