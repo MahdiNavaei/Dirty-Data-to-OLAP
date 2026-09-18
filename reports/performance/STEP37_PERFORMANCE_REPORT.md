@@ -3,7 +3,7 @@
 ## Result
 
 - Overall result: `PASS`
-- Assessed content commit: `8ca39fe565830debc319feebe3ee23631dd6a240`
+- Assessed content commit: `18d48a5f0af64e0b2eb2a8aa311c949a59cd05e6`
 - Scope: single-run/stage performance only; G12 capacity remains pending.
 
 ## Environment
@@ -182,7 +182,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
   {
     "benchmark_id": "PERF-MAT-001",
     "cold_warm": "COLD",
-    "cpu_seconds": 0.140625,
+    "cpu_seconds": 0.125,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "dimension_rows": {
@@ -194,7 +194,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "fact_rows": 3,
       "materialization_mode": "PROJECT_DUCKDB_MATERIALIZER",
       "run": "first materialization",
-      "semantic_artifact_content_hash": "9c4d943f8e5eeb4d3de4b10c754f8925dda38c63c968e4be48ab97ce499264c0",
+      "semantic_artifact_content_hash": "ae5d802484a0f5b949cd1cfac423539c05474ad34a8d68ea42e29a4416444289",
       "table_count": 5,
       "target_sha256": "88ba6c6b4f223dfee9d49d8f5524dd50921a6e8ba85ecfcc4040aa5865bea794"
     },
@@ -207,7 +207,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "temporary_bytes_observed": null
     },
     "peak_memory": {
-      "bytes": 5456770,
+      "bytes": 5456808,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -215,63 +215,63 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [
       {
         "calls": 150,
-        "cumulative_seconds": 0.0001849,
+        "cumulative_seconds": 0.0001803,
         "function": "enum.py:193:__get__"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0053799,
+        "cumulative_seconds": 0.0046015,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 4.59e-05,
+        "cumulative_seconds": 3.93e-05,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.4154335,
+        "cumulative_seconds": 0.3278545,
         "function": "run_step37_performance.py:236:materialize"
       },
       {
-        "calls": 1,
-        "cumulative_seconds": 0.408115,
-        "function": "materialization.py:47:materialize"
-      },
-      {
         "calls": 22,
-        "cumulative_seconds": 0.0052298,
+        "cumulative_seconds": 0.0044943,
         "function": "encoder.py:205:iterencode"
       },
       {
         "calls": 150,
-        "cumulative_seconds": 3.92e-05,
+        "cumulative_seconds": 3.7e-05,
         "function": "enum.py:1255:value"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0056112,
+        "cumulative_seconds": 0.0047672,
         "function": "__init__.py:183:dumps"
       },
       {
-        "calls": 2,
-        "cumulative_seconds": 0.0001433,
-        "function": "pathlib.py:703:relative_to"
-      },
-      {
-        "calls": 1,
-        "cumulative_seconds": 3.32e-05,
-        "function": "pathlib.py:667:with_name"
+        "calls": 7,
+        "cumulative_seconds": 0.0002716,
+        "function": "pathlib.py:484:_parse_args"
       },
       {
         "calls": 15,
-        "cumulative_seconds": 3.85e-05,
+        "cumulative_seconds": 3.89e-05,
         "function": "pathlib.py:147:splitroot"
       },
       {
-        "calls": 7,
-        "cumulative_seconds": 0.0003008,
-        "function": "pathlib.py:484:_parse_args"
+        "calls": 12,
+        "cumulative_seconds": 0.0526031,
+        "function": "~:0:<built-in method _duckdb.execute>"
+      },
+      {
+        "calls": 1,
+        "cumulative_seconds": 0.0001225,
+        "function": "~:0:<built-in method _duckdb.fetchall>"
+      },
+      {
+        "calls": 5,
+        "cumulative_seconds": 3.11e-05,
+        "function": "~:0:<built-in method _duckdb.fetchone>"
       }
     ],
     "status": "PASS",
@@ -290,12 +290,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.4155294
+    "wall_seconds": 0.3279248
   },
   {
     "benchmark_id": "PERF-MAT-002",
     "cold_warm": "WARM",
-    "cpu_seconds": 0.140625,
+    "cpu_seconds": 0.09375,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "dimension_rows": {
@@ -307,7 +307,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "fact_rows": 3,
       "materialization_mode": "PROJECT_DUCKDB_MATERIALIZER",
       "run": "identical repeated materialization",
-      "semantic_artifact_content_hash": "9c4d943f8e5eeb4d3de4b10c754f8925dda38c63c968e4be48ab97ce499264c0",
+      "semantic_artifact_content_hash": "ae5d802484a0f5b949cd1cfac423539c05474ad34a8d68ea42e29a4416444289",
       "table_count": 5,
       "target_sha256": "88ba6c6b4f223dfee9d49d8f5524dd50921a6e8ba85ecfcc4040aa5865bea794"
     },
@@ -342,12 +342,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.3707407
+    "wall_seconds": 0.3158957
   },
   {
     "benchmark_id": "PERF-REG-001",
     "cold_warm": "COLD",
-    "cpu_seconds": 0.140625,
+    "cpu_seconds": 0.125,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "dimension_rows": {
@@ -361,7 +361,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "optimization_status": "NONE_ACCEPTED",
       "run": "first materialization",
       "same_fixture": true,
-      "semantic_artifact_content_hash": "9c4d943f8e5eeb4d3de4b10c754f8925dda38c63c968e4be48ab97ce499264c0",
+      "semantic_artifact_content_hash": "ae5d802484a0f5b949cd1cfac423539c05474ad34a8d68ea42e29a4416444289",
       "table_count": 5,
       "target_sha256": "88ba6c6b4f223dfee9d49d8f5524dd50921a6e8ba85ecfcc4040aa5865bea794"
     },
@@ -374,7 +374,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "temporary_bytes_observed": null
     },
     "peak_memory": {
-      "bytes": 5456770,
+      "bytes": 5456808,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -382,63 +382,63 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [
       {
         "calls": 150,
-        "cumulative_seconds": 0.0001849,
+        "cumulative_seconds": 0.0001803,
         "function": "enum.py:193:__get__"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0053799,
+        "cumulative_seconds": 0.0046015,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 4.59e-05,
+        "cumulative_seconds": 3.93e-05,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.4154335,
+        "cumulative_seconds": 0.3278545,
         "function": "run_step37_performance.py:236:materialize"
       },
       {
-        "calls": 1,
-        "cumulative_seconds": 0.408115,
-        "function": "materialization.py:47:materialize"
-      },
-      {
         "calls": 22,
-        "cumulative_seconds": 0.0052298,
+        "cumulative_seconds": 0.0044943,
         "function": "encoder.py:205:iterencode"
       },
       {
         "calls": 150,
-        "cumulative_seconds": 3.92e-05,
+        "cumulative_seconds": 3.7e-05,
         "function": "enum.py:1255:value"
       },
       {
         "calls": 22,
-        "cumulative_seconds": 0.0056112,
+        "cumulative_seconds": 0.0047672,
         "function": "__init__.py:183:dumps"
       },
       {
-        "calls": 2,
-        "cumulative_seconds": 0.0001433,
-        "function": "pathlib.py:703:relative_to"
-      },
-      {
-        "calls": 1,
-        "cumulative_seconds": 3.32e-05,
-        "function": "pathlib.py:667:with_name"
+        "calls": 7,
+        "cumulative_seconds": 0.0002716,
+        "function": "pathlib.py:484:_parse_args"
       },
       {
         "calls": 15,
-        "cumulative_seconds": 3.85e-05,
+        "cumulative_seconds": 3.89e-05,
         "function": "pathlib.py:147:splitroot"
       },
       {
-        "calls": 7,
-        "cumulative_seconds": 0.0003008,
-        "function": "pathlib.py:484:_parse_args"
+        "calls": 12,
+        "cumulative_seconds": 0.0526031,
+        "function": "~:0:<built-in method _duckdb.execute>"
+      },
+      {
+        "calls": 1,
+        "cumulative_seconds": 0.0001225,
+        "function": "~:0:<built-in method _duckdb.fetchall>"
+      },
+      {
+        "calls": 5,
+        "cumulative_seconds": 3.11e-05,
+        "function": "~:0:<built-in method _duckdb.fetchone>"
       }
     ],
     "status": "PASS",
@@ -457,7 +457,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.4155294
+    "wall_seconds": 0.3279248
   },
   {
     "benchmark_id": "PERF-QUERY-001",
@@ -496,7 +496,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.000417
+    "wall_seconds": 0.0005236
   },
   {
     "benchmark_id": "PERF-QUERY-001-WARM",
@@ -535,12 +535,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0002721
+    "wall_seconds": 0.0008721
   },
   {
     "benchmark_id": "PERF-QUERY-002",
     "cold_warm": "COLD",
-    "cpu_seconds": 0.0,
+    "cpu_seconds": 0.015625,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "query_index": 1,
@@ -574,12 +574,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.003916
+    "wall_seconds": 0.0030388
   },
   {
     "benchmark_id": "PERF-QUERY-002-WARM",
     "cold_warm": "WARM",
-    "cpu_seconds": 0.015625,
+    "cpu_seconds": 0.0,
     "dataset_id": "step20-typed-reference-fixture-v1",
     "details": {
       "query_index": 1,
@@ -613,7 +613,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0024716
+    "wall_seconds": 0.0021156
   },
   {
     "benchmark_id": "PERF-QUERY-003",
@@ -652,7 +652,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0021555
+    "wall_seconds": 0.0023587
   },
   {
     "benchmark_id": "PERF-QUERY-003-WARM",
@@ -691,7 +691,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.001277
+    "wall_seconds": 0.0013393
   },
   {
     "benchmark_id": "PERF-VAL-001",
@@ -709,7 +709,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "READ_ONLY_TARGET"
     },
     "peak_memory": {
-      "bytes": 5024361,
+      "bytes": 5023321,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -731,12 +731,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.1582829
+    "wall_seconds": 0.1710086
   },
   {
     "benchmark_id": "PERF-FUSION-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.09375,
+    "cpu_seconds": 0.125,
     "dataset_id": "step17-evidence-fusion-runtime",
     "details": {
       "cases": 23,
@@ -748,7 +748,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "NOT_APPLICABLE"
     },
     "peak_memory": {
-      "bytes": 1291773,
+      "bytes": 1291536,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -756,62 +756,62 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [
       {
         "calls": 2412,
-        "cumulative_seconds": 0.0036993,
+        "cumulative_seconds": 0.0037607,
         "function": "enum.py:193:__get__"
       },
       {
         "calls": 407,
-        "cumulative_seconds": 0.0291088,
+        "cumulative_seconds": 0.0281673,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 23,
-        "cumulative_seconds": 0.0038818,
+        "cumulative_seconds": 0.0039949,
         "function": "decoder.py:332:decode"
       },
       {
         "calls": 407,
-        "cumulative_seconds": 0.0007461,
+        "cumulative_seconds": 0.0007567,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 71,
-        "cumulative_seconds": 0.0003247,
+        "cumulative_seconds": 0.0003672,
         "function": "copy.py:243:_keep_alive"
       },
       {
         "calls": 23,
-        "cumulative_seconds": 0.003243,
+        "cumulative_seconds": 0.0030181,
         "function": "decoder.py:343:raw_decode"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.133792,
+        "cumulative_seconds": 0.132465,
         "function": "run_step37_performance.py:296:<dictcomp>"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.1337982,
+        "cumulative_seconds": 0.132476,
         "function": "run_step37_performance.py:296:<lambda>"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 2.9e-06,
+        "cumulative_seconds": 2.4e-06,
         "function": "enum.py:1093:__new__"
       },
       {
+        "calls": 23,
+        "cumulative_seconds": 0.0041992,
+        "function": "__init__.py:299:loads"
+      },
+      {
         "calls": 387,
-        "cumulative_seconds": 0.0269041,
+        "cumulative_seconds": 0.0260775,
         "function": "encoder.py:205:iterencode"
       },
       {
         "calls": 26,
-        "cumulative_seconds": 0.0020974,
-        "function": "main.py:393:model_copy"
-      },
-      {
-        "calls": 26,
-        "cumulative_seconds": 4.6e-06,
+        "cumulative_seconds": 5.4e-06,
         "function": "copy.py:107:_copy_immutable"
       }
     ],
@@ -831,12 +831,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.1338146
+    "wall_seconds": 0.1324985
   },
   {
     "benchmark_id": "PERF-SCALE-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.171875,
+    "cpu_seconds": 0.15625,
     "dataset_id": "step24-orders-input-v1",
     "details": {
       "policy": "step24-test-policy-v1",
@@ -849,7 +849,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "NOT_APPLICABLE"
     },
     "peak_memory": {
-      "bytes": 272977,
+      "bytes": 273574,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -857,62 +857,62 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0786047,
+        "cumulative_seconds": 0.0744756,
         "function": "encoder.py:183:encode"
       },
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0045695,
+        "cumulative_seconds": 0.0041845,
         "function": "encoder.py:105:__init__"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 0.1676334,
+        "cumulative_seconds": 0.1452616,
         "function": "run_step37_performance.py:309:<lambda>"
       },
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0654098,
+        "cumulative_seconds": 0.0625836,
         "function": "encoder.py:205:iterencode"
       },
       {
         "calls": 3072,
-        "cumulative_seconds": 0.0996591,
+        "cumulative_seconds": 0.0924059,
         "function": "__init__.py:183:dumps"
       },
       {
         "calls": 4,
-        "cumulative_seconds": 0.0016775,
+        "cumulative_seconds": 0.0012054,
         "function": "main.py:253:__init__"
       },
       {
-        "calls": 4,
-        "cumulative_seconds": 0.001658,
-        "function": "~:0:<method 'validate_python' of 'pydantic_core._pydantic_core.SchemaValidator' objects>"
-      },
-      {
         "calls": 1024,
-        "cumulative_seconds": 0.0099984,
+        "cumulative_seconds": 0.0074752,
         "function": "~:0:<method 'to_python' of 'pydantic_core._pydantic_core.SchemaSerializer' objects>"
       },
       {
+        "calls": 4,
+        "cumulative_seconds": 0.0011889,
+        "function": "~:0:<method 'validate_python' of 'pydantic_core._pydantic_core.SchemaValidator' objects>"
+      },
+      {
         "calls": 1,
-        "cumulative_seconds": 0.0407811,
-        "function": "distributed.py:637:_merge_outputs"
+        "cumulative_seconds": 0.0005213,
+        "function": "distributed.py:438:_candidate_pairs"
       },
       {
         "calls": 1024,
-        "cumulative_seconds": 0.0114433,
+        "cumulative_seconds": 0.0086381,
         "function": "main.py:427:model_dump"
       },
       {
         "calls": 1,
-        "cumulative_seconds": 6.05e-05,
+        "cumulative_seconds": 5.6e-05,
         "function": "distributed.py:23:_content_hash"
       },
       {
         "calls": 2048,
-        "cumulative_seconds": 0.0524827,
+        "cumulative_seconds": 0.0561636,
         "function": "source.py:437:_canonical_json"
       }
     ],
@@ -932,12 +932,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.1676499
+    "wall_seconds": 0.1452778
   },
   {
     "benchmark_id": "PERF-MEDIUM-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 268.171875,
+    "cpu_seconds": 245.25,
     "dataset_id": "step37-medium-100k-v1",
     "details": {
       "container_read_only": true,
@@ -989,19 +989,19 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "staged_bytes": 256658,
       "stages": {
         "dependency_candidate_generation": {
-          "cpu_seconds": 13.609375,
+          "cpu_seconds": 13.421875,
           "peak_memory": {
-            "bytes": 81711510,
+            "bytes": 81711333,
             "method": "python_tracemalloc_peak",
             "process_rss_after_bytes": null,
             "process_rss_before_bytes": null
           },
           "profile_top_functions": [],
           "status": "PASS",
-          "wall_seconds": 24.1330075
+          "wall_seconds": 24.0981474
         },
         "duckdb_materialization": {
-          "cpu_seconds": 109.765625,
+          "cpu_seconds": 91.78125,
           "peak_memory": {
             "bytes": 473756778,
             "method": "python_tracemalloc_peak",
@@ -1010,31 +1010,31 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
           },
           "profile_top_functions": [],
           "status": "PASS",
-          "wall_seconds": 93.520386
+          "wall_seconds": 80.1495382
         },
         "extraction_staging": {
-          "cpu_seconds": 24.109375,
+          "cpu_seconds": 22.890625,
           "peak_memory": {
-            "bytes": 466769367,
+            "bytes": 466768497,
             "method": "python_tracemalloc_peak",
             "process_rss_after_bytes": null,
             "process_rss_before_bytes": null
           },
           "profile_top_functions": [],
           "status": "PASS",
-          "wall_seconds": 27.5307384
+          "wall_seconds": 23.9837471
         },
         "profiling": {
-          "cpu_seconds": 120.53125,
+          "cpu_seconds": 116.890625,
           "peak_memory": {
-            "bytes": 141400732,
+            "bytes": 141398980,
             "method": "python_tracemalloc_peak",
             "process_rss_after_bytes": null,
             "process_rss_before_bytes": null
           },
           "profile_top_functions": [],
           "status": "PASS",
-          "wall_seconds": 131.0418663
+          "wall_seconds": 119.6283146
         },
         "source_discovery": {
           "cpu_seconds": 0.0,
@@ -1046,10 +1046,10 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
           },
           "profile_top_functions": [],
           "status": "PASS",
-          "wall_seconds": 0.0154085
+          "wall_seconds": 0.0148916
         },
         "validation": {
-          "cpu_seconds": 0.15625,
+          "cpu_seconds": 0.265625,
           "peak_memory": {
             "bytes": 5456,
             "method": "python_tracemalloc_peak",
@@ -1058,7 +1058,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
           },
           "profile_top_functions": [],
           "status": "PASS",
-          "wall_seconds": 0.1620927
+          "wall_seconds": 0.3774233
         }
       },
       "validation": {
@@ -1099,7 +1099,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 276.4034994
+    "wall_seconds": 248.2520622
   },
   {
     "benchmark_id": "PERF-API-001",
@@ -1115,7 +1115,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "HTTP_LOCAL"
     },
     "peak_memory": {
-      "bytes": 195540,
+      "bytes": 195813,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1123,12 +1123,12 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.0132162
+    "wall_seconds": 0.0543474
   },
   {
     "benchmark_id": "PERF-E2E-001",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 18.328125,
+    "cpu_seconds": 18.359375,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
       "accepted_review_checkpoints": [
@@ -1158,7 +1158,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "LOCAL_PRODUCT_RUNTIME"
     },
     "peak_memory": {
-      "bytes": 9774564,
+      "bytes": 11942054,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1180,15 +1180,15 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 43.5255596
+    "wall_seconds": 42.246055
   },
   {
     "benchmark_id": "PERF-API-002",
     "cold_warm": "NOT_APPLICABLE",
-    "cpu_seconds": 0.171875,
+    "cpu_seconds": 0.15625,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "endpoint": "/api/v1/runs/run_3c1cd1fc481427304f24ed25c88555ae/product-summary",
+      "endpoint": "/api/v1/runs/run_0963dcccf5e29053645dab0d8ab5bed4/product-summary",
       "status_code": 200,
       "terminal_product_status": "SUCCEEDED"
     },
@@ -1197,7 +1197,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "HTTP_LOCAL"
     },
     "peak_memory": {
-      "bytes": 2363997,
+      "bytes": 2364061,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1205,7 +1205,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.1617192
+    "wall_seconds": 0.1545431
   },
   {
     "benchmark_id": "PERF-DIAG-001",
@@ -1213,7 +1213,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "cpu_seconds": 0.078125,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "endpoint": "/api/v1/runs/run_3c1cd1fc481427304f24ed25c88555ae/diagnostics",
+      "endpoint": "/api/v1/runs/run_0963dcccf5e29053645dab0d8ab5bed4/diagnostics",
       "status_code": 200,
       "terminal_product_status": "SUCCEEDED"
     },
@@ -1222,7 +1222,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "HTTP_LOCAL"
     },
     "peak_memory": {
-      "bytes": 1508251,
+      "bytes": 1508798,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1230,7 +1230,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.0814681
+    "wall_seconds": 0.0794585
   },
   {
     "benchmark_id": "PERF-STAGE-ANALYTICAL_PLANNING",
@@ -1253,7 +1253,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 1.2650000000139698
+    "wall_seconds": 1.2820000000065193
   },
   {
     "benchmark_id": "PERF-STAGE-CANONICAL_FINALIZATION",
@@ -1276,7 +1276,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.15600000007543713
+    "wall_seconds": 0.1720000000204891
   },
   {
     "benchmark_id": "PERF-STAGE-CANONICAL_HYPOTHESES",
@@ -1299,7 +1299,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.20300000009592623
+    "wall_seconds": 0.1559999999590218
   },
   {
     "benchmark_id": "PERF-STAGE-CANONICAL_IDENTITY_PREPARATION",
@@ -1322,7 +1322,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.17199999990407377
+    "wall_seconds": 0.1720000000204891
   },
   {
     "benchmark_id": "PERF-STAGE-COMPILATION",
@@ -1345,7 +1345,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.5620000000344589
+    "wall_seconds": 0.5
   },
   {
     "benchmark_id": "PERF-STAGE-DEPENDENCY_DISCOVERY",
@@ -1368,7 +1368,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 19.719000000040978
+    "wall_seconds": 19.32900000002701
   },
   {
     "benchmark_id": "PERF-STAGE-EVIDENCE_FUSION",
@@ -1391,7 +1391,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.8119999999180436
+    "wall_seconds": 0.6089999999385327
   },
   {
     "benchmark_id": "PERF-STAGE-MATERIALIZATION",
@@ -1414,7 +1414,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.4530000000959262
+    "wall_seconds": 0.48400000005494803
   },
   {
     "benchmark_id": "PERF-STAGE-PROFILING",
@@ -1437,7 +1437,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 1.1099999999860302
+    "wall_seconds": 1.452999999979511
   },
   {
     "benchmark_id": "PERF-STAGE-QUALITY_ANALYSIS",
@@ -1460,7 +1460,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.640999999945052
+    "wall_seconds": 0.2970000000204891
   },
   {
     "benchmark_id": "PERF-STAGE-SEMANTIC_MODELING",
@@ -1483,7 +1483,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.39099999994505197
+    "wall_seconds": 0.375
   },
   {
     "benchmark_id": "PERF-STAGE-SOURCE_DISCOVERY",
@@ -1506,7 +1506,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.15700000000651926
+    "wall_seconds": 0.1559999999590218
   },
   {
     "benchmark_id": "PERF-STAGE-SOURCE_SNAPSHOT_STAGE",
@@ -1529,7 +1529,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 0.23400000005494803
+    "wall_seconds": 0.31200000003445894
   },
   {
     "benchmark_id": "PERF-STAGE-VALIDATION_RECONCILIATION",
@@ -1552,7 +1552,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "profile_top_functions": [],
     "status": "PASS",
     "truth_fixture_ids": [],
-    "wall_seconds": 1.0
+    "wall_seconds": 1.077999999979511
   },
   {
     "benchmark_id": "PERF-TELEMETRY-001",
@@ -1560,8 +1560,8 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "cpu_seconds": 0.015625,
     "dataset_id": "step29-orders-csv-4-rows",
     "details": {
-      "disabled_wall_seconds": 0.025662,
-      "enabled_wall_seconds": 0.0297385,
+      "disabled_wall_seconds": 0.0254152,
+      "enabled_wall_seconds": 0.029239,
       "method": "bounded 250 event/span emissions; diagnostic overhead only",
       "no_telemetry_disable_in_product": true
     },
@@ -1570,7 +1570,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "status": "NOT_APPLICABLE"
     },
     "peak_memory": {
-      "bytes": 907921,
+      "bytes": 908191,
       "method": "python_tracemalloc_peak",
       "process_rss_after_bytes": null,
       "process_rss_before_bytes": null
@@ -1592,7 +1592,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
       "step15-relationship-ranker-v1",
       "step16-semantic-safety-v2"
     ],
-    "wall_seconds": 0.0297385
+    "wall_seconds": 0.029239
   }
 ]
 ```
@@ -1602,7 +1602,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
 ```json
 [
   {
-    "baseline_cost": 0.4155294,
+    "baseline_cost": 0.3279248,
     "benchmark_id": "PERF-MAT-001",
     "delta": null,
     "empirical_quality_result": "NOT_APPLICABLE_NO_OPTIMIZATION",
@@ -1616,7 +1616,7 @@ Every measured record includes wall time, CPU time where reliable, Python alloca
     "status": "OBSERVED_NO_CHANGE"
   },
   {
-    "baseline_cost": 276.4034994,
+    "baseline_cost": 248.2520622,
     "benchmark_id": "PERF-MEDIUM-001",
     "delta": null,
     "empirical_quality_result": "NOT_APPLICABLE_NO_OPTIMIZATION",
@@ -1948,15 +1948,15 @@ Medium is the smallest full production-boundary scale executed here. The several
     "1M": {
       "observed_medium_output_db_bytes": 16789504,
       "observed_medium_peak_memory_bytes": 473756778,
-      "observed_medium_wall_seconds": 276.4034994,
+      "observed_medium_wall_seconds": 248.2520622,
       "reason": "The 100k Medium boundary is the smallest meaningful full production-boundary benchmark; a 1M run was not started because the bounded CI wall-clock budget must retain room for real provider E2E and independent stage baselines.",
       "status": "NOT_EXECUTED"
     },
     "several-million": {
-      "observed_medium_cpu_seconds": 268.171875,
+      "observed_medium_cpu_seconds": 245.25,
       "observed_medium_output_db_bytes": 16789504,
       "observed_medium_peak_memory_bytes": 473756778,
-      "observed_medium_wall_seconds": 276.4034994,
+      "observed_medium_wall_seconds": 248.2520622,
       "reason": "A bounded feasibility assessment used the measured Medium wall time, CPU, peak Python allocation and output-database size; a several-million materialization would exceed the Step37 single-run budget and is a capacity experiment reserved for Step38.",
       "status": "NOT_EXECUTED"
     }

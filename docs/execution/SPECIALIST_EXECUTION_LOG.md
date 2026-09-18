@@ -1759,3 +1759,20 @@ handoff_to:
 - gate_state: `G6-G11 PASS`; `G12-G15 PENDING`; `blocked=false`
 - final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step37_started=true`; `step37_status=COMPLETED_PERFORMANCE`; `step38_started=false`; `step38_status=NOT_STARTED`
 - no_step38_implementation: true
+
+## POST-STEP37 PERFORMANCE INTEGRITY REPAIR / FINAL CLOSURE
+
+- repair_scope: Step37 performance evidence integrity and CI command binding only; no Step38 implementation
+- superseded_prior_closure: `72a363a0a4fb30a165626eebbec848b7686de8ad` was insufficient because it lacked a successful real-provider E2E baseline and measured Medium evidence
+- content_repair_commit: `18d48a5f0af64e0b2eb2a8aa311c949a59cd05e6`
+- exact_head_content_ci: run `35299342517`; result `PASS`; exact head `18d48a5f0af64e0b2eb2a8aa311c949a59cd05e6`
+- ci_repair_note: the prior run `35294797339` exposed a workflow-only folded-scalar defect in schema/entity stage commands; both now use block scalars and the repaired run passed
+- provider_boundary: pinned Desbordante source `b211961f3f272ed8815ef1ffbda90573b11e1116`; image digest `sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638`; read-only/no-network/bind-readonly proof recorded
+- real_stage_baselines: `dependency=PASS`; `schema_matching=PASS`; `entity_resolution=PASS`; project-owned adapters/services executed with aggregate-only receipts
+- e2e_result: `PERF-E2E-001=PASS`; terminal `SUCCEEDED`; G6 `PASS`; eligible; validated output and four accepted review checkpoints present
+- medium_result: `PERF-MEDIUM-001=PASS`; 100000 rows; semantic oracle `PASS`; fact rows `100000`; quantity sum `300000`; unresolved foreign keys `0`; duplicate grain `0`; dependency search complete with two provider calls and no timeout
+- scale_result: Tiny `EXECUTED_REFERENCE_ONLY`; Medium `EXECUTED`; 1M and several-million `NOT_EXECUTED` with measured Medium evidence; 10M optional/not executed; 100M feasibility designed; no capacity claim
+- validator_and_tests: receipt validator `PASS`; focused Step37 tests `13 passed`; 32 machine-readable benchmarks; negative controls cover missing provider/E2E/G6/Medium, fabricated scale, gate advancement and Step38 start
+- protected_quality_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
+- authoritative_final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step37_started=true`; `step37_status=COMPLETED_PERFORMANCE`; `step37_integrity_repair=PASS`; `step38_started=false`; `step38_status=NOT_STARTED`; `G6-G11=PASS`; `G12-G15=PENDING`; `blocked=false`
+- no_step38_implementation: true
