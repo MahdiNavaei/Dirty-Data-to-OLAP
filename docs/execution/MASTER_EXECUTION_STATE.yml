@@ -446,7 +446,7 @@ specialist_execution:
     assessed_commit: "69b28bb5521c8d63275be232f783fc8a6d0c8cd2"
     load_profile_result: "PASS"
     g12_status: "PENDING"
-    blocker: "Full repository regression did not pass; Step30 clean-room sync was externally blocked by PyPI timeout, Step31 QA validator found generated OpenAPI drift, and the unfiltered full pytest run had environment/provider/system failures."
+    blocker: "Formal G12 remains pending: latest full pytest was 558 passed, 4 skipped, 15 failed before the focused Step33 predicate repair; Step30 clean-room reached deterministic OpenAPI/frontend checks but Playwright Chromium installation returned HTTP 403 location access denied; Step31 passed locked install and deterministic generation but did not complete its Docker build; optional providers and STEP31_BASE_URL remain unavailable in the host regression."
     real_listener: true
     overload_submissions: 20
     g6_concurrent_successes: 2

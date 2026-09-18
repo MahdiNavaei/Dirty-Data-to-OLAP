@@ -4,9 +4,9 @@ Status: `PENDING`
 
 Step38 established a bounded, reproducible local load/stress profile for the
 real Dirty Data to OLAP listener and worker/control-plane path, but the formal
-G12 closure remains pending because the required repository-wide regression did
-not pass in this environment. This is a local reference result, not a
-production capacity, SLA, or deployment claim.
+G12 closure remains pending because the required repository-wide regression and
+clean-room closure did not pass in this environment. This is a local reference
+result, not a production capacity, SLA, or deployment claim.
 
 ## Evidence
 
@@ -54,16 +54,22 @@ production capacity, SLA, or deployment claim.
 
 ## Closure blockers
 
-- The current full pytest run was not green: `556 passed, 4 skipped, 17
-  failed`. Failures included unavailable optional provider modules, missing
-  `STEP31_BASE_URL`, and historical state/fixture assumptions.
-- Step30 clean-room validator could not complete its locked Python sync because
-  fetching `setuptools` from PyPI timed out.
-- Step31 QA validator detected tracked OpenAPI drift during generation; the
-  generated frontend files were restored and no frontend change was retained.
-- Steps22-30 and Steps32-37 critical validators passed after later-state
-  compatibility predicates were added, but Step31 remains blocked by the
-  generated-artifact drift check.
+- The latest full pytest run was not green: `558 passed, 4 skipped, 15
+  failed` in 638.44 seconds. It included unavailable optional provider
+  modules, missing `STEP31_BASE_URL`, a host-only profiler expectation, and
+  the accepted Step29 real-provider path unavailable on this host. Three
+  Step33 state-predicate failures from that run were repaired afterward and
+  the focused Step33 suite now passes `12` tests plus `6` state-classification
+  tests; a green full rerun is still required.
+- Step30 clean-room validation passed through locked Python/frontend setup,
+  deterministic OpenAPI generation, typecheck, lint, frontend tests and build,
+  but its project-owned Chromium install failed with Playwright CDN HTTP `403`
+  (`location access denied`).
+- Step31 QA validation passed locked frontend install and deterministic API
+  generation, but did not complete the Docker backend/frontend build, so it is
+  not reported as PASS.
+- Steps22-29 and Steps32-37 critical validators passed on the current state;
+  Step30 remains externally blocked and Step31 remains incomplete.
 
 ## Gate state
 

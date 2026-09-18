@@ -1794,7 +1794,8 @@ handoff_to:
 - g11_regression: Step28/Step29 integration regression `18 passed`
 - limitations: no production database/source stress; no production capacity, public SLA, exactly-once, or 1M/10M/100M execution claim
 - protected_quality_artifacts: contents not read; path otherwise untouched, unstaged and uncommitted. An initial discovery/status command enumerated directory names only; no protected file content was opened or changed
-- closure_blockers: full pytest `556 passed, 4 skipped, 17 failed`; Step30 locked-sync validator blocked by PyPI timeout; Step31 QA validator detected generated OpenAPI drift and frontend generated files were restored; no Step39 implementation
+- closure_blockers: latest full pytest `558 passed, 4 skipped, 15 failed` in 638.44s before the focused Step33 predicate repair; Step30 clean-room reached deterministic OpenAPI/frontend checks but Chromium installation failed with Playwright CDN HTTP 403 location access denied; Step31 passed locked install and deterministic generation but did not complete Docker build; optional providers and STEP31_BASE_URL remain unavailable; no Step39 implementation
+- post_run_repairs: canonical frontend OpenAPI/types were committed in `490ca6c`; Step38 incomplete-handoff predicates were hardened in `11e8a8f`; focused Step33 tests `12 passed` and state-classification tests `6 passed`; full regression rerun remains required
 - gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`, `G12=PENDING`, `G13-G15=PENDING`, `blocked=false`
 - authoritative_final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step38_started=true`; `step38_status=INCOMPLETE_FULL_REGRESSION_BLOCKER`; `step39_started=false`; `step39_status=NOT_STARTED`; `next_step=Step38 - Load / Stress Test Engineer`; `blocked=false`
 - no_step39_implementation: true

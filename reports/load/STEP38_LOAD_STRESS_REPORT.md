@@ -179,9 +179,16 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
 
 - The load profile itself is `PASS`, but formal G12 remains `PENDING` until
   the required repository-wide regression and all relevant validator checks
-  are green. The current full pytest run was `556 passed, 4 skipped, 17
-  failed`; Step30 clean-room sync was blocked by a PyPI timeout and Step31
-  detected generated OpenAPI drift.
+  are green. The latest full pytest run was `558 passed, 4 skipped, 15
+  failed` in 638.44 seconds, before the focused Step33 predicate repair;
+  the focused repair now passes 12 Step33 tests and 6 state-classification
+  tests, but a green full rerun is still required.
+- Step30 clean-room checks passed through deterministic OpenAPI generation,
+  frontend typecheck, lint, tests and build, then failed at project-owned
+  Chromium installation with Playwright CDN HTTP 403 (`location access
+  denied`). Step31 passed locked frontend install and deterministic API
+  generation but did not complete its Docker build, so neither validator is
+  a formal G12 PASS.
 - No production capacity, deployment, HA, multi-node, 1M, 10M or 100M measured claim.
 - No exactly-once claim; the worker remains at-least-once with durable replay fences.
 - Optional provider availability is reported as observed and fail-closed; it is not silently upgraded.
