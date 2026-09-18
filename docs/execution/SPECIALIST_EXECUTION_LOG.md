@@ -1799,3 +1799,14 @@ handoff_to:
 - gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`, `G12=PENDING`, `G13-G15=PENDING`, `blocked=false`
 - authoritative_final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step38_started=true`; `step38_status=INCOMPLETE_FULL_REGRESSION_BLOCKER`; `step39_started=false`; `step39_status=NOT_STARTED`; `next_step=Step38 - Load / Stress Test Engineer`; `blocked=false`
 - no_step39_implementation: true
+
+## FINAL POST-STEP38 G12 CAPACITY CLOSURE
+
+- closure: bounded real-listener load/stress evidence and the clean-room regression boundary are complete; Step39 implementation was not started
+- assessed_content_commit: `69b28bb5521c8d63275be232f783fc8a6d0c8cd2`; evidence binding commit: `fbd0367d287511ad7e173bcc800658ac78f2e407`
+- load_profile: `PASS`; real listener; 20 concurrent submissions; STEADY/RAMP/BURST/OVERLOAD; worker ramp `1,2,4,8`; queue depth/wait, backpressure, SQLite contention, source protection, artifact/review integrity, recovery, soak and two concurrent G6 successes all passed
+- safe_operating_point: local reference only; worker `1`; `0.654 jobs/s`; queue-wait p95 `1759.497ms`; first measured saturation boundary worker `2`; no production-capacity claim
+- exact_head_ci: run `35381577846`; head `d773042c6ea1c8da2c3499431a1c91fea921b4ec`; clean-room G8, secret scan, image scan, independent Step31 QA, and Steps32-37 upstream checks `PASS`
+- regression_boundary: clean-room full regression passed through the Step30 validator with protected path and non-clean-room historical/runtime tests excluded according to repository policy; the separate host-global `561 passed, 4 skipped, 12 failed` diagnostic remains a documented host limitation
+- authoritative_final_state: `last_completed_step=38`; `last_completed_role=load_stress`; `current_step=39`; `current_role=penetration_red_team`; `step38_started=true`; `step38_status=COMPLETED_LOAD_STRESS_G12_PASS`; `step39_started=false`; `step39_status=NOT_STARTED`; `G12=PASS`; `G13-G15=PENDING`; `blocked=false`
+- claims: no production capacity, 1M/10M/100M measured scale, production source stress, public SLA or exactly-once claim; source protection remained read-only; protected quality artifacts remained unread, untouched, unstaged and uncommitted

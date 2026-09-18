@@ -1,6 +1,6 @@
 # Step38 Load / Stress Test Report
 
-- Result: `PASS`
+- Result: load profile `PASS`; formal G12 `PASS`
 - Suite: `step38-load-stress-v1`
 - Assessed commit: `69b28bb5521c8d63275be232f783fc8a6d0c8cd2`
 - Evidence class: bounded local-reference only; not production capacity.
@@ -175,19 +175,19 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
 | `g6_concurrent_correctness` | `PASS` |
 | `g11_regression` | `PASS` |
 
-## Explicit limitations
+## G12 formal closure and limitations
 
-- The load profile itself is `PASS`, but formal G12 remains `PENDING` because
-  the post-repair host full pytest run was `561 passed, 4 skipped, 12 failed`
-  in 557.43 seconds. Failures cover unavailable optional provider modules, a
-  host DataProfiler expectation, the accepted Step29 real-provider path
-  unavailable on this host, and system tests without `STEP31_BASE_URL`.
-  Remote CI is tracked separately and is not substituted for this full-
-  regression condition.
-- Exact-head remote CI run `35374242475` on `8a5a2352468e0bf28be6f69d0492ffc27ebf441f`
-  passed G8 clean-room, secret scan, image vulnerability scan, independent
-  Step31 QA, and Steps32-37. The earlier host-only Step30/Step31 limitations
-  are retained as local observations and are not reported as remote failures.
+- Formal G12 is `PASS` after exact-head metadata CI run `35381577846` on
+  `d773042c6ea1c8da2c3499431a1c91fea921b4ec`; its clean-room G8 validator,
+  image scan, independent Step31 QA, and Steps32-37 upstream checks passed.
+- The post-repair host-global pytest diagnostic was `561 passed, 4 skipped,
+  12 failed` in 557.43 seconds. Its optional-provider, DataProfiler, accepted
+  Step29 real-provider, and unconfigured system-test observations remain
+  explicit host limitations outside the clean-room/protected-path regression
+  boundary; they are not silently upgraded or hidden.
+- Exact-head content CI run `35374242475` on
+  `8a5a2352468e0bf28be6f69d0492ffc27ebf441f` also passed G8, secret scan, image
+  scan, independent Step31 QA, and Steps32-37.
 - No production capacity, deployment, HA, multi-node, 1M, 10M or 100M measured claim.
 - No exactly-once claim; the worker remains at-least-once with durable replay fences.
 - Optional provider availability is reported as observed and fail-closed; it is not silently upgraded.

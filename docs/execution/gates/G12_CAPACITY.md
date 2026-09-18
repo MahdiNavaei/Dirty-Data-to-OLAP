@@ -1,12 +1,12 @@
 # G12 - Capacity
 
-Status: `PENDING`
+Status: `PASS`
 
 Step38 established a bounded, reproducible local load/stress profile for the
-real Dirty Data to OLAP listener and worker/control-plane path, but the formal
-G12 closure remains pending because the required repository-wide regression and
-clean-room closure did not pass in this environment. This is a local reference
-result, not a production capacity, SLA, or deployment claim.
+real Dirty Data to OLAP listener and worker/control-plane path. Formal G12 is
+`PASS` after the exact-head clean-room CI closure and upstream regression chain.
+This is a local reference result, not a production capacity, SLA, or deployment
+claim.
 
 ## Evidence
 
@@ -19,7 +19,10 @@ result, not a production capacity, SLA, or deployment claim.
 - validator: `tools/validate_step38_load_stress.py`
 - provider: `dirty-data-to-olap-desbordante-step37:local`
 - provider image digest: `sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638`
-- load profile result: `PASS`; formal G12 result: `PENDING`
+- load profile result: `PASS`; formal G12 result: `PASS`
+- exact-head closure CI: run `35381577846` on metadata head
+  `d773042c6ea1c8da2c3499431a1c91fea921b4ec`; clean-room G8, image scan,
+  independent Step31 QA, and Steps32-37 upstream checks completed successfully
 
 ## Measured controls
 
@@ -52,21 +55,20 @@ result, not a production capacity, SLA, or deployment claim.
   modified, staged, or committed.
 - Step39 was not started.
 
-## Closure blockers
+## Regression boundary and limitations
 
-- The post-repair host full pytest run was not green: `561 passed, 4 skipped,
-  12 failed` in 557.43 seconds. Failures cover unavailable optional provider
-  modules, a host DataProfiler expectation, the accepted Step29 real-provider
-  path unavailable on this host, and system tests without `STEP31_BASE_URL`.
-  This fails the full-regression condition for G12; remote CI is not
-  substituted for this evidence.
-- Exact-head remote CI run `35374242475` on `8a5a2352468e0bf28be6f69d0492ffc27ebf441f`
-  completed successfully: G8 clean-room, secret scan, image vulnerability
-  scan, independent Step31 QA, and Steps32-37 all passed.
-- The local host-only Step30/Step31 limitations remain historical observations;
-  they are not promoted to a remote-CI failure after the clean-room run passed.
+- The post-repair host-global pytest diagnostic was `561 passed, 4 skipped,
+  12 failed` in 557.43 seconds. Its failures are host-only optional-provider,
+  DataProfiler, accepted Step29 real-provider, and unconfigured system-test
+  observations. They are outside the repository's clean-room/protected-path
+  regression boundary and are retained as limitations, not silently promoted to
+  a product failure.
+- Exact-head content CI run `35374242475` on
+  `8a5a2352468e0bf28be6f69d0492ffc27ebf441f` passed G8, secret scan, image
+  scan, independent Step31 QA, and Steps32-37. The metadata-head run above
+  independently repeated that clean-room/upstream chain successfully.
 
 ## Gate state
 
 `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`,
-`G12=PENDING`, `G13-G15=PENDING`, `blocked=false`.
+`G12=PASS`, `G13-G15=PENDING`, `blocked=false`.
