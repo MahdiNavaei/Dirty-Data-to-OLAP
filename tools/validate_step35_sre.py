@@ -60,7 +60,7 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any], document: dict[str, Any]) -> str:
-    from tools.execution_state import step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed
+    from tools.execution_state import step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed
 
     specialist = mapping(state.get("specialist_execution"), "specialist_execution")
     current_gates = mapping(state.get("gates"), "gates")
@@ -69,7 +69,8 @@ def validate_state(state: dict[str, Any], document: dict[str, Any]) -> str:
     if any(current_gates.get(name) != "PASS" for name in ("G6_DATA_CORRECTNESS", "G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY")):
         raise ValidationFailure("G6-G10 must remain PASS")
     later_step36_closure = specialist.get("current_step") in {37, 38} and current_gates.get("G11_RESILIENCE") == "PASS" and all(current_gates.get(name) == "PENDING" for name in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")) and (step36_resilience_closed(state) if specialist.get("current_step") == 37 else step37_performance_closed(state))
-    if not later_step36_closure and any(current_gates.get(name) != "PENDING" for name in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
+    later_step38_closure = specialist.get("current_step") == 39 and current_gates.get("G11_RESILIENCE") == "PASS" and current_gates.get("G12_CAPACITY") == "PASS" and all(current_gates.get(name) == "PENDING" for name in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")) and step38_load_stress_closed(state)
+    if not (later_step36_closure or later_step38_closure) and any(current_gates.get(name) != "PENDING" for name in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
         raise ValidationFailure("G11-G15 must remain PENDING")
     if specialist.get("current_step") == 35:
         if not step34_observability_closed(state) or specialist.get("current_role") != "sre" or specialist.get("step35_started") is not False or specialist.get("step35_status") != "NOT_STARTED":
@@ -94,6 +95,13 @@ def validate_state(state: dict[str, Any], document: dict[str, Any]) -> str:
     if specialist.get("current_step") == 38:
         if not step37_performance_closed(state):
             raise ValidationFailure("state is not the authorized later Step37 closure")
+        sre = mapping(specialist.get("step35_sre"), "step35_sre")
+        if document.get("phase") != "STEP35_CLOSURE" or document.get("assessed_commit") != sre.get("content_commit"):
+            raise ValidationFailure("closure report is not bound to the Step35 content commit")
+        return "STEP35_CLOSURE"
+    if specialist.get("current_step") == 39:
+        if not step38_load_stress_closed(state):
+            raise ValidationFailure("state is not the authorized later Step38 closure")
         sre = mapping(specialist.get("step35_sre"), "step35_sre")
         if document.get("phase") != "STEP35_CLOSURE" or document.get("assessed_commit") != sre.get("content_commit"):
             raise ValidationFailure("closure report is not bound to the Step35 content commit")

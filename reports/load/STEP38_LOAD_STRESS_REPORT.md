@@ -177,8 +177,13 @@ The suite exercised STEADY, RAMP, BURST and OVERLOAD arrivals. OVERLOAD used twe
 
 ## Explicit limitations
 
+- The load profile itself is `PASS`, but formal G12 remains `PENDING` until
+  the required repository-wide regression and all relevant validator checks
+  are green. The current full pytest run was `556 passed, 4 skipped, 17
+  failed`; Step30 clean-room sync was blocked by a PyPI timeout and Step31
+  detected generated OpenAPI drift.
 - No production capacity, deployment, HA, multi-node, 1M, 10M or 100M measured claim.
 - No exactly-once claim; the worker remains at-least-once with durable replay fences.
 - Optional provider availability is reported as observed and fail-closed; it is not silently upgraded.
 - Step39 was not started.
-- Protected quality artifacts were not read, modified, staged or committed.
+- Protected quality artifact contents were not read; the path was not modified, staged or committed.

@@ -720,6 +720,7 @@
     "A local safe operating point is not a production capacity commitment."
   ],
   "overall_result": "PASS",
+  "formal_g12_status": "PENDING",
   "protected_quality_artifacts": "unread, untouched, unstaged and uncommitted",
   "safe_operating_point": {
     "jobs": 2,
@@ -744,7 +745,7 @@
   "upstream_gates": {
     "G10": "PASS",
     "G11": "PASS",
-    "G12": "PASS",
+    "G12": "PENDING",
     "G13": "PENDING",
     "G14": "PENDING",
     "G15": "PENDING",

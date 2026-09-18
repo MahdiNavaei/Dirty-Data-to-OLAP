@@ -11,7 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed, step33_application_security_closed, step36_resilience_closed, step37_performance_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed, step33_application_security_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed
 ARCH = ROOT / "docs" / "data-architecture"
 SPECS = ARCH / "specs"
 STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -523,6 +523,7 @@ def main() -> int:
         and not (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass)
         and not (key == "G10_APPLICATION_SECURITY" and step33_pass)
         and not (key == "G11_RESILIENCE" and step36_pass)
+        and not (key == "G12_CAPACITY" and step38_load_stress_closed(state))
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:

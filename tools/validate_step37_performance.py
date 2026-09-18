@@ -220,7 +220,10 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
     state_gates = state.get("gates", {})
     if any(state_gates.get("G" + str(number) + suffix) != "PASS" for number, suffix in ((6, "_DATA_CORRECTNESS"), (7, "_END_TO_END_PRODUCT"), (8, "_REPRODUCIBLE_BUILD"), (9, "_FUNCTIONAL_SUPPORT"), (10, "_APPLICATION_SECURITY"), (11, "_RESILIENCE"))):
         _fail("authoritative state G6-G11 is not PASS")
-    if any(state_gates.get(key) != "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
+    if specialist.get("current_step") == 39:
+        if state_gates.get("G12_CAPACITY") != "PASS" or any(state_gates.get(key) != "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
+            _fail("authoritative state G12-G15 is not a valid Step38 closure")
+    elif any(state_gates.get(key) != "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
         _fail("authoritative state G12-G15 is not PENDING")
     if state.get("blocked") is not False:
         _fail("authoritative blocked state is not false")
@@ -241,6 +244,19 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
             )
         ):
             _fail("final Step37 to Step38 handoff is inconsistent")
+    elif specialist.get("current_step") == 39:
+        receipt = specialist.get("step38_load_stress", {})
+        if (
+            specialist.get("last_completed_step") != 38
+            or specialist.get("last_completed_role") != "load_stress"
+            or specialist.get("current_role") != "penetration_red_team"
+            or specialist.get("step38_started") is not True
+            or specialist.get("step38_status") != "COMPLETED_LOAD_STRESS_G12_PASS"
+            or specialist.get("step39_started") is not False
+            or specialist.get("step39_status") != "NOT_STARTED"
+            or receipt.get("status") != "PASS"
+        ):
+            _fail("final Step38 to Step39 handoff is inconsistent")
     else:
         _fail("unsupported authoritative current step")
     if payload.get("overall_result") != "PASS":

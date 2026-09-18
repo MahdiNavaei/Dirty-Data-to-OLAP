@@ -45,6 +45,7 @@ CURRENT_ROLE_BY_STEP = {
     36: "chaos_resilience",
     37: "performance_engineer",
     38: "load_stress",
+    39: "penetration_red_team",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -86,6 +87,7 @@ def is_authorized_specialist_handoff(
         or (current_step == 36 and maximum_current_step <= 35 and step35_sre_closed(state))
         or (current_step == 37 and maximum_current_step <= 36 and step36_resilience_closed(state))
         or (current_step == 38 and maximum_current_step <= 37 and step37_performance_closed(state))
+        or (current_step == 39 and maximum_current_step <= 38 and step38_load_stress_closed(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -252,7 +254,10 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
                 and _step36_receipt_evidence(state)
             )
         )
-        and current_gates.get("G12_CAPACITY") == "PENDING"
+        and (
+            current_gates.get("G12_CAPACITY") == "PENDING"
+            or (current_gates.get("G12_CAPACITY") == "PASS" and _step38_receipt_evidence(state))
+        )
         and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PENDING"
         and current_gates.get("G14_USABILITY") == "PENDING"
         and current_gates.get("G15_RELEASE") == "PENDING"
@@ -270,7 +275,7 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37)
         and step36_resilience_closed(state)
-    )
+    ) or step38_load_stress_closed(state)
 
 
 def _step33_completion_evidence(state: dict[str, Any]) -> bool:
@@ -333,7 +338,7 @@ def step33_application_security_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step35_completion_evidence(state)
-    )
+    ) or step38_load_stress_closed(state)
 
 
 def _step34_completion_evidence(state: dict[str, Any]) -> bool:
@@ -466,7 +471,7 @@ def step34_observability_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step34_completion_evidence(state)
-    )
+    ) or step38_load_stress_closed(state)
 
 
 def _step35_receipt_evidence(state: dict[str, Any]) -> bool:
@@ -520,7 +525,7 @@ def _step35_completion_evidence(state: dict[str, Any]) -> bool:
 def step35_sre_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step35 -> Step36 SRE handoff."""
 
-    return is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)
+    return (is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)) or step38_load_stress_closed(state)
 
 
 def _step36_receipt_evidence(state: dict[str, Any]) -> bool:
@@ -564,6 +569,23 @@ def _step37_receipt_evidence(state: dict[str, Any]) -> bool:
     )
 
 
+def _step38_receipt_evidence(state: dict[str, Any]) -> bool:
+    """Validate the Step38 receipt metadata without requiring the live pointer."""
+
+    specialist = execution(state)
+    load_stress = specialist.get("step38_load_stress", {})
+    content_commit = load_stress.get("content_commit") if isinstance(load_stress, dict) else None
+    return (
+        isinstance(load_stress, dict)
+        and load_stress.get("step38_started") is True
+        and load_stress.get("status") == "PASS"
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and load_stress.get("assessed_commit") == content_commit
+    )
+
+
 def _step36_completion_evidence(state: dict[str, Any]) -> bool:
     specialist = execution(state)
     current_gates = gates(state)
@@ -587,7 +609,7 @@ def _step36_completion_evidence(state: dict[str, Any]) -> bool:
 def step36_resilience_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step36 -> Step37 resilience handoff."""
 
-    return is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)
+    return (is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)) or step38_load_stress_closed(state)
 
 
 def step37_performance_closed(state: dict[str, Any]) -> bool:
@@ -597,7 +619,7 @@ def step37_performance_closed(state: dict[str, Any]) -> bool:
     current_gates = gates(state)
     performance = specialist.get("step37_performance", {})
     content_commit = performance.get("content_commit") if isinstance(performance, dict) else None
-    return (
+    direct_closure = (
         is_authorized_specialist_handoff(state, minimum_current_step=38, maximum_current_step=38)
         and _step36_completion_evidence(state)
         and _step37_receipt_evidence(state)
@@ -621,6 +643,62 @@ def step37_performance_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
         and current_gates.get("G11_RESILIENCE") == "PASS"
         and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
+    )
+    return direct_closure or step38_load_stress_closed(state)
+
+
+def step38_load_stress_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step38/G12 closure and Step39 handoff."""
+
+    specialist = execution(state)
+    current_gates = gates(state)
+    load_stress = specialist.get("step38_load_stress", {})
+    content_commit = load_stress.get("content_commit") if isinstance(load_stress, dict) else None
+    return (
+        isinstance(load_stress, dict)
+        and is_authorized_specialist_handoff(state, minimum_current_step=39, maximum_current_step=39)
+        and specialist.get("current_step") == 39
+        and specialist.get("current_role") == "penetration_red_team"
+        and specialist.get("current_specialist") == "Step39 - Penetration Tester / Red Team"
+        and specialist.get("last_completed_step") == 38
+        and specialist.get("last_completed_role") == "load_stress"
+        and specialist.get("last_completed_specialist") == "Step38 - Load / Stress Test Engineer"
+        and specialist.get("last_completed_content_commit") == content_commit
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("step38_started") is True
+        and specialist.get("step38_status") == "COMPLETED_LOAD_STRESS_G12_PASS"
+        and specialist.get("step30_started") is True
+        and specialist.get("step30_status") == "COMPLETED_DEVOPS_G8_PASS"
+        and specialist.get("step31_started") is True
+        and specialist.get("step31_status") == "COMPLETED_QA_AUTOMATION"
+        and specialist.get("step32_started") is True
+        and specialist.get("step32_status") == "COMPLETED_COMPATIBILITY_G9_PASS"
+        and specialist.get("step33_started") is True
+        and specialist.get("step33_status") == "COMPLETED_APPLICATION_SECURITY_G10_PASS"
+        and specialist.get("step34_started") is True
+        and specialist.get("step34_status") == "COMPLETED_OBSERVABILITY"
+        and specialist.get("step35_started") is True
+        and specialist.get("step35_status") == "COMPLETED_SRE"
+        and specialist.get("step36_started") is True
+        and specialist.get("step36_status") == "COMPLETED_RESILIENCE_G11_PASS"
+        and specialist.get("step37_started") is True
+        and specialist.get("step37_status") == "COMPLETED_PERFORMANCE"
+        and specialist.get("step39_started") is False
+        and specialist.get("step39_status") == "NOT_STARTED"
+        and load_stress.get("step38_started") is True
+        and load_stress.get("status") == "PASS"
+        and load_stress.get("assessed_commit") == content_commit
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and current_gates.get("G11_RESILIENCE") == "PASS"
+        and current_gates.get("G12_CAPACITY") == "PASS"
+        and all(current_gates.get(key) == "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
 
@@ -683,6 +761,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             or (key == "G9_FUNCTIONAL_SUPPORT" and step32_compatibility_closed(state))
             or (key == "G10_APPLICATION_SECURITY" and step33_application_security_closed(state))
             or (key == "G11_RESILIENCE" and current_gates.get(key) == "PASS" and _step36_receipt_evidence(state))
+            or (key == "G12_CAPACITY" and current_gates.get(key) == "PASS" and _step38_receipt_evidence(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )

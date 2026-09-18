@@ -1776,3 +1776,25 @@ handoff_to:
 - protected_quality_artifacts: `tests/quality_unit_artifacts/` remained unread, untouched, unstaged and uncommitted
 - authoritative_final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step37_started=true`; `step37_status=COMPLETED_PERFORMANCE`; `step37_integrity_repair=PASS`; `step38_started=false`; `step38_status=NOT_STARTED`; `G6-G11=PASS`; `G12-G15=PENDING`; `blocked=false`
 - no_step38_implementation: true
+
+## PRIMARY PROMPT 38/41 - Load / Stress Test Engineer
+
+- execution_step: `38`; bounded local load/stress characterization completed, but formal G12 closure remains pending after regression/validator blockers; Step39 was not started
+- starting_baseline: accepted Step37 performance closure at content commit `18d48a5f0af64e0b2eb2a8aa311c949a59cd05e6`, with `step38_started=false` and `step38_status=NOT_STARTED`
+- implementation_content_commit: `69b28bb5521c8d63275be232f783fc8a6d0c8cd2`
+- evidence_binding_commit: `fbd0367d287511ad7e173bcc800658ac78f2e407`
+- assessed_commit: `69b28bb5521c8d63275be232f783fc8a6d0c8cd2`; load profile receipt `PASS`; formal G12 `PENDING`
+- benchmark_suite: `step38-load-stress-v1`; scenarios `load/step38_scenarios.json`; receipt `output/step38_load_stress_validation.json`; report `reports/load/STEP38_LOAD_STRESS_REPORT.md`; validator `tools/validate_step38_load_stress.py`
+- arrival_patterns: `STEADY`, `RAMP`, `BURST`, `OVERLOAD`; real listener accepted 20 concurrent overload submissions with zero submission errors
+- replay_and_ramp: five same-command idempotency-key replay cases; worker ramp `1,2,4,8`; queue depth and queue-wait p95 recorded
+- local_capacity_reference: safe point `worker=1`, `0.654 jobs/s`, queue-wait p95 `1759.497ms`; measured throughput decline boundary at `worker=2` with increased queue-wait p95; local-reference-only
+- product_correctness_repair: run-scoped persisted identities for DomainAssertion and RelationshipDecision, with compatible review subject binding; required by concurrent real-run evidence and verified by G6
+- real_pipeline: two concurrent runs reached G6 and each passed four review checkpoints; cancellation/recovery, artifact staging, source read-only protection, provider concurrency, backpressure, isolation, and state-machine controls passed
+- provider_boundary: `dirty-data-to-olap-desbordante-step37:local`; image digest `sha256:2cc4b944805dd55b6ee23de3ac4a9a6fb4cdc9daede9d86ea4b71c97937f3638`
+- g11_regression: Step28/Step29 integration regression `18 passed`
+- limitations: no production database/source stress; no production capacity, public SLA, exactly-once, or 1M/10M/100M execution claim
+- protected_quality_artifacts: contents not read; path otherwise untouched, unstaged and uncommitted. An initial discovery/status command enumerated directory names only; no protected file content was opened or changed
+- closure_blockers: full pytest `556 passed, 4 skipped, 17 failed`; Step30 locked-sync validator blocked by PyPI timeout; Step31 QA validator detected generated OpenAPI drift and frontend generated files were restored; no Step39 implementation
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`, `G12=PENDING`, `G13-G15=PENDING`, `blocked=false`
+- authoritative_final_state: `last_completed_step=37`; `last_completed_role=performance_engineer`; `current_step=38`; `current_role=load_stress`; `step38_started=true`; `step38_status=INCOMPLETE_FULL_REGRESSION_BLOCKER`; `step39_started=false`; `step39_status=NOT_STARTED`; `next_step=Step38 - Load / Stress Test Engineer`; `blocked=false`
+- no_step39_implementation: true
