@@ -13,7 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "dirty_data_to_olap"
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed
+from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed
 
 
 def main() -> int:
@@ -38,7 +38,7 @@ def main() -> int:
     try:
         state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
         execution = state["specialist_execution"]
-        if execution["current_step"] not in range(8, 36) and not (execution["current_step"] == 36 and step35_sre_closed(state)) and not (execution["current_step"] == 37 and step36_resilience_closed(state)) and not (execution["current_step"] == 38 and step37_performance_closed(state)):
+        if execution["current_step"] not in range(8, 36) and not (execution["current_step"] == 36 and step35_sre_closed(state)) and not (execution["current_step"] == 37 and step36_resilience_closed(state)) and not (execution["current_step"] == 38 and step37_performance_closed(state)) and not (execution["current_step"] == 39 and step38_load_stress_closed(state)):
             errors.append("state is not in Step08 implementation or a later specialist handoff")
         if execution["current_step"] == 9 and execution["last_completed_step"] != 8:
             errors.append("Step09 state must record Step08 completion")
