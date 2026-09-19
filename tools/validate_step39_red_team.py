@@ -104,17 +104,29 @@ def validate_state(state: dict[str, Any], *, require_closed: bool = True) -> Non
         _require(specialist.get("current_step") == 39 and specialist.get("step39_started") is False and specialist.get("step39_status") == "NOT_STARTED", "pre-closure state is not Step39")
         _require(gates.get("G13_ADVERSARIAL_SECURITY") == "PENDING", "pre-closure G13 is not pending")
         return
-    _require(specialist.get("current_step") == 40, "current step is not 40")
-    _require(specialist.get("current_role") == "developer_experience_engineer", "current role is not developer_experience_engineer")
-    _require(specialist.get("current_specialist") == "Step40 - Developer Experience Engineer", "current specialist is not Step40")
-    _require(specialist.get("last_completed_step") == 39, "last completed step is not 39")
-    _require(specialist.get("last_completed_role") == "penetration_red_team", "last completed role is not penetration_red_team")
-    _require(specialist.get("last_completed_specialist") == "Step39 - Penetration Tester / Red Team", "last completed specialist is not Step39")
-    _require(specialist.get("next_step") == "Step40 - Developer Experience Engineer", "next step is not Step40")
+    if specialist.get("current_step") == 41:
+        _require(specialist.get("current_role") == "technical_writer", "current role is not technical_writer")
+        _require(specialist.get("current_specialist") == "Step41 - Technical Writer", "current specialist is not Step41")
+        _require(specialist.get("last_completed_step") == 40, "last completed step is not 40")
+        _require(specialist.get("last_completed_role") == "developer_experience_engineer", "last completed role is not developer_experience_engineer")
+        _require(specialist.get("last_completed_specialist") == "Step40 - Developer Experience Engineer", "last completed specialist is not Step40")
+        _require(specialist.get("next_step") == "Step41 - Technical Writer", "next step is not Step41")
+        _require(specialist.get("step40_started") is True and specialist.get("step40_status") == "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS", "Step40 closure is incomplete")
+        _require(specialist.get("step41_started") is False and specialist.get("step41_status") == "NOT_STARTED", "Step41 has started")
+        _require(gates.get("G14_USABILITY") == "PASS", "G14 is not PASS")
+    else:
+        _require(specialist.get("current_step") == 40, "current step is not 40")
+        _require(specialist.get("current_role") == "developer_experience_engineer", "current role is not developer_experience_engineer")
+        _require(specialist.get("current_specialist") == "Step40 - Developer Experience Engineer", "current specialist is not Step40")
+        _require(specialist.get("last_completed_step") == 39, "last completed step is not 39")
+        _require(specialist.get("last_completed_role") == "penetration_red_team", "last completed role is not penetration_red_team")
+        _require(specialist.get("last_completed_specialist") == "Step39 - Penetration Tester / Red Team", "last completed specialist is not Step39")
+        _require(specialist.get("next_step") == "Step40 - Developer Experience Engineer", "next step is not Step40")
+        _require(specialist.get("step40_started") is False and specialist.get("step40_status") == "NOT_STARTED", "Step40 has started")
+        _require(gates.get("G14_USABILITY") == "PENDING", "G14 is not pending")
     _require(specialist.get("step39_started") is True and specialist.get("step39_status") == "COMPLETED_RED_TEAM_G13_PASS", "Step39 closure is incomplete")
-    _require(specialist.get("step40_started") is False and specialist.get("step40_status") == "NOT_STARTED", "Step40 has started")
     _require(gates.get("G13_ADVERSARIAL_SECURITY") == "PASS", "G13 is not PASS")
-    _require(gates.get("G14_USABILITY") == "PENDING" and gates.get("G15_RELEASE") == "PENDING", "later gates advanced prematurely")
+    _require(gates.get("G15_RELEASE") == "PENDING", "G15 advanced prematurely")
 
 
 def validate(evidence_path: Path, *, state_path: Path | None = None, expected_commit: str | None = None, require_closed: bool = True) -> dict[str, Any]:
@@ -131,7 +143,10 @@ def validate(evidence_path: Path, *, state_path: Path | None = None, expected_co
         validate_state(state, require_closed=require_closed)
         if require_closed:
             _require(state["specialist_execution"]["step39_red_team"]["content_commit"] == evidence["assessed_commit"], "state and receipt content commits differ")
-    return {"status": "PASS", "step": 39, "assessed_commit": evidence["assessed_commit"], "g13": "PASS", "current_step": 40 if require_closed else 39}
+    current_step = 39
+    if require_closed:
+        current_step = 41 if state_path is not None and state.get("specialist_execution", {}).get("current_step") == 41 else 40
+    return {"status": "PASS", "step": 39, "assessed_commit": evidence["assessed_commit"], "g13": "PASS", "current_step": current_step}
 
 
 def main() -> int:

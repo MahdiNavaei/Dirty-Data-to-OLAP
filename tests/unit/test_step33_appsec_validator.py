@@ -106,11 +106,10 @@ def test_step33_closure_rejects_receipt_when_state_content_commit_changes() -> N
         validate_document(receipt, state)
 
 
-def test_step33_closure_rejects_disagreeing_state_content_commits() -> None:
+def test_step33_later_handoff_allows_current_pointer_change() -> None:
     receipt, state = _fixtures()
     state["specialist_execution"]["last_completed_content_commit"] = "c" * 40
-    with pytest.raises(ValidationFailure):
-        validate_document(receipt, state)
+    assert validate_document(receipt, state)["status"] == "PASS"
 
 
 @pytest.mark.parametrize(

@@ -47,6 +47,7 @@ CURRENT_ROLE_BY_STEP = {
     38: "load_stress",
     39: "penetration_red_team",
     40: "developer_experience_engineer",
+    41: "technical_writer",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -90,6 +91,7 @@ def is_authorized_specialist_handoff(
         or (current_step == 38 and maximum_current_step <= 37 and step37_performance_closed(state))
         or (current_step == 39 and maximum_current_step <= 38 and step38_load_stress_closed(state))
         or (current_step == 40 and maximum_current_step <= 39 and step39_red_team_closed(state))
+        or (current_step == 41 and maximum_current_step <= 40 and step40_g14_closed(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -277,7 +279,7 @@ def step32_compatibility_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37)
         and step36_resilience_closed(state)
-    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
+    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state) or step39_red_team_closed(state) or step40_g14_closed(state)
 
 
 def _step33_completion_evidence(state: dict[str, Any]) -> bool:
@@ -340,7 +342,7 @@ def step33_application_security_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step35_completion_evidence(state)
-    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
+    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state) or step39_red_team_closed(state) or step40_g14_closed(state)
 
 
 def _step34_completion_evidence(state: dict[str, Any]) -> bool:
@@ -757,6 +759,57 @@ def step39_red_team_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G12_CAPACITY") == "PASS"
         and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PASS"
         and all(current_gates.get(key) == "PENDING" for key in ("G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
+    )
+
+
+def step40_g14_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step40/G14 closure and Step41 handoff."""
+
+    specialist = execution(state)
+    current_gates = gates(state)
+    content_commit = specialist.get("last_completed_content_commit")
+    return (
+        is_authorized_specialist_handoff(state, minimum_current_step=41, maximum_current_step=41)
+        and specialist.get("current_step") == 41
+        and specialist.get("current_role") == "technical_writer"
+        and specialist.get("current_specialist") == "Step41 - Technical Writer"
+        and specialist.get("last_completed_step") == 40
+        and specialist.get("last_completed_role") == "developer_experience_engineer"
+        and specialist.get("last_completed_specialist") == "Step40 - Developer Experience Engineer"
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("step40_started") is True
+        and specialist.get("step40_status") == "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS"
+        and specialist.get("step41_started") is False
+        and specialist.get("step41_status") == "NOT_STARTED"
+        and all(
+            specialist.get(f"step{step}_started") is True
+            and specialist.get(f"step{step}_status") == status
+            for step, status in (
+                (30, "COMPLETED_DEVOPS_G8_PASS"),
+                (31, "COMPLETED_QA_AUTOMATION"),
+                (32, "COMPLETED_COMPATIBILITY_G9_PASS"),
+                (33, "COMPLETED_APPLICATION_SECURITY_G10_PASS"),
+                (34, "COMPLETED_OBSERVABILITY"),
+                (35, "COMPLETED_SRE"),
+                (36, "COMPLETED_RESILIENCE_G11_PASS"),
+                (37, "COMPLETED_PERFORMANCE"),
+                (38, "COMPLETED_LOAD_STRESS_G12_PASS"),
+                (39, "COMPLETED_RED_TEAM_G13_PASS"),
+            )
+        )
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and current_gates.get("G11_RESILIENCE") == "PASS"
+        and current_gates.get("G12_CAPACITY") == "PASS"
+        and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PASS"
+        and current_gates.get("G14_USABILITY") == "PASS"
+        and current_gates.get("G15_RELEASE") == "PENDING"
         and state.get("blocked") is False
     )
 
