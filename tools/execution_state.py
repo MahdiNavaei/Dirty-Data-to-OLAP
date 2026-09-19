@@ -475,7 +475,7 @@ def step34_observability_closed(state: dict[str, Any]) -> bool:
     ) or (
         is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36)
         and _step34_completion_evidence(state)
-    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
+    ) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state) or step40_g14_closed(state)
 
 
 def _step35_receipt_evidence(state: dict[str, Any]) -> bool:
@@ -529,7 +529,7 @@ def _step35_completion_evidence(state: dict[str, Any]) -> bool:
 def step35_sre_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step35 -> Step36 SRE handoff."""
 
-    return (is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
+    return (is_authorized_specialist_handoff(state, minimum_current_step=36, maximum_current_step=36) and _step35_completion_evidence(state)) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state) or step40_g14_closed(state)
 
 
 def _step36_receipt_evidence(state: dict[str, Any]) -> bool:
@@ -613,7 +613,7 @@ def _step36_completion_evidence(state: dict[str, Any]) -> bool:
 def step36_resilience_closed(state: dict[str, Any]) -> bool:
     """Recognize only the exact Step36 -> Step37 resilience handoff."""
 
-    return (is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
+    return (is_authorized_specialist_handoff(state, minimum_current_step=37, maximum_current_step=37) and _step36_completion_evidence(state)) or _step38_incomplete_handoff(state) or step38_load_stress_closed(state) or step40_g14_closed(state)
 
 
 def step37_performance_closed(state: dict[str, Any]) -> bool:
@@ -649,7 +649,7 @@ def step37_performance_closed(state: dict[str, Any]) -> bool:
         and all(current_gates.get(key) == "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
     )
-    return direct_closure or _step38_incomplete_handoff(state) or step38_load_stress_closed(state)
+    return direct_closure or _step38_incomplete_handoff(state) or step38_load_stress_closed(state) or step40_g14_closed(state)
 
 
 def step38_load_stress_closed(state: dict[str, Any]) -> bool:
@@ -704,7 +704,7 @@ def step38_load_stress_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G12_CAPACITY") == "PASS"
         and all(current_gates.get(key) == "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
-    ) or step39_red_team_closed(state)
+    ) or step39_red_team_closed(state) or step40_g14_closed(state)
 
 
 def step39_red_team_closed(state: dict[str, Any]) -> bool:
@@ -760,7 +760,7 @@ def step39_red_team_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PASS"
         and all(current_gates.get(key) == "PENDING" for key in ("G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
-    )
+    ) or step40_g14_closed(state)
 
 
 def step40_g14_closed(state: dict[str, Any]) -> bool:

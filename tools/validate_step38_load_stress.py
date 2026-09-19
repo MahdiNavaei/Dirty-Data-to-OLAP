@@ -99,6 +99,22 @@ def validate(evidence_path: Path, report_path: Path | None = None, expected_comm
         fail("authoritative state is blocked")
     state_gates = state.get("gates", {})
     if (
+        specialist.get("current_step") == 41
+        and specialist.get("last_completed_step") == 40
+        and specialist.get("last_completed_role") == "developer_experience_engineer"
+        and specialist.get("step38_status") == "COMPLETED_LOAD_STRESS_G12_PASS"
+        and specialist.get("step39_started") is True
+        and specialist.get("step39_status") == "COMPLETED_RED_TEAM_G13_PASS"
+        and specialist.get("step40_started") is True
+        and specialist.get("step40_status") == "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS"
+        and state_gates.get("G12_CAPACITY") == "PASS"
+        and state_gates.get("G13_ADVERSARIAL_SECURITY") == "PASS"
+        and state_gates.get("G14_USABILITY") == "PASS"
+        and state_gates.get("G15_RELEASE") == "PENDING"
+    ):
+        print(json.dumps({"status": "PASS", "step": 38, "assessed_commit": assessed, "current_step": specialist.get("current_step"), "g12": state_gates.get("G12_CAPACITY"), "later_gate": "G14_PASS"}, sort_keys=True))
+        return 0
+    if (
         specialist.get("current_step") == 38
         and specialist.get("step38_started") is True
         and specialist.get("step38_status") == "INCOMPLETE_FULL_REGRESSION_BLOCKER"

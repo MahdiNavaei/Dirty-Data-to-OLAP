@@ -220,7 +220,16 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
     state_gates = state.get("gates", {})
     if any(state_gates.get("G" + str(number) + suffix) != "PASS" for number, suffix in ((6, "_DATA_CORRECTNESS"), (7, "_END_TO_END_PRODUCT"), (8, "_REPRODUCIBLE_BUILD"), (9, "_FUNCTIONAL_SUPPORT"), (10, "_APPLICATION_SECURITY"), (11, "_RESILIENCE"))):
         _fail("authoritative state G6-G11 is not PASS")
-    if specialist.get("current_step") == 40:
+    if specialist.get("current_step") == 41:
+        try:
+            from tools.execution_state import step40_g14_closed
+        except ModuleNotFoundError:
+            from execution_state import step40_g14_closed
+        if not step40_g14_closed(state) or state_gates.get("G12_CAPACITY") != "PASS" or state_gates.get("G13_ADVERSARIAL_SECURITY") != "PASS" or state_gates.get("G14_USABILITY") != "PASS" or state_gates.get("G15_RELEASE") != "PENDING":
+            _fail("authoritative state G12-G15 is not a valid Step40/G14 closure")
+        if specialist.get("step40_started") is not True or specialist.get("step40_status") != "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS":
+            _fail("authoritative Step40 closure is incomplete")
+    elif specialist.get("current_step") == 40:
         if state_gates.get("G12_CAPACITY") != "PASS" or state_gates.get("G13_ADVERSARIAL_SECURITY") != "PASS" or any(state_gates.get(key) != "PENDING" for key in ("G14_USABILITY", "G15_RELEASE")):
             _fail("authoritative state G12-G15 is not a valid Step39 closure")
     elif specialist.get("current_step") == 39:
@@ -258,6 +267,12 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
             _fail("authoritative state G12-G15 is not a valid Step39 closure")
         if specialist.get("step39_started") is not True or specialist.get("step39_status") != "COMPLETED_RED_TEAM_G13_PASS":
             _fail("authoritative Step39 closure is incomplete")
+    elif specialist.get("current_step") == 41:
+        from execution_state import step40_g14_closed
+        if not step40_g14_closed(state) or state_gates.get("G12_CAPACITY") != "PASS" or state_gates.get("G13_ADVERSARIAL_SECURITY") != "PASS" or state_gates.get("G14_USABILITY") != "PASS" or state_gates.get("G15_RELEASE") != "PENDING":
+            _fail("authoritative state G12-G15 is not a valid Step40 closure")
+        if specialist.get("step40_started") is not True or specialist.get("step40_status") != "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS":
+            _fail("authoritative Step40 closure is incomplete")
     elif specialist.get("current_step") == 39:
         receipt = specialist.get("step38_load_stress", {})
         if (
