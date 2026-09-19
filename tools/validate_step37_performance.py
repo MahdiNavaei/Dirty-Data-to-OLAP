@@ -220,7 +220,10 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
     state_gates = state.get("gates", {})
     if any(state_gates.get("G" + str(number) + suffix) != "PASS" for number, suffix in ((6, "_DATA_CORRECTNESS"), (7, "_END_TO_END_PRODUCT"), (8, "_REPRODUCIBLE_BUILD"), (9, "_FUNCTIONAL_SUPPORT"), (10, "_APPLICATION_SECURITY"), (11, "_RESILIENCE"))):
         _fail("authoritative state G6-G11 is not PASS")
-    if specialist.get("current_step") == 39:
+    if specialist.get("current_step") == 40:
+        if state_gates.get("G12_CAPACITY") != "PASS" or state_gates.get("G13_ADVERSARIAL_SECURITY") != "PASS" or any(state_gates.get(key) != "PENDING" for key in ("G14_USABILITY", "G15_RELEASE")):
+            _fail("authoritative state G12-G15 is not a valid Step39 closure")
+    elif specialist.get("current_step") == 39:
         if state_gates.get("G12_CAPACITY") != "PASS" or any(state_gates.get(key) != "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
             _fail("authoritative state G12-G15 is not a valid Step38 closure")
     elif any(state_gates.get(key) != "PENDING" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
@@ -250,6 +253,11 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
             )
         ):
             _fail("final Step37 to Step38 handoff is inconsistent")
+    elif specialist.get("current_step") == 40:
+        if state_gates.get("G12_CAPACITY") != "PASS" or state_gates.get("G13_ADVERSARIAL_SECURITY") != "PASS" or any(state_gates.get(key) != "PENDING" for key in ("G14_USABILITY", "G15_RELEASE")):
+            _fail("authoritative state G12-G15 is not a valid Step39 closure")
+        if specialist.get("step39_started") is not True or specialist.get("step39_status") != "COMPLETED_RED_TEAM_G13_PASS":
+            _fail("authoritative Step39 closure is incomplete")
     elif specialist.get("current_step") == 39:
         receipt = specialist.get("step38_load_stress", {})
         if (

@@ -1810,3 +1810,18 @@ handoff_to:
 - regression_boundary: clean-room full regression passed through the Step30 validator with protected path and non-clean-room historical/runtime tests excluded according to repository policy; the separate host-global `561 passed, 4 skipped, 12 failed` diagnostic remains a documented host limitation
 - authoritative_final_state: `last_completed_step=38`; `last_completed_role=load_stress`; `current_step=39`; `current_role=penetration_red_team`; `step38_started=true`; `step38_status=COMPLETED_LOAD_STRESS_G12_PASS`; `step39_started=false`; `step39_status=NOT_STARTED`; `G12=PASS`; `G13-G15=PENDING`; `blocked=false`
 - claims: no production capacity, 1M/10M/100M measured scale, production source stress, public SLA or exactly-once claim; source protection remained read-only; protected quality artifacts remained unread, untouched, unstaged and uncommitted
+
+## PRIMARY PROMPT 39/41 - Penetration Tester / Red Team
+
+- execution_step: `39`; independent bounded adversarial security review completed; Step40 was not started
+- starting_baseline: accepted Step38/G12 closure at `69b28bb5521c8d63275be232f783fc8a6d0c8cd2`; Step39 implementation/evidence content commit `d003ebddca686e82a7ce56f292a431534efe4cf5`
+- attack_plan: `docs/security/redteam/STEP39_ATTACK_PLAN.md`; findings `docs/security/redteam/STEP39_FINDINGS.md`; retest `docs/security/redteam/STEP39_RETEST_REPORT.md`
+- executable_evidence: `tests/redteam/test_step39_red_team.py`; `8` independent adversarial tests passed; receipt controls `8` passed; total focused tests `16 passed`
+- attack_surface: HTTP auth and BOLA, project/run isolation, reviews and replay, execution authority, artifacts/filesystem, SQL/semantic query, connector SSRF/credential boundary, uploads, symlink confinement, and error/diagnostic disclosure
+- findings: Critical open `0`; High open `0`; two Medium accepted limitations are explicitly bounded to local-test authentication and trusted-proxy composition; all required scenarios passed and were retested
+- machine_receipt: `output/step39_red_team_validation.json`; validator `tools/validate_step39_red_team.py`; negative controls cover missing scenario, forged PASS, wrong commit, premature gate advancement, and Step40 start
+- exact_scope: local synthetic/disposable resources only; no external unauthorized system, real secret, destructive source operation, or protected artifact access
+- gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`, `G12=PASS`, `G13=PASS`, `G14-G15=PENDING`, `blocked=false`
+- authoritative_final_state: `last_completed_step=39`; `last_completed_role=penetration_red_team`; `current_step=40`; `current_role=developer_experience_engineer`; `step39_started=true`; `step39_status=COMPLETED_RED_TEAM_G13_PASS`; `step40_started=false`; `step40_status=NOT_STARTED`; `next_step=Step40 - Developer Experience Engineer`
+- ci_handoff: Step39 CI job is bounded to adversarial tests/validator and does not rerun Step38 load/stress; remote CI result is recorded after the exact-head run
+- no_step40_implementation: true

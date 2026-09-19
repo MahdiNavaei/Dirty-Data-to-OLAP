@@ -109,6 +109,19 @@ def validate(evidence_path: Path, report_path: Path | None = None, expected_comm
     ):
         print(json.dumps({"status": "PENDING", "step": 38, "assessed_commit": assessed, "current_step": specialist.get("current_step"), "g12": state_gates.get("G12_CAPACITY"), "profile_result": "PASS", "reason": "formal G12 closure is pending required regression/validator completion"}, sort_keys=True))
         return 0
+    if (
+        specialist.get("current_step") == 40
+        and specialist.get("last_completed_step") == 39
+        and specialist.get("last_completed_role") == "penetration_red_team"
+        and specialist.get("step38_status") == "COMPLETED_LOAD_STRESS_G12_PASS"
+        and specialist.get("step39_started") is True
+        and specialist.get("step39_status") == "COMPLETED_RED_TEAM_G13_PASS"
+        and state_gates.get("G12_CAPACITY") == "PASS"
+        and state_gates.get("G13_ADVERSARIAL_SECURITY") == "PASS"
+        and all(state_gates.get(key) == "PENDING" for key in ("G14_USABILITY", "G15_RELEASE"))
+    ):
+        print(json.dumps({"status": "PASS", "step": 38, "assessed_commit": assessed, "current_step": specialist.get("current_step"), "g12": state_gates.get("G12_CAPACITY"), "later_gate": "G13_PASS"}, sort_keys=True))
+        return 0
     expected_state = {"last_completed_step": 38, "last_completed_role": "load_stress", "current_step": 39, "current_role": "penetration_red_team", "step38_started": True, "step38_status": "COMPLETED_LOAD_STRESS_G12_PASS", "step39_started": False, "step39_status": "NOT_STARTED"}
     for key, value in expected_state.items():
         if specialist.get(key) != value:

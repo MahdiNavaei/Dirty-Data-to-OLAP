@@ -11,7 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed, step33_application_security_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed, step33_application_security_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed
 ARCH = ROOT / "docs" / "data-architecture"
 SPECS = ARCH / "specs"
 STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -513,6 +513,7 @@ def main() -> int:
     step32_pass = step32_compatibility_closed(state)
     step33_pass = step33_application_security_closed(state)
     step36_pass = step36_resilience_closed(state) or step37_performance_closed(state)
+    step39_pass = step39_red_team_closed(state)
     if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"} or state["gates"].get("G4_BOUNDED_INTELLIGENCE") not in {"PENDING", "PASS"} or any(
         value != "PENDING" for key, value in state["gates"].items()
         if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY", "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY"}
@@ -524,6 +525,7 @@ def main() -> int:
         and not (key == "G10_APPLICATION_SECURITY" and step33_pass)
         and not (key == "G11_RESILIENCE" and step36_pass)
         and not (key == "G12_CAPACITY" and step38_load_stress_closed(state))
+        and not (key == "G13_ADVERSARIAL_SECURITY" and step39_pass)
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:

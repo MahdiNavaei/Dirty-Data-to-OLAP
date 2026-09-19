@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "step": 39,
-  "assessed_commit": "e52a5f61ef726a45a54d3d6555a03b5c59584c5b",
+  "assessed_commit": "d003ebddca686e82a7ce56f292a431534efe4cf5",
   "status": "PASS",
   "overall_result": "PASS",
   "attack_surface_inventory": [

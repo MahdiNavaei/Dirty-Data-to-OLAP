@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
+import yaml
 
-from tools.validate_step39_red_team import REQUIRED_NEGATIVE_CONTROLS, REQUIRED_SCENARIOS, Step39ValidationError, validate_document
+from tools.validate_step39_red_team import REQUIRED_NEGATIVE_CONTROLS, REQUIRED_SCENARIOS, Step39ValidationError, validate_document, validate_state
 
 
 def _receipt() -> dict:
@@ -58,3 +60,22 @@ def test_step39_receipt_rejects_forged_or_incomplete_evidence(mutation, message:
     mutation(value)
     with pytest.raises(Step39ValidationError, match=message):
         validate_document(value)
+
+
+def test_step39_authoritative_state_accepts_g13_pass_and_step40_handoff() -> None:
+    root = Path(__file__).resolve().parents[2]
+    state = yaml.safe_load((root / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
+    validate_state(state)
+
+
+def test_step39_state_rejects_starting_step40_or_losing_g13() -> None:
+    root = Path(__file__).resolve().parents[2]
+    state = yaml.safe_load((root / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
+    forged = deepcopy(state)
+    forged["specialist_execution"]["step40_started"] = True
+    with pytest.raises(Step39ValidationError, match="Step40"):
+        validate_state(forged)
+    forged = deepcopy(state)
+    forged["gates"]["G13_ADVERSARIAL_SECURITY"] = "PENDING"
+    with pytest.raises(Step39ValidationError, match="G13"):
+        validate_state(forged)

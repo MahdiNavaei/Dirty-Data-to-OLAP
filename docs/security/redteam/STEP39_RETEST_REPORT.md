@@ -6,7 +6,7 @@ The complete adversarial suite was rerun after the attack probes were written:
 
 ```text
 tests/redteam/test_step39_red_team.py: 8 passed
-tests/unit/test_step39_red_team_validator.py: 6 passed
+tests/unit/test_step39_red_team_validator.py: 8 passed
 ```
 
 The suite includes both positive attack rejection and negative controls for

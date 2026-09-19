@@ -55,7 +55,7 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any], report: dict[str, Any], *, ci: bool) -> str:
-    from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed
+    from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed
 
     specialist = mapping(state.get("specialist_execution"), "specialist_execution")
     gates = mapping(state.get("gates"), "gates")
@@ -119,6 +119,17 @@ def validate_state(state: dict[str, Any], report: dict[str, Any], *, ci: bool) -
             raise ValidationFailure("closure state must set G11 PASS")
         return "STEP36_CLOSURE"
 
+    if specialist.get("current_step") == 40:
+        if not step39_red_team_closed(state):
+            raise ValidationFailure("state is not the authorized later Step39 closure")
+        resilience = mapping(specialist.get("step36_chaos_resilience"), "step36_chaos_resilience")
+        assessed = resilience.get("content_commit")
+        if report.get("phase") != "STEP36_CLOSURE" or report.get("assessed_commit") != assessed:
+            raise ValidationFailure("closure report is not bound to the Step36 content commit")
+        if gates.get("G11_RESILIENCE") != "PASS":
+            raise ValidationFailure("closure state must keep G11 PASS")
+        return "STEP36_CLOSURE"
+
     raise ValidationFailure("state is neither Step36 content phase nor authorized Step37 handoff")
 
 
@@ -154,7 +165,7 @@ def validate_documents(state: dict[str, Any]) -> dict[str, Any]:
         raise ValidationFailure("Step36 receipt is incomplete")
     if state["specialist_execution"]["current_step"] == 36 and re.search(r"G11[^\n]*PASS", receipt, re.IGNORECASE):
         raise ValidationFailure("content receipt must not claim G11 PASS")
-    if state["specialist_execution"]["current_step"] in {37, 38, 39} and not GATE_RECEIPT.is_file():
+    if state["specialist_execution"]["current_step"] in {37, 38, 39, 40} and not GATE_RECEIPT.is_file():
         raise ValidationFailure("G11 gate receipt is missing from closure")
     return {"fault_model": "PASS", "receipt": "PASS"}
 
@@ -165,7 +176,7 @@ def validate_report(report: dict[str, Any], state: dict[str, Any], *, ci: bool) 
     if report.get("required_scenarios") != 29 or report.get("passed_scenarios") != 29:
         raise ValidationFailure("Step36 report must record all 29 scenarios")
     for key in ("g11_resilience", "g12_capacity", "g13_adversarial_security", "g14_usability", "g15_release"):
-        expected = "PASS" if key == "g11_resilience" and state["specialist_execution"]["current_step"] in {37, 38, 39} else "PENDING"
+        expected = "PASS" if key == "g11_resilience" and state["specialist_execution"]["current_step"] in {37, 38, 39, 40} else "PENDING"
         if report.get(key) != expected:
             raise ValidationFailure(f"{key} has an invalid Step36 value")
     return validate_state(state, report, ci=ci)

@@ -57,14 +57,14 @@ post_bootstrap_repairs:
     scope: "Deterministic cleanup-plan and deletion-permit binding, run-scoped staged identity and manifest closure, V1-to-V3 SQLite migration, exact typed ValidationReport G6 receipts and external-locator binding"
     specialist_step_started: false
 specialist_execution:
-  current_step: 39
-  current_role: "penetration_red_team"
-  current_specialist: "Step39 - Penetration Tester / Red Team"
-  last_completed_step: 38
-  last_completed_role: "load_stress"
-  last_completed_specialist: "Step38 - Load / Stress Test Engineer"
-  last_completed_content_commit: "69b28bb5521c8d63275be232f783fc8a6d0c8cd2"
-  next_step: "Step39 - Penetration Tester / Red Team"
+  current_step: 40
+  current_role: "developer_experience_engineer"
+  current_specialist: "Step40 - Developer Experience Engineer"
+  last_completed_step: 39
+  last_completed_role: "penetration_red_team"
+  last_completed_specialist: "Step39 - Penetration Tester / Red Team"
+  last_completed_content_commit: "d003ebddca686e82a7ce56f292a431534efe4cf5"
+  next_step: "Step40 - Developer Experience Engineer"
   step30_started: true
   step30_status: "COMPLETED_DEVOPS_G8_PASS"
   step31_started: true
@@ -83,8 +83,10 @@ specialist_execution:
   step37_status: "COMPLETED_PERFORMANCE"
   step38_started: true
   step38_status: "COMPLETED_LOAD_STRESS_G12_PASS"
-  step39_started: false
-  step39_status: "NOT_STARTED"
+  step39_started: true
+  step39_status: "COMPLETED_RED_TEAM_G13_PASS"
+  step40_started: false
+  step40_status: "NOT_STARTED"
   step22_status: "COMPLETED_G6_PASS"
   step22_started: true
   step23_started: true
@@ -463,6 +465,27 @@ specialist_execution:
     scale_limits: "1M/10M/100M NOT_EXECUTED; no production capacity, SLA, exactly-once, or production-source-stress claim"
     step39_started: false
     protected_quality_artifacts: "contents unread; path untouched, unstaged and uncommitted"
+  step39_red_team:
+    step39_started: true
+    status: "PASS"
+    content_commit: "d003ebddca686e82a7ce56f292a431534efe4cf5"
+    assessed_commit: "d003ebddca686e82a7ce56f292a431534efe4cf5"
+    receipt: "output/step39_red_team_validation.json"
+    attack_plan: "docs/security/redteam/STEP39_ATTACK_PLAN.md"
+    findings: "docs/security/redteam/STEP39_FINDINGS.md"
+    retest: "docs/security/redteam/STEP39_RETEST_REPORT.md"
+    review: "docs/execution/STEP39_RED_TEAM_REVIEW.md"
+    validator: "tools/validate_step39_red_team.py"
+    executable_suite: "tests/redteam/test_step39_red_team.py"
+    validator_controls: "tests/unit/test_step39_red_team_validator.py"
+    scenarios: 13
+    focused_tests: "16 passed"
+    critical_open: 0
+    high_open: 0
+    g13_status: "PASS"
+    content_ci_run: "PENDING_REMOTE_CI"
+    content_ci_result: "PENDING_REMOTE_CI"
+    protected_quality_artifacts: "unread, untouched, unstaged and uncommitted"
   step22_content_commit: "f5ddeb6dbd2a1759b8d92a4dacf47400d6b580c2"
   step22_validation_report: "docs/execution/STEP22_DATA_CORRECTNESS_REVIEW.md"
   step22_blocking_reason: ""
@@ -480,7 +503,7 @@ gates:
   G10_APPLICATION_SECURITY: "PASS"
   G11_RESILIENCE: "PASS"
   G12_CAPACITY: "PASS"
-  G13_ADVERSARIAL_SECURITY: "PENDING"
+  G13_ADVERSARIAL_SECURITY: "PASS"
   G14_USABILITY: "PENDING"
   G15_RELEASE: "PENDING"
 intermediate_milestones:

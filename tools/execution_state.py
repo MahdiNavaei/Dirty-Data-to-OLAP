@@ -46,6 +46,7 @@ CURRENT_ROLE_BY_STEP = {
     37: "performance_engineer",
     38: "load_stress",
     39: "penetration_red_team",
+    40: "developer_experience_engineer",
 }
 
 PREVIOUS_ROLE_ALIASES = {
@@ -88,6 +89,7 @@ def is_authorized_specialist_handoff(
         or (current_step == 37 and maximum_current_step <= 36 and step36_resilience_closed(state))
         or (current_step == 38 and maximum_current_step <= 37 and step37_performance_closed(state))
         or (current_step == 39 and maximum_current_step <= 38 and step38_load_stress_closed(state))
+        or (current_step == 40 and maximum_current_step <= 39 and step39_red_team_closed(state))
     )
     if (not minimum_current_step <= current_step <= maximum_current_step and not beyond_declared_ceiling) or last_step != current_step - 1:
         return False
@@ -700,6 +702,47 @@ def step38_load_stress_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G12_CAPACITY") == "PASS"
         and all(current_gates.get(key) == "PENDING" for key in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE"))
         and state.get("blocked") is False
+    ) or step39_red_team_closed(state)
+
+
+def step39_red_team_closed(state: dict[str, Any]) -> bool:
+    """Recognize the accepted Step39/G13 closure and Step40 handoff."""
+
+    specialist = execution(state)
+    current_gates = gates(state)
+    red_team = specialist.get("step39_red_team", {})
+    content_commit = red_team.get("content_commit") if isinstance(red_team, dict) else None
+    return (
+        isinstance(red_team, dict)
+        and is_authorized_specialist_handoff(state, minimum_current_step=40, maximum_current_step=40)
+        and specialist.get("current_step") == 40
+        and specialist.get("current_role") == "developer_experience_engineer"
+        and specialist.get("current_specialist") == "Step40 - Developer Experience Engineer"
+        and specialist.get("last_completed_step") == 39
+        and specialist.get("last_completed_role") == "penetration_red_team"
+        and specialist.get("last_completed_specialist") == "Step39 - Penetration Tester / Red Team"
+        and specialist.get("last_completed_content_commit") == content_commit
+        and isinstance(content_commit, str)
+        and len(content_commit) == 40
+        and all(character in "0123456789abcdef" for character in content_commit.lower())
+        and specialist.get("step39_started") is True
+        and specialist.get("step39_status") == "COMPLETED_RED_TEAM_G13_PASS"
+        and specialist.get("step40_started") is False
+        and specialist.get("step40_status") == "NOT_STARTED"
+        and red_team.get("step39_started") is True
+        and red_team.get("status") == "PASS"
+        and red_team.get("g13_status") == "PASS"
+        and red_team.get("assessed_commit") == content_commit
+        and current_gates.get("G6_DATA_CORRECTNESS") == "PASS"
+        and current_gates.get("G7_END_TO_END_PRODUCT") == "PASS"
+        and current_gates.get("G8_REPRODUCIBLE_BUILD") == "PASS"
+        and current_gates.get("G9_FUNCTIONAL_SUPPORT") == "PASS"
+        and current_gates.get("G10_APPLICATION_SECURITY") == "PASS"
+        and current_gates.get("G11_RESILIENCE") == "PASS"
+        and current_gates.get("G12_CAPACITY") == "PASS"
+        and current_gates.get("G13_ADVERSARIAL_SECURITY") == "PASS"
+        and all(current_gates.get(key) == "PENDING" for key in ("G14_USABILITY", "G15_RELEASE"))
+        and state.get("blocked") is False
     )
 
 
@@ -809,6 +852,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             or (key == "G10_APPLICATION_SECURITY" and step33_application_security_closed(state))
             or (key == "G11_RESILIENCE" and current_gates.get(key) == "PASS" and _step36_receipt_evidence(state))
             or (key == "G12_CAPACITY" and current_gates.get(key) == "PASS" and _step38_receipt_evidence(state))
+            or (key == "G13_ADVERSARIAL_SECURITY" and step39_red_team_closed(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )

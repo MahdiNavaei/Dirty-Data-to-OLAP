@@ -15,7 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed
 ARCH = ROOT / "docs" / "architecture"
 SPECS = ARCH / "specs"
 KB = ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base"
@@ -948,6 +948,13 @@ def check_state() -> None:
         require(execution.get("current_role") == "penetration_red_team", "post-Step 38 state must hand off to Step39")
         require("Penetration Tester / Red Team" in str(execution.get("current_specialist")), "current specialist must be Step39")
         require("Penetration Tester / Red Team" in str(execution.get("next_step")), "next step must be Step39")
+    elif execution.get("current_step") == 40:
+        require(step39_red_team_closed(state), "Step39/red-team closure must be sequential and coherent")
+        require(execution.get("last_completed_step") == 39, "post-Step 39 state must record completed Step 39")
+        require(execution.get("last_completed_role") == "penetration_red_team", "post-Step 39 role must be penetration_red_team")
+        require(execution.get("current_role") == "developer_experience_engineer", "post-Step 39 state must hand off to Step40")
+        require("Developer Experience Engineer" in str(execution.get("current_specialist")), "current specialist must be Step40")
+        require("Developer Experience Engineer" in str(execution.get("next_step")), "next step must be Step40")
     elif execution.get("current_step") == 5:
         require(execution.get("last_completed_step") == 4, "execution state must record completed Step 04")
         require(execution.get("last_completed_role") == "solution_architect", "execution state role must be solution_architect")
@@ -976,7 +983,8 @@ def check_state() -> None:
     step33_pass = step33_application_security_closed(state)
     step36_pass = step36_resilience_closed(state) or step37_performance_closed(state)
     step38_pass = step38_load_stress_closed(state)
-    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) or (key == "G11_RESILIENCE" and step36_pass) or (key == "G12_CAPACITY" and step38_pass) for key in later_gate_keys[4:]), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7/G8/G9/G10/G11/G12 decisions")
+    step39_pass = step39_red_team_closed(state)
+    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) or (key == "G11_RESILIENCE" and step36_pass) or (key == "G12_CAPACITY" and step38_pass) or (key == "G13_ADVERSARIAL_SECURITY" and step39_pass) for key in later_gate_keys[4:]), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7/G8/G9/G10/G11/G12/G13 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 
