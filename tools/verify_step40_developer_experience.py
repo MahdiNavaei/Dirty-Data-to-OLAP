@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from typing import Any
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
@@ -28,6 +29,21 @@ def run_expected_failure(label: str, args: list[str], *, timeout: int = 60) -> d
     return {"name": label, "status": "PASS" if result.returncode != 0 else "FAIL", "returncode": result.returncode, "stdout_tail": result.stdout[-800:], "stderr_tail": result.stderr[-800:]}
 
 
+def run_demo_boundary_negative_control(label: str, state_root: Path, forbidden_artifact: Path) -> dict[str, Any]:
+    result = run_expected_failure(
+        label,
+        [str(ROOT / "tools" / "ddo.py"), "--root", str(ROOT), "demo", "--state-root", str(state_root)],
+        timeout=300,
+    )
+    actionable = "project-local .ddo" in result["stderr_tail"]
+    no_external_artifact = not forbidden_artifact.exists()
+    if result["status"] != "PASS" or not actionable or not no_external_artifact:
+        result["status"] = "FAIL"
+    result["actionable_boundary_error"] = actionable
+    result["no_external_artifact"] = no_external_artifact
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate Step40 developer experience")
     parser.add_argument("--ci", action="store_true")
@@ -42,10 +58,25 @@ def main() -> int:
     checks.append({"name": "CLI negative control", **run_expected_failure("CLI negative control", [shim, "--root", str(ROOT), "bootstrap", "--profile", "not-a-profile"], timeout=60)})
     checks.append({"name": "bootstrap dry-run", **run("bootstrap dry-run", [shim, "--root", str(ROOT), "bootstrap", "--dry-run"], timeout=60)})
     checks.append({"name": "bootstrap dry-run idempotency", **run("bootstrap dry-run idempotency", [shim, "--root", str(ROOT), "bootstrap", "--dry-run"], timeout=60)})
+    (ROOT / ".ddo").mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ddo-step40-demo-", dir=ROOT / ".ddo") as directory:
         state = Path(directory)
         checks.append({"name": "demo", **run("demo", [shim, "--root", str(ROOT), "demo", "--state-root", str(state)], timeout=300)})
         checks.append({"name": "demo idempotency", **run("demo idempotency", [shim, "--root", str(ROOT), "demo", "--state-root", str(state)], timeout=300)})
+    token = uuid.uuid4().hex
+    external = ROOT.parent / f".ddo-step40-external-{token}"
+    checks.append(run_demo_boundary_negative_control("demo external absolute path", external, external / "demo-result.json"))
+    traversal = ROOT / ".ddo" / ".." / f"ddo-step40-traversal-{token}"
+    checks.append(run_demo_boundary_negative_control("demo traversal path", traversal, ROOT / f"ddo-step40-traversal-{token}" / "demo-result.json"))
+    with tempfile.TemporaryDirectory(prefix="ddo-step40-link-", dir=ROOT / ".ddo") as directory:
+        link = Path(directory) / "escape"
+        symlink_target = ROOT.parent / f".ddo-step40-symlink-target-{token}"
+        try:
+            link.symlink_to(symlink_target, target_is_directory=True)
+        except OSError:
+            checks.append({"name": "demo symlink escape", "status": "SKIP", "detail": "directory symlinks unavailable on this host"})
+        else:
+            checks.append(run_demo_boundary_negative_control("demo symlink escape", link, symlink_target / "demo-result.json"))
     compiled = devx.compile_tracked_python(ROOT)
     checks.append({"name": "tracked Python compileall", **compiled})
     if args.include_frontend:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tempfile
 
 import pytest
 
@@ -109,9 +110,57 @@ def test_step40_bootstrap_reuses_exact_active_python(monkeypatch, capsys) -> Non
     assert any("--python pinned-python" in command for command in plan["commands"])
 
 
-def test_step40_demo_uses_real_product_boundary(tmp_path: Path, capsys) -> None:
-    assert devx.main(["--root", str(ROOT), "demo", "--state-root", str(tmp_path / "demo")]) == 0
+def test_step40_demo_default_state_is_project_local(capsys) -> None:
+    assert devx.main(["--root", str(ROOT), "demo"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert result["status"] == "PASS"
-    assert result["health"]["status"] == "ok"
-    assert result["run_status"] == "CREATED"
+    state = Path(result["state_root"]).resolve()
+    state.relative_to((ROOT / ".ddo").resolve())
+    assert state == (ROOT / ".ddo" / "demo").resolve()
+    assert Path(result["result_file"]).resolve().is_file()
+
+
+def test_step40_demo_uses_real_product_boundary_and_is_idempotent(capsys) -> None:
+    (ROOT / ".ddo").mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="ddo-step40-unit-", dir=ROOT / ".ddo") as directory:
+        state = Path(directory)
+        for _ in range(2):
+            assert devx.main(["--root", str(ROOT), "demo", "--state-root", str(state)]) == 0
+            result = json.loads(capsys.readouterr().out)
+            assert result["status"] == "PASS"
+            assert result["health"]["status"] == "ok"
+            assert result["run_status"] == "CREATED"
+            Path(result["state_root"]).resolve().relative_to((ROOT / ".ddo").resolve())
+            assert Path(result["result_file"]).resolve().is_file()
+
+
+def test_step40_demo_rejects_external_absolute_and_traversal_paths(tmp_path: Path, capsys) -> None:
+    external = tmp_path / "external-demo-state"
+    traversal = ROOT / ".ddo" / ".." / "step40-traversal-state"
+    for candidate in (external, traversal):
+        assert devx.main(["--root", str(ROOT), "demo", "--state-root", str(candidate)]) == 2
+        assert "project-local .ddo" in capsys.readouterr().err
+        assert not candidate.resolve().exists()
+        assert not (candidate / "demo-result.json").exists()
+
+
+def test_step40_demo_rejects_symlink_escape(tmp_path: Path, capsys) -> None:
+    (ROOT / ".ddo").mkdir(parents=True, exist_ok=True)
+    link = ROOT / ".ddo" / "step40-symlink-escape"
+    external_target = tmp_path / "symlink-target"
+    link.unlink(missing_ok=True)
+    try:
+        link.symlink_to(external_target, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks are unavailable on this host")
+    try:
+        assert devx.main(["--root", str(ROOT), "demo", "--state-root", str(link)]) == 2
+        assert "project-local .ddo" in capsys.readouterr().err
+        assert not external_target.exists()
+        assert not (external_target / "demo-result.json").exists()
+    finally:
+        link.unlink(missing_ok=True)
+
+
+def test_step40_demo_rejects_invalid_state_root_type() -> None:
+    with pytest.raises(devx.DevxFailure, match="path-like"):
+        devx.demo(ROOT, state_root=object())

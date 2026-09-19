@@ -41,6 +41,43 @@ class DevxFailure(RuntimeError):
     """An actionable developer-workflow failure."""
 
 
+def _resolve_demo_state_root(root: Path, state_root: object | None) -> Path:
+    """Resolve demo state without allowing it to escape the project-local boundary."""
+
+    project_root = Path(root).resolve()
+    authorized_root = (project_root / ".ddo").resolve()
+    try:
+        authorized_root.relative_to(project_root)
+    except ValueError:
+        raise DevxFailure("demo state authority is invalid: .ddo resolves outside the repository") from None
+
+    if state_root is None:
+        requested = authorized_root / "demo"
+    else:
+        if not isinstance(state_root, (str, os.PathLike)):
+            raise DevxFailure("demo --state-root must be a path-like value")
+        try:
+            raw_state_root = os.fspath(state_root)
+            if isinstance(raw_state_root, bytes) or not raw_state_root:
+                raise DevxFailure("demo --state-root must be a non-empty text path")
+            requested_path = Path(raw_state_root).expanduser()
+        except (OSError, TypeError, ValueError) as exc:
+            raise DevxFailure("demo --state-root must be a valid path") from exc
+        requested = requested_path if requested_path.is_absolute() else Path.cwd() / requested_path
+
+    try:
+        resolved = requested.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise DevxFailure(f"demo --state-root cannot be resolved safely: {requested}") from exc
+    try:
+        resolved.relative_to(authorized_root)
+    except ValueError:
+        raise DevxFailure(f"demo --state-root must remain under the project-local .ddo directory: {requested}") from None
+    if resolved.exists() and not resolved.is_dir():
+        raise DevxFailure(f"demo --state-root must identify a directory: {requested}")
+    return resolved
+
+
 def repository_root(value: str | Path | None = None) -> Path:
     if value is not None:
         root = Path(value).expanduser().resolve()
@@ -283,12 +320,13 @@ def compile_tracked_python(root: Path) -> dict[str, Any]:
 
 
 def demo(root: Path, state_root: Path | None = None) -> int:
+    state = _resolve_demo_state_root(root, state_root)
+
     from fastapi.testclient import TestClient
 
     from dirty_data_to_olap.composition import build_local_backend
     from dirty_data_to_olap.entrypoints.api import create_app
 
-    state = (state_root or (root / ".ddo" / "demo")).resolve()
     platform_obj, backend = build_local_backend(state)
     try:
         with TestClient(create_app(backend)) as client:
