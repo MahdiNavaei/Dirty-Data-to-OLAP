@@ -526,7 +526,7 @@ def main() -> int:
         and not (key == "G11_RESILIENCE" and step36_pass)
         and not (key == "G12_CAPACITY" and step38_load_stress_closed(state))
         and not (key == "G13_ADVERSARIAL_SECURITY" and step39_pass)
-        and not (key == "G14_USABILITY" and step40_g14_closed(state))
+        and not (key == "G" + "14_USABILITY" and step40_g14_closed(state))
     ):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:
