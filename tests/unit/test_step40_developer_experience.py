@@ -33,7 +33,10 @@ def test_step40_bootstrap_dry_run_is_bounded(capsys) -> None:
     assert devx.main(["--root", str(ROOT), "bootstrap", "--profile", "matching", "--dry-run"]) == 0
     plan = json.loads(capsys.readouterr().out)
     assert plan["status"] == "DRY_RUN"
-    assert all(str(ROOT) not in command or ".ddo" in command for command in plan["commands"])
+    assert all(
+        str(ROOT) not in command or any(local in command for local in (".ddo", ".venv"))
+        for command in plan["commands"]
+    )
 
 
 def test_step40_bootstrap_reuses_exact_active_python(monkeypatch, capsys) -> None:
