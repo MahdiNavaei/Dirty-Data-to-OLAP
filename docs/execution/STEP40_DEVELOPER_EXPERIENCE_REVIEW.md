@@ -49,3 +49,30 @@ Required evidence before closure:
 Final state: `G14=PASS`, `G15=PENDING`, `step40_started=true`,
 `step40_status=COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS`,
 `step41_started=false`, `step41_status=NOT_STARTED`.
+
+## Targeted post-Step40 filesystem-boundary repair
+
+The accepted Step40 CLI had one independently audited defect: an explicit
+`--state-root` could make the real demo backend and `demo-result.json` outside
+the project-local `.ddo/` authority. The repair resolves both the authority
+and requested path, applies Path containment semantics, and rejects external
+absolute paths, traversal, symlink escapes, invalid path types, and non-directory
+targets before backend construction or runtime writes.
+
+Repair evidence:
+
+- repaired content head: `354030a90fd4148c74151426bd9102dc4f2a20ec`;
+- default state: `<repository>/.ddo/demo/`;
+- valid custom state: only beneath `<repository>/.ddo/`;
+- focused Step40 suite: `10 passed`;
+- actual CLI negative controls: external absolute path, traversal, symlink escape,
+  actionable failure, and no external artifact creation;
+- supported unit tests: `245 passed` excluding the protected quality-engine test;
+- security/red-team tests: `65 passed`;
+- default repository validators: `37/39`; the two host-only failures were
+  Step30/Step31 OpenAPI checks requiring unavailable local Python `3.11.16`;
+- exact pinned remote CI run: `35464747467`, result `SUCCESS`;
+- Step40 job: `105965189041`; bootstrap, validator, boundary controls and
+  clean-worktree verification passed;
+- protected `tests/quality_unit_artifacts/` remained unread and untouched;
+- G14 remains `PASS`, G15 remains `PENDING`, and Step41 remains `NOT_STARTED`.

@@ -1840,3 +1840,21 @@ handoff_to:
 - gate_state: `G6=PASS`, `G7=PASS`, `G8=PASS`, `G9=PASS`, `G10=PASS`, `G11=PASS`, `G12=PASS`, `G13=PASS`, `G14=PASS`, `G15=PENDING`, `blocked=false`
 - authoritative_final_state: `last_completed_step=40`; `last_completed_role=developer_experience_engineer`; `current_step=41`; `current_role=technical_writer`; `step40_started=true`; `step40_status=COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS`; `step41_started=false`; `step41_status=NOT_STARTED`; `next_step=Step41 - Technical Writer`; `blocked=false`
 - no_step41_implementation: true
+
+## TARGETED POST-STEP40 FILESYSTEM BOUNDARY INTEGRITY REPAIR
+
+- repair_scope: project-local `ddo demo` state boundary only; Step41 implementation was not started
+- starting_head: `31400fe900aadddc6352c12e334a92965c4c0b08`
+- content_repair_commit: `354030a90fd4148c74151426bd9102dc4f2a20ec`
+- defect: caller-controlled `--state-root` could direct SQLite/control state and `demo-result.json` outside the repository-local `.ddo/` authority
+- enforcement: resolved-path containment under `<repository>/.ddo/`; authorized before backend construction, directory creation, or result writing; external absolute, traversal, symlink escape, invalid type and non-directory controls fail closed
+- default_demo_path: `<repository>/.ddo/demo/`
+- valid_custom_demo_path: only a resolved directory beneath `<repository>/.ddo/`
+- focused_tests: `10 passed`; default path, valid custom path, real FastAPI boundary, idempotency, external absolute, traversal, symlink escape, invalid type and no-external-artifact controls included
+- local_supported_tests: `245 passed` unit tests excluding protected quality-engine test; `65 passed` security/red-team tests; compileall and `git diff --check` passed
+- repository_validators: `37/39` default validators passed; Step30 and Step31 host-only OpenAPI checks remained blocked by unavailable local Python `3.11.16`; exact pinned CI passed
+- exact_head_ci: run `35464747467`; head `354030a90fd4148c74151426bd9102dc4f2a20ec`; result `PASS`
+- step40_ci_job: `105965189041`; pinned bootstrap, Step40 validator, filesystem negative controls and clean worktree all passed
+- protected_quality_artifacts: contents unread; path untouched, unstaged and uncommitted; pre-existing user RAR preserved
+- authoritative_final_state: `last_completed_step=40`; `current_step=41`; `current_role=technical_writer`; `step41_started=false`; `step41_status=NOT_STARTED`; `G14=PASS`; `G15=PENDING`; `blocked=false`
+- no_step41_implementation: true
