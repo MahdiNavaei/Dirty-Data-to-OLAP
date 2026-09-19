@@ -415,3 +415,29 @@ jobs:
         run: |
           git diff --check
           test -z "$(git status --porcelain)"
+
+  redteam:
+    name: Step39 adversarial security / G13
+    needs: [performance]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute independent Step39 adversarial scenarios
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/redteam/test_step39_red_team.py tests/unit/test_step39_red_team_validator.py -q
+      - name: Validate Step39 receipt and G13 handoff
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step39_red_team.py
+      - name: Verify Step39 content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
