@@ -108,6 +108,31 @@ def _python_version(executable: str = sys.executable) -> str:
     return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if executable == sys.executable else (_version([executable, "--version"], cwd=Path.cwd())[0] or "unknown").removeprefix("Python ")
 
 
+def _exact_python_executable(root: Path, expected: str) -> str | None:
+    """Return an already-available interpreter matching the repository pin."""
+    candidates: list[str] = []
+    override = os.environ.get("DDO_PYTHON")
+    if override:
+        candidates.append(override)
+    candidates.append(sys.executable)
+    venv_python = _venv_python(root)
+    if venv_python.is_file():
+        candidates.append(str(venv_python))
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            actual, _ = _version([candidate, "--version"], cwd=root, timeout=20)
+        except DevxFailure:
+            continue
+        if (actual or "").removeprefix("Python ").strip() == expected:
+            return candidate
+    return None
+
+
 def _venv_python(root: Path) -> Path:
     relative = Path(".venv") / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     return root / relative
@@ -193,12 +218,23 @@ def doctor(root: Path) -> tuple[dict[str, Any], bool]:
 def bootstrap(root: Path, *, profile: str, dry_run: bool) -> int:
     extras = _profile_extras(profile)
     env = _local_environment(root)
-    commands: list[list[str]] = [
-        [_command_name(root, "uv"), "python", "install", _read_pin(root, ".python-version", PINNED_PYTHON)],
-        [_command_name(root, "uv"), "sync", "--locked", "--python", _read_pin(root, ".python-version", PINNED_PYTHON), "--group", "dev", *sum((["--extra", extra] for extra in extras), [])],
+    expected_python = _read_pin(root, ".python-version", PINNED_PYTHON)
+    exact_python = _exact_python_executable(root, expected_python)
+    python_target = exact_python or expected_python
+    commands: list[list[str]] = []
+    if exact_python is None:
+        commands.append([_command_name(root, "uv"), "python", "install", expected_python])
+    commands.extend([
+        [_command_name(root, "uv"), "sync", "--locked", "--python", python_target, "--group", "dev", *sum((["--extra", extra] for extra in extras), [])],
         [_command_name(root, "npm"), "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
-    ]
-    plan = {"status": "DRY_RUN" if dry_run else "RUN", "profile": profile, "project_local": True, "commands": [" ".join(command) for command in commands]}
+    ])
+    plan = {
+        "status": "DRY_RUN" if dry_run else "RUN",
+        "profile": profile,
+        "project_local": True,
+        "python_source": "existing-exact-interpreter" if exact_python else "uv-managed-interpreter",
+        "commands": [" ".join(command) for command in commands],
+    }
     if dry_run:
         _json_print(plan)
         return 0
@@ -206,11 +242,19 @@ def bootstrap(root: Path, *, profile: str, dry_run: bool) -> int:
     (root / ".ddo" / "cache" / "npm").mkdir(parents=True, exist_ok=True)
     (root / ".ddo" / "python").mkdir(parents=True, exist_ok=True)
     (root / ".venv").mkdir(parents=True, exist_ok=True)
-    for label, command, cwd, timeout in (
-        ("pinned Python", commands[0], root, 600),
-        ("locked Python environment", commands[1], root, 3600),
-        ("locked frontend dependencies", commands[2], root / "frontend", 900),
-    ):
+    steps: list[tuple[str, list[str], Path, int]] = []
+    if exact_python is None:
+        steps.append(("pinned Python", commands[0], root, 600))
+        sync_command = commands[1]
+        npm_command = commands[2]
+    else:
+        sync_command = commands[0]
+        npm_command = commands[1]
+    steps.extend([
+        ("locked Python environment", sync_command, root, 3600),
+        ("locked frontend dependencies", npm_command, root / "frontend", 900),
+    ])
+    for label, command, cwd, timeout in steps:
         result = _run(command, cwd=cwd, env=env, timeout=timeout, capture=False)
         if result.returncode != 0:
             raise DevxFailure(f"{label} failed with exit code {result.returncode}; rerun with the same profile after fixing the reported prerequisite")

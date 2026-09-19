@@ -14,10 +14,12 @@ python tools/ddo.py doctor
 ```
 
 The bootstrap uses `.python-version` (`3.11.16`), `.node-version` (`22.14.0`),
-and the locked `uv` version (`0.11.26`). It stores the virtual environment,
-uv-managed Python, uv cache, and npm cache under the repository. It fails
-closed when the exact pinned interpreter is unavailable; it does not silently
-substitute another Python version.
+and the locked `uv` version (`0.11.26`). It reuses an already-active exact
+Python interpreter when one is provided by the host or CI, otherwise it asks uv
+to provision the pinned interpreter. The virtual environment, any uv-managed
+Python, uv cache, and npm cache stay under the repository. It fails closed when
+the exact pinned interpreter is unavailable; it does not silently substitute
+another Python version.
 
 After bootstrap, the equivalent installed entry point is:
 

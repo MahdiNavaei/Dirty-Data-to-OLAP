@@ -36,6 +36,17 @@ def test_step40_bootstrap_dry_run_is_bounded(capsys) -> None:
     assert all(str(ROOT) not in command or ".ddo" in command for command in plan["commands"])
 
 
+def test_step40_bootstrap_reuses_exact_active_python(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("DDO_PYTHON", "pinned-python")
+    monkeypatch.setattr(devx, "_version", lambda *args, **kwargs: ("Python 3.11.16", None))
+
+    assert devx.main(["--root", str(ROOT), "bootstrap", "--profile", "core", "--dry-run"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["python_source"] == "existing-exact-interpreter"
+    assert not any("python install" in command for command in plan["commands"])
+    assert any("--python pinned-python" in command for command in plan["commands"])
+
+
 def test_step40_demo_uses_real_product_boundary(tmp_path: Path, capsys) -> None:
     assert devx.main(["--root", str(ROOT), "demo", "--state-root", str(tmp_path / "demo")]) == 0
     result = json.loads(capsys.readouterr().out)
