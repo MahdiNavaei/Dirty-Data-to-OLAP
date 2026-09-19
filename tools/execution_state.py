@@ -729,6 +729,21 @@ def step39_red_team_closed(state: dict[str, Any]) -> bool:
         and specialist.get("step39_status") == "COMPLETED_RED_TEAM_G13_PASS"
         and specialist.get("step40_started") is False
         and specialist.get("step40_status") == "NOT_STARTED"
+        and all(
+            specialist.get(f"step{step}_started") is True
+            and specialist.get(f"step{step}_status") == status
+            for step, status in (
+                (30, "COMPLETED_DEVOPS_G8_PASS"),
+                (31, "COMPLETED_QA_AUTOMATION"),
+                (32, "COMPLETED_COMPATIBILITY_G9_PASS"),
+                (33, "COMPLETED_APPLICATION_SECURITY_G10_PASS"),
+                (34, "COMPLETED_OBSERVABILITY"),
+                (35, "COMPLETED_SRE"),
+                (36, "COMPLETED_RESILIENCE_G11_PASS"),
+                (37, "COMPLETED_PERFORMANCE"),
+                (38, "COMPLETED_LOAD_STRESS_G12_PASS"),
+            )
+        )
         and red_team.get("step39_started") is True
         and red_team.get("status") == "PASS"
         and red_team.get("g13_status") == "PASS"

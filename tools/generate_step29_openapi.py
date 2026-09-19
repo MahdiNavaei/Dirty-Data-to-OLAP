@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from dirty_data_to_olap.application.product_runtime import build_local_product
+from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.entrypoints.api import create_app
 
 
@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    platform, backend, _runtime = build_local_product(root)
+    platform, backend = build_local_backend(root)
     try:
         document = create_app(backend).openapi()
         args.output.parent.mkdir(parents=True, exist_ok=True)

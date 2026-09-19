@@ -12,6 +12,9 @@ dependencies = [
   "duckdb>=1.0,<2",
 ]
 
+[project.scripts]
+ddo = "dirty_data_to_olap.devx:main"
+
 [project.optional-dependencies]
 api = [
   "fastapi>=0.128,<1",

@@ -23,6 +23,7 @@ htmlcov/
 !.env.example
 
 # Project-local runtime state and generated output
+.ddo/
 .var/
 .cache/
 tmp/

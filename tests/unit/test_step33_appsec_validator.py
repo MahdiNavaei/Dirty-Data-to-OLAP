@@ -42,7 +42,27 @@ def _content_phase_state(state: dict) -> dict:
         }
     )
     execution.pop("step33_application_security", None)
-    candidate["gates"]["G10_APPLICATION_SECURITY"] = "PENDING"
+    for step in range(34, 41):
+        execution[f"step{step}_started"] = False
+        execution[f"step{step}_status"] = "NOT_STARTED"
+    for key in (
+        "step34_observability",
+        "step35_sre",
+        "step36_resilience",
+        "step37_performance",
+        "step38_load_stress",
+        "step39_red_team",
+    ):
+        execution.pop(key, None)
+    for gate in (
+        "G10_APPLICATION_SECURITY",
+        "G11_RESILIENCE",
+        "G12_CAPACITY",
+        "G13_ADVERSARIAL_SECURITY",
+        "G14_USABILITY",
+        "G15_RELEASE",
+    ):
+        candidate["gates"][gate] = "PENDING"
     candidate["blocked"] = False
     return candidate
 
