@@ -38,10 +38,14 @@ def test_step38_validator_rejects_exactly_once_or_step39_claim(tmp_path: Path, m
 def test_step38_authoritative_state_preserves_g12_after_later_handoffs() -> None:
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     specialist = state["specialist_execution"]
-    assert specialist["current_step"] in {38, 39, 40}
+    assert specialist["current_step"] in {38, 39, 40, 41}
     if specialist["current_step"] == 40:
         assert specialist["step39_started"] is True
         assert specialist["step39_status"] == "COMPLETED_RED_TEAM_G13_PASS"
         assert state["gates"]["G13_ADVERSARIAL_SECURITY"] == "PASS"
+    elif specialist["current_step"] == 41:
+        assert specialist["step40_started"] is True
+        assert specialist["step40_status"] == "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS"
+        assert state["gates"]["G14_USABILITY"] == "PASS"
     else:
         assert state["gates"]["G13_ADVERSARIAL_SECURITY"] == "PENDING"
