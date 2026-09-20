@@ -1,4 +1,8 @@
-# Dirty Data to OLAP V1 — Pre-Implementation Documentation Pack
+# Dirty Data to OLAP V1 — Pre-Implementation Documentation Pack (Historical)
+
+> This pack is the architectural source used before implementation. For the
+> current product, start at [the current documentation map](README.md), not
+> this historical pack.
 
 > Canonical product name: **Dirty Data to OLAP**
 > Goal of V1: turn fragmented, dirty tabular data into a validated, unified, OLAP-ready analytical layer.

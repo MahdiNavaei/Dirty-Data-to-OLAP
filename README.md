@@ -1,20 +1,82 @@
 # Dirty Data to OLAP
 
-Dirty Data to OLAP turns fragmented, dirty tabular data into an evidence-backed, validated OLAP-ready analytical layer.
+Dirty Data to OLAP is an evidence-first V1 reference product for turning a
+bounded, read-only tabular source into a reviewed and validated OLAP-ready
+analytical layer. The product keeps source observations, evidence, review
+decisions, canonical identity, analytical planning, materialization, and G6
+correctness validation separate and inspectable.
 
-Developer quickstart: run `python tools/ddo.py bootstrap --profile core`, then
-`python tools/ddo.py doctor`, `python tools/ddo.py demo`, and
-`python tools/ddo.py check --tests`. The canonical cross-platform interface is
-the same `ddo` command after bootstrap (`uv run ddo ...`); see
-[CONTRIBUTING.md](CONTRIBUTING.md) and the [developer workflow](docs/development/DEVELOPER_WORKFLOW.md).
+This repository is a local/reference implementation. It does not claim
+production deployment, high availability, a production SLA, universal source
+security, or measured multi-million-row capacity.
 
-The Step 05 architecture and engineering baseline is complete.
+The Step 05 architecture and engineering baseline remains preserved as
+historical design evidence; this README describes the current implementation
+and later gate state.
 
-Current status: Steps 01-21 are complete for their bounded specialist scopes; corrected Step18 v5 empirical evaluation is formally G5 PASS in `REVIEW_ONLY_VALIDATED` mode, Step19 provides the review-gated canonical model boundary, Step20 provides a review-gated, materializable DuckDB star-schema package, and Step21 provides a generic, review-bound semantic projection with bounded read-only query plans. Step21 does not change Step20 grain or aggregation classes, invent revenue, or certify G6. The critical post-Step19 integrity repairs are complete: evidence reviews bind to each concrete relationship/mapping decision, identity memberships are proposal-owned, every ER_REQUIRED family must have a compatible COMPLETE ER result even for HUMAN_DOMAIN_REVIEW, authorized ER membership edges must form one connected component, and ER_NOT_REQUIRED events are finalized explicitly. The earlier v4 PASS is historical and superseded by the v5 ER metric/cluster-policy repair. G0/G1/G2/G3 PASS; G4/G5 PASS; G3A/G3B/G4A PASS; G6-G15 remain PENDING. Step15 remains experimental and uncalibrated. Step16 provides optional, local-only Ollama semantic evidence, Step17 provides provenance-aware Evidence Fusion with first-class conflicts and explicitly UNCALIBRATED scores, Step18 binds actual provider outputs, Step19 preserves reviewed identity, mappings, survivorship, conflicts and source-record accounting, and Step20 preserves those canonical references while assigning separate deterministic warehouse keys. No automatic acceptance, repair execution, source write, revenue inference, or automation authorization is performed.
+## Current product path
 
-Next: Step22 Data QA Engineer owns independent source-to-canonical-to-OLAP reconciliation. G6 remains pending and no automation threshold has been selected; automation remains not authorized.
+The user-facing browser path is a managed CSV import followed by source
+binding, server-owned plan preparation, durable execution, four typed review
+checkpoints, materialization, validation, and an output projection only after a
+successful G6-eligible run. The wider adapter boundary also covers tested
+SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, CSV, Parquet, and optional XLSX
+paths. Oracle is deferred.
 
-The latest offline continuation verified Valentine `1.0.0` and Splink `4.0.17` from the project-local wheelhouse and local NLTK resources. Coma and Cupid each completed all 11 schema groups; joint Schema Fusion used the combined result with the real 22/22/22 producer estate; Splink trained with phone comparison and complementary EM rules over 24 records. The corrected v5 report evaluates 10 TEST records as 45 pairs (8 positive, 37 negative), uses complete predicted partitions, and enforces final project edge bands. G5 is `PASS` / `REVIEW_ONLY_VALIDATED`, remains review-only with no selected threshold. Step20 evidence is under `workspace/runs/step20-reference-run/olap/`; Step21 semantic evidence is under `workspace/runs/step21-reference-run/semantic/` and `workspace/runs/step21-generic-reference-run/semantic/`, all synthetic/domain-reviewed and local-only.
+The Step40 `ddo demo` is intentionally smaller: it is a deterministic,
+project-local control-plane smoke through health, configuration, run creation,
+and run read. It is not the full OLAP product journey.
 
-- Project documentation: [docs/00_README.md](docs/00_README.md)
-- Execution state: [docs/execution/MASTER_EXECUTION_STATE.yml](docs/execution/MASTER_EXECUTION_STATE.yml)
+## Quickstart
+
+From PowerShell at the repository root:
+
+```powershell
+python tools/ddo.py bootstrap --profile core
+python tools/ddo.py doctor
+python tools/ddo.py demo
+python tools/ddo.py check --tests
+```
+
+The same interface is available as `uv run ddo ...` after the locked
+environment is bootstrapped. Disposable state is kept under project-local
+`.ddo/` and `.venv/`; the demo refuses external or traversal state roots.
+
+## Navigate the documentation
+
+- [Documentation map](docs/README.md)
+- [Getting started](docs/getting-started/README.md)
+- [User guide and full workflow](docs/user-guide/README.md)
+- [Concepts and trust boundaries](docs/concepts/README.md)
+- [Architecture](docs/architecture/README.md)
+- [API and authentication](docs/api/README.md)
+- [Source support](docs/compatibility/README.md)
+- [Validation and evidence](docs/validation/README.md)
+- [Operations and recovery](docs/operations/README.md)
+- [Troubleshooting](docs/troubleshooting/README.md)
+- [Release notes and limitations](docs/release/README.md)
+- [Developer workflow](docs/development/DEVELOPER_WORKFLOW.md)
+
+The older [pre-implementation documentation pack](docs/00_README.md) remains
+available as architectural history. It is not the current user guide.
+
+## Release gates
+
+G0 through G14 are PASS in the authoritative execution state. G15 is the
+documentation and release-accuracy gate and is PASS only when the current
+claim/evidence matrix, command checks, validators, regression, and CI all
+succeed. A G15 PASS is not a universal production-readiness certificate.
+
+## Important boundaries
+
+- Fusion scores are uncalibrated decision scores, not probabilities.
+- No inference automation threshold is selected or enabled.
+- Entity-resolution clusters are reviewed linkage evidence, not automatic
+  canonical truth.
+- The product does not invent revenue or GMV semantics.
+- Source systems are treated as read-only by the V1 contract.
+- No release tag, deployment, or external publication is performed by this
+  repository workflow.
+
+See [the release limitations](docs/release/LIMITATIONS.md) for the complete
+scope and evidence boundary.

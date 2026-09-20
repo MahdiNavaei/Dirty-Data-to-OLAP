@@ -1,5 +1,27 @@
 # Step27 Backend API
 
+This page documents the current `/api/v1` contract. The tracked
+`frontend/openapi.json` generated from the FastAPI application is the source of
+truth for request and response schemas; this route index is a navigation aid,
+not a second schema.
+
+## Route index
+
+| Area | Routes |
+|---|---|
+| System and sources | `GET /health`, `GET /sources`, `GET /product/configuration`, `POST /sources/import` |
+| Runs | `POST /runs`, `GET /runs`, `GET /projects/{project_id}/runs`, `GET /runs/{run_id}`, `GET /runs/{run_id}/product-summary`, `GET /runs/{run_id}/diagnostics` |
+| Source and attempts | `POST /runs/{run_id}/source-selection`, `GET /runs/{run_id}/attempts`, `GET /runs/{run_id}/attempts/{attempt_id}` |
+| Jobs | `GET /runs/{run_id}/jobs`, `GET /runs/{run_id}/jobs/{job_id}`, `GET /jobs/{job_id}` |
+| Artifacts | `GET /runs/{run_id}/artifacts`, `GET /artifacts/{artifact_id}`, `POST /runs/{run_id}/artifacts/register`, `GET /runs/{run_id}/artifacts/{artifact_id}/content` |
+| Reviews and validation | `GET /runs/{run_id}/reviews`, `POST /runs/{run_id}/reviews/{checkpoint}`, `POST /runs/{run_id}/reviews/{checkpoint}/invalidate`, `GET /runs/{run_id}/validation/{artifact_id}`, `GET /runs/{run_id}/visualizations/{artifact_id}` |
+| Execution | `POST /runs/{run_id}/execution/prepare`, `POST /runs/{run_id}/execution`, `POST /runs/{run_id}/cancel`, `POST /runs/{run_id}/resume` |
+
+The complete paths include the `/api/v1` prefix and the path/query parameters
+shown by OpenAPI. OpenAPI and generated frontend types must be checked with
+`python tools/ddo.py frontend openapi`; that command refuses an unpinned
+Python interpreter and does not mutate tracked outputs.
+
 The executable API is created by `dirty_data_to_olap.entrypoints.api.create_app`.
 The reference composition is `dirty_data_to_olap.composition.build_local_backend`.
 
