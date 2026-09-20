@@ -196,8 +196,10 @@ def validate_report(report: dict[str, Any], state: dict[str, Any], *, ci: bool) 
         raise ValidationFailure("Step36 report identity/result is invalid")
     if report.get("required_scenarios") != 29 or report.get("passed_scenarios") != 29:
         raise ValidationFailure("Step36 report must record all 29 scenarios")
+    from tools.execution_state import step41_g15_closed
+    terminal = step41_g15_closed(state)
     for key in ("g11_resilience", "g12_capacity", "g13_adversarial_security", "g14_usability", "g15_release"):
-        expected = "PASS" if key == "g11_resilience" and state["specialist_execution"]["current_step"] in {37, 38, 39, 40, 41} else "PENDING"
+        expected = "PASS" if key == "g11_resilience" and (terminal or state["specialist_execution"]["current_step"] in {37, 38, 39, 40, 41}) else "PENDING"
         if report.get(key) != expected:
             raise ValidationFailure(f"{key} has an invalid Step36 value")
     return validate_state(state, report, ci=ci)

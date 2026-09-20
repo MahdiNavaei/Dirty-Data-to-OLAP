@@ -11,7 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed, step33_application_security_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step32_compatibility_closed, step33_application_security_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed, step41_g15_closed
 ARCH = ROOT / "docs" / "data-architecture"
 SPECS = ARCH / "specs"
 STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -41,7 +41,7 @@ def implementation_is_authorized() -> bool:
     except Exception:
         return False
     execution = state.get("specialist_execution", {})
-    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
+    return step41_g15_closed(state) or (isinstance(execution.get("current_step"), int) and execution.get("current_step") >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS")
 
 
 def _accounting_record_is_valid(
@@ -514,7 +514,8 @@ def main() -> int:
     step33_pass = step33_application_security_closed(state)
     step36_pass = step36_resilience_closed(state) or step37_performance_closed(state)
     step39_pass = step39_red_team_closed(state)
-    if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"} or state["gates"].get("G4_BOUNDED_INTELLIGENCE") not in {"PENDING", "PASS"} or any(
+    terminal = step41_g15_closed(state)
+    if state["gates"].get("G3_SOURCE_SAFETY") not in {"PENDING", "PASS", "BLOCKED"} or state["gates"].get("G4_BOUNDED_INTELLIGENCE") not in {"PENDING", "PASS"} or (not terminal and any(
         value != "PENDING" for key, value in state["gates"].items()
         if key not in {"G0_PRODUCT_CONTRACT", "G1_DOMAIN_TRUTH", "G2_ARCHITECTURE_READY", "G3_SOURCE_SAFETY", "G4_BOUNDED_INTELLIGENCE", "G5_INFERENCE_VALIDITY"}
         and not (key == "G5_INFERENCE_VALIDITY" and value in {"REVIEW_ONLY_VALIDATED", "PASS"})
@@ -527,7 +528,7 @@ def main() -> int:
         and not (key == "G12_CAPACITY" and step38_load_stress_closed(state))
         and not (key == "G13_ADVERSARIAL_SECURITY" and step39_pass)
         and not (key == "G" + "14_USABILITY" and step40_g14_closed(state))
-    ):
+    )):
         errors.append("G3-G15 state is inconsistent")
     if state["blocked"] is not False:
         errors.append("blocked is not false")

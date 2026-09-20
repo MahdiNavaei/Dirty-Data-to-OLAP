@@ -7,14 +7,17 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 from typing import Any
 
 import yaml
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 from tools.execution_state import step41_g15_closed
 
 
-ROOT = Path(__file__).resolve().parents[1]
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_SCENARIOS = {
     "RT-AUTH-001",
@@ -152,9 +155,10 @@ def validate(evidence_path: Path, *, state_path: Path | None = None, expected_co
         validate_state(state, require_closed=require_closed)
         if require_closed:
             _require(state["specialist_execution"]["step39_red_team"]["content_commit"] == evidence["assessed_commit"], "state and receipt content commits differ")
+    terminal = state_path is not None and step41_g15_closed(state)
     current_step = 39
     if require_closed:
-        current_step = 41 if state_path is not None and state.get("specialist_execution", {}).get("current_step") == 41 else 40
+        current_step = None if terminal else (41 if state_path is not None and state.get("specialist_execution", {}).get("current_step") == 41 else 40)
     return {"status": "PASS", "step": 39, "assessed_commit": evidence["assessed_commit"], "g13": "PASS", "current_step": current_step}
 
 

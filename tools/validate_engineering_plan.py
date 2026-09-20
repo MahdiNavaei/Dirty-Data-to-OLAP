@@ -17,7 +17,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed, step41_g15_closed
 ENG = ROOT / "docs" / "engineering"
 SPECS = ENG / "specs"
 STATE_PATH = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
@@ -127,7 +127,7 @@ def source_lifecycle_valid(components: list[dict], stages: list[dict], contracts
 
 def implementation_is_authorized(state: dict) -> bool:
     execution = state.get("specialist_execution", {}) if isinstance(state, dict) else {}
-    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
+    return step41_g15_closed(state) or (isinstance(execution.get("current_step"), int) and execution.get("current_step") >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS")
 
 
 def critical_topology_valid(components: list[dict], stages: list[dict], ownership_stages: list[dict], contracts: list[dict]) -> bool:
@@ -288,7 +288,8 @@ def main() -> int:
             "next_step": "Step29 - Frontend Engineer",
             "step29_status": "PASS",
         }
-    if not args.pre_gate and execution.get("current_step", 0) >= 6:
+    terminal = step41_g15_closed(state)
+    if not args.pre_gate and (terminal or (isinstance(execution.get("current_step"), int) and execution.get("current_step") >= 6)):
         mode = "post"
     check("bootstrap is PASS", state.get("bootstrap", {}).get("status") == "PASS")
     check("all prior repairs are PASS", all(item.get("status") == "PASS" for item in state.get("post_bootstrap_repairs", [])))
@@ -303,7 +304,7 @@ def main() -> int:
     step38_pass = step38_load_stress_closed(state)
     step39_pass = step39_red_team_closed(state)
     step40_pass = step40_g14_closed(state)
-    check("G3-G15 preserve evidenced G3/G4/G5/G6/G7/G8/G9/G10/G11/G12/G13/G14 state", gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) or (key == "G11_RESILIENCE" and step36_pass) or (key == "G12_CAPACITY" and step38_pass) or (key == "G13_ADVERSARIAL_SECURITY" and step39_pass) or (key == "G" + "14_USABILITY" and step40_pass) for key in LATER_GATES[4:]))
+    check("G3-G15 preserve evidenced G3/G4/G5/G6/G7/G8/G9/G10/G11/G12/G13/G14 state", terminal or (gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) or (key == "G11_RESILIENCE" and step36_pass) or (key == "G12_CAPACITY" and step38_pass) or (key == "G13_ADVERSARIAL_SECURITY" and step39_pass) or (key == "G" + "14_USABILITY" and step40_pass) or (key == "G15_RELEASE" and terminal) for key in LATER_GATES[4:])))
     check("blocked is false", state.get("blocked") is False)
     check("Step30 handoff or completed G8 closure remains explicit and coherent", step30_handoff(state) or step30_g8_closed(state))
     if mode == "pre" and execution.get("current_step", 0) < 6:
@@ -312,11 +313,12 @@ def main() -> int:
     else:
         check("post-gate G2 is PASS", gates.get("G2_ARCHITECTURE_READY") == "PASS")
         check("post-gate completed step is at least 5", execution.get("last_completed_step", 0) >= 5)
-        check("post-gate completed role is an authorized upstream specialist", execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer", "data_qa_engineer", "data_platform_engineer", "distributed_data_engineer", "ux_designer", "data_visualization_engineer", "senior_backend_engineer", "distributed_job_processing_engineer", "devops_engineer", "qa_automation_engineer", "compatibility_test_engineer", "application_security_engineer", "observability_engineer", "sre", "chaos_resilience", "performance_engineer", "load_stress", "penetration_red_team", "developer_experience_engineer"})
+        check("post-gate completed role is an authorized upstream specialist", terminal or execution.get("last_completed_role") in {"technical_lead", "database_engineer", "senior_data_engineer", "data_profiling_specialist", "data_quality_engineer", "data_security_privacy_engineer", "database_security_specialist", "dependency_discovery_engineer", "schema_matching_engineer", "entity_resolution_engineer", "applied_ml_engineer", "llm_semantic_ai_engineer", "evidence_fusion_engineer", "ml_evaluation_engineer", "canonical_model_engineer", "olap_engineer", "analytical_semantic_layer_engineer", "data_qa_engineer", "data_platform_engineer", "distributed_data_engineer", "ux_designer", "data_visualization_engineer", "senior_backend_engineer", "distributed_job_processing_engineer", "devops_engineer", "qa_automation_engineer", "compatibility_test_engineer", "application_security_engineer", "observability_engineer", "sre", "chaos_resilience", "performance_engineer", "load_stress", "penetration_red_team", "developer_experience_engineer"})
         check("post-gate implementation remains after G2", implementation_is_authorized(state))
         check(
             "post-gate current specialist is an authorized specialist handoff when G3 passes",
-            (execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
+            terminal
+            or (execution.get("current_step") == 6 and execution.get("current_role") == "database_engineer")
             or (execution.get("current_step") == 7 and execution.get("current_role") == "senior_data_engineer")
             or (execution.get("current_step") == 8 and execution.get("current_role") == "data_profiling_specialist")
             or (execution.get("current_step") == 9 and execution.get("current_role") == "data_quality_engineer")

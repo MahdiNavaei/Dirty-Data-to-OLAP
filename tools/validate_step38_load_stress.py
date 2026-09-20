@@ -11,9 +11,10 @@ import sys
 
 import yaml
 
-from tools.execution_state import step41_g15_closed
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from tools.execution_state import step41_g15_closed
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_PATTERNS = {"STEADY", "RAMP", "BURST", "OVERLOAD"}
 REQUIRED_CONTROLS = {

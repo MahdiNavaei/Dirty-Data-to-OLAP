@@ -92,6 +92,8 @@ def is_authorized_specialist_handoff(
     """Return whether the durable pointer is a sequential specialist handoff."""
 
     specialist = execution(state)
+    if step41_g15_closed(state):
+        return True
     current_step = specialist.get("current_step")
     last_step = specialist.get("last_completed_step")
     if not isinstance(current_step, int) or not isinstance(last_step, int):

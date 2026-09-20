@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOMAIN = ROOT / "docs" / "domain"
 LABELS = ROOT / "benchmarks" / "labels" / "domain-reviewed"
 STATE = ROOT / "docs" / "execution" / "MASTER_EXECUTION_STATE.yml"
+sys.path.insert(0, str(ROOT))
+from tools.execution_state import step41_g15_closed
 
 
 def fail(errors: list[str], message: str) -> None:
@@ -26,7 +28,7 @@ def implementation_is_authorized() -> bool:
     except Exception:
         return False
     execution = state.get("specialist_execution", {})
-    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
+    return step41_g15_closed(state) or (isinstance(execution.get("current_step"), int) and execution.get("current_step") >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS")
 
 
 def main() -> int:

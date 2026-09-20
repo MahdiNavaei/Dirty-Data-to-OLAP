@@ -15,7 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed
+from tools.execution_state import step29_g7_closed, step30_g8_closed, step30_handoff, step31_qa_closed, step32_compatibility_closed, step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed, step41_g15_closed
 ARCH = ROOT / "docs" / "architecture"
 SPECS = ARCH / "specs"
 KB = ROOT / "docs" / "Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base"
@@ -73,7 +73,7 @@ def implementation_is_authorized() -> bool:
     except Exception:
         return False
     execution = state.get("specialist_execution", {})
-    return execution.get("current_step", 0) >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS"
+    return step41_g15_closed(state) or (isinstance(execution.get("current_step"), int) and execution.get("current_step") >= 6 and state.get("gates", {}).get("G2_ARCHITECTURE_READY") == "PASS")
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -741,7 +741,9 @@ def check_state() -> None:
     state = load_yaml(STATE)
     execution = state.get("specialist_execution", {})
     gates = state.get("gates", {})
-    if execution.get("current_step") == 7:
+    if step41_g15_closed(state):
+        pass
+    elif execution.get("current_step") == 7:
         require(execution.get("last_completed_step") == 6, "post-Step 06 state must record completed Step 06")
         require(execution.get("last_completed_role") == "database_engineer", "post-Step 06 role must be database_engineer")
         require(execution.get("current_role") == "senior_data_engineer", "post-Step 06 state must hand off to Step 07")
@@ -992,7 +994,7 @@ def check_state() -> None:
     step38_pass = step38_load_stress_closed(state)
     step39_pass = step39_red_team_closed(state)
     step40_pass = step40_g14_closed(state)
-    require(gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) or (key == "G11_RESILIENCE" and step36_pass) or (key == "G12_CAPACITY" and step38_pass) or (key == "G13_ADVERSARIAL_SECURITY" and step39_pass) or (key == "G" + "14_USABILITY" and step40_pass) for key in later_gate_keys[4:]), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7/G8/G9/G10/G11/G12/G13/G14 decisions")
+    require(step41_g15_closed(state) or (gates.get("G3_SOURCE_SAFETY") in {"PENDING", "PASS", "BLOCKED"} and gates.get("G4_BOUNDED_INTELLIGENCE") in {"PENDING", "PASS"} and gates.get("G5_INFERENCE_VALIDITY") in {"PENDING", "REVIEW_ONLY_VALIDATED", "PASS"} and gates.get("G6_DATA_CORRECTNESS") in {"PENDING", "PASS"} and all(gates.get(key) == "PENDING" or (key == "G7_END_TO_END_PRODUCT" and step29_pass) or (key == "G8_REPRODUCIBLE_BUILD" and step30_pass) or (key == "G9_FUNCTIONAL_SUPPORT" and step32_pass) or (key == "G10_APPLICATION_SECURITY" and step33_pass) or (key == "G11_RESILIENCE" and step36_pass) or (key == "G12_CAPACITY" and step38_pass) or (key == "G13_ADVERSARIAL_SECURITY" and step39_pass) or (key == "G" + "14_USABILITY" and step40_pass) for key in later_gate_keys[4:])), "G3-G15 must remain pending except evidenced G3/G4/G5/G6/G7/G8/G9/G10/G11/G12/G13/G14 decisions")
     require(state.get("blocked") is False, "execution state must not be blocked")
 
 

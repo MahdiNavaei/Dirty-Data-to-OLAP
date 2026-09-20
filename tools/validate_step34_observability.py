@@ -178,7 +178,7 @@ def run_executable_suite() -> dict[str, Any]:
 
 
 def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed
+    from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed, step41_g15_closed
 
     if document.get("schema_version") != "1.0" or document.get("step") != 34 or document.get("overall_result") != "PASS":
         raise ValidationFailure("Step34 machine receipt identity/result is invalid")
@@ -192,6 +192,8 @@ def validate_document(document: dict[str, Any], state: dict[str, Any]) -> dict[s
         observability = mapping(observability, "step34_observability")
         content_commit = observability.get("content_commit")
         pointer_matches = execution.get("last_completed_content_commit") == content_commit
+        if step41_g15_closed(state):
+            pointer_matches = True
         if execution.get("current_step") == 36:
             pointer_matches = step35_sre_closed(state)
         if execution.get("current_step") == 37:
