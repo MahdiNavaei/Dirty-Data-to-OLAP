@@ -1042,7 +1042,7 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             or (key == "G11_RESILIENCE" and current_gates.get(key) == "PASS" and _step36_receipt_evidence(state))
             or (key == "G12_CAPACITY" and current_gates.get(key) == "PASS" and _step38_receipt_evidence(state))
             or (key == "G13_ADVERSARIAL_SECURITY" and step39_red_team_closed(state))
-            or (key == "G14_USABILITY" and step40_g14_closed(state))
+            or (key in {"G14_USABILITY"} and step40_g14_closed(state))
             or (key == "G15_RELEASE" and step41_g15_closed(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
