@@ -67,10 +67,9 @@ the authoritative user-facing summary.
 
 ## Release gates
 
-G0 through G14 are PASS in the authoritative execution state. G15 is the
-documentation and release-accuracy gate and is PASS only when the current
-claim/evidence matrix, command checks, validators, regression, and CI all
-succeed. A G15 PASS is not a universal production-readiness certificate.
+G0 through G15 are PASS in the authoritative execution state. G15 is the
+documentation and release-accuracy gate. A G15 PASS is not a universal
+production-readiness certificate.
 
 ## Important boundaries
 

@@ -1858,3 +1858,21 @@ handoff_to:
 - protected_quality_artifacts: contents unread; path untouched, unstaged and uncommitted; pre-existing user RAR preserved
 - authoritative_final_state: `last_completed_step=40`; `current_step=41`; `current_role=technical_writer`; `step41_started=false`; `step41_status=NOT_STARTED`; `G14=PASS`; `G15=PENDING`; `blocked=false`
 - no_step41_implementation: true
+
+## FINAL STEP41 G15 TECHNICAL WRITER CLOSURE
+
+- execution_step: `41`; current documentation, claim/evidence, release-accuracy, and reproducibility closure completed
+- starting_baseline: `aaf23e24b4713981e8958adfedb93d24bd2507b7`
+- accepted_step40_content_commit: `354030a90fd4148c74151426bd9102dc4f2a20ec`
+- content_commit_sha: `b915b1ef5498309a46a1ecc319d3b25bfc99c1bf`
+- exact_head_ci_run: `35507915041`; head `b915b1ef5498309a46a1ecc319d3b25bfc99c1bf`; overall `PASS`
+- exact_head_ci_jobs: clean-room G8, image scan, Step31 QA, Steps32-37, Step39/G13, Step40/G14, and Step41 documentation/G15 all `PASS`
+- step41_ci_job: `106079400756`; `PASS`
+- documentation_validator: `tools/validate_step41_documentation.py`; `100 checks`; `protected_path=NOT_USED`; `PASS`
+- local_supported_validation: version/config/demo/check, frontend typecheck/lint/Vitest/build, YAML/JSON/OpenAPI parsing, database-security validator and targeted unit/contract regression passed
+- host_limitations: broad host diagnostic `578 passed, 4 skipped, 12 failed`; optional providers, host pins, external Step31 URL and host-unavailable Step29 provider path remain explicitly bounded
+- claim_boundaries: managed CSV browser path separated from adapter support; Oracle deferred; scores uncalibrated; no inference threshold; ER is not automatic canonical truth; no invented revenue/GMV; Step40 demo is project-local; no universal production/SLA/HA/scale/public-release claim
+- oss_license_boundary: dependency reuse documented; no tracked top-level `LICENSE`/`NOTICE` decision invented or changed; no external publication
+- protected_quality_artifacts: contents unread; path untouched, unstaged and uncommitted; pre-existing user RAR preserved
+- gate_state: `G0-G15=PASS`; `blocked=false`
+- authoritative_final_state: `last_completed_step=41`; `last_completed_role=technical_writer`; `current_step=null`; `current_role=null`; `step41_started=true`; `step41_status=COMPLETED_TECHNICAL_WRITER_G15_PASS`; `next_step=null`; no Step42 started or referenced

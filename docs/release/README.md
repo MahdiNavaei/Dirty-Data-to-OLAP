@@ -17,8 +17,8 @@ approval or universal production-readiness statement.
 The released documentation covers the implemented local product path, the
 tested source/adapter boundary, review-gated canonical and OLAP behavior,
 bounded API/auth contracts, project-local developer experience, and the
-evidence classes behind G0-G14. G15 is PASS only after the final evidence
-receipt and exact-head CI succeed.
+evidence classes behind G0-G15. G15 is PASS after the final evidence receipt
+and exact-head CI succeeded.
 
 No tag, deployment, package publication, or external release action is
 performed by this workflow.

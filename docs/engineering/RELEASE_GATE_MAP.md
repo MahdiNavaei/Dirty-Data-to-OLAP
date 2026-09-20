@@ -1,9 +1,8 @@
 # Release Gate Map
 
-Current authoritative snapshot: G0 through G14 are `PASS`; G15 is the final
-documentation/release gate and is `PENDING` until the Step41 evidence receipt
-and exact-head CI succeed. The complete canonical gate contract, evidence
-classes, ownership and after-step mapping remain in `specs/gate_map.yml`.
+Current authoritative snapshot: G0 through G15 are `PASS`. The complete
+canonical gate contract, evidence classes, ownership and after-step mapping
+remain in `specs/gate_map.yml`.
 
 The snapshot is not a rewrite of historical reports. A historical report may
 say a later gate was pending because it predates that gate's closure.
