@@ -1876,3 +1876,15 @@ handoff_to:
 - protected_quality_artifacts: contents unread; path untouched, unstaged and uncommitted; pre-existing user RAR preserved
 - gate_state: `G0-G15=PASS`; `blocked=false`
 - authoritative_final_state: `last_completed_step=41`; `last_completed_role=technical_writer`; `current_step=null`; `current_role=null`; `step41_started=true`; `step41_status=COMPLETED_TECHNICAL_WRITER_G15_PASS`; `next_step=null`; no Step42 started or referenced
+
+## POST-STEP41 TERMINAL CI INTEGRITY REPAIR
+
+- correction_scope: historical execution-state compatibility only; the 41-step sequence, terminal metadata, G15 receipt and product claims were preserved
+- root_cause: the clean-room Step30 validator accepted pre-G8, post-G8, post-Step31 and intermediate handoffs, but its inherited closure chain did not recognize the legitimate terminal Step41/G15 state
+- failed_terminal_ci: run `35511720776`; only `Clean-room G8 / build / runtime` failed at `Execute clean-room Step30 validator`; dependent jobs were skipped before product regression execution
+- terminal_predicate: `tools.execution_state.step41_g15_closed`; exact `COMPLETE` pointer, Step41 status, no Step42 fields/pointer, all `G0-G15=PASS`, `blocked=false`, prior specialist completion statuses, and compatible Step41 receipt/content-CI evidence are required
+- historical_guard_preservation: Step29 G7 closure, Step30-40 completion statuses, all gate values, blocked-state checks, receipt paths, content-commit binding and existing handoff predicates remain enforced
+- negative_controls: terminal predicate tests reject G15 pending, last completed Step40, current/next Step42, Step41 not started, missing receipt and any prior gate pending; existing historical handoff tests remain green
+- accepted_content_ci: run `35507915041`; exact Step41 content head `b915b1ef5498309a46a1ecc319d3b25bfc99c1bf`; overall `PASS`
+- repair_boundary: shared validator predicates and focused state tests only; no product/frontend implementation, Step42, G16 or claim expansion
+- final_head_ci_recording: the exact pushed repair HEAD is the authoritative final-head CI evidence; no follow-up metadata commit is used merely to copy its run identifier into this historical log

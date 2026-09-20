@@ -72,7 +72,7 @@ def test_step39_state_rejects_starting_step40_or_losing_g13() -> None:
     root = Path(__file__).resolve().parents[2]
     state = yaml.safe_load((root / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     forged = deepcopy(state)
-    forged["specialist_execution"]["step41_started"] = True
+    forged["specialist_execution"]["step41_status"] = "NOT_STARTED"
     with pytest.raises(Step39ValidationError, match="Step41"):
         validate_state(forged)
     forged = deepcopy(state)

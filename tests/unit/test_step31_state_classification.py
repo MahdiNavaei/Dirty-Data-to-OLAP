@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tools.execution_state import step30_g8_closed, step31_external_ci_blocked, step31_qa_closed
+from tools.execution_state import step30_g8_closed, step31_external_ci_blocked, step31_qa_closed, step41_g15_closed
 from tools.validate_step31_qa import ValidationFailure, classify_state
 
 
@@ -34,6 +34,10 @@ def _state() -> dict:
     state["gates"]["G9_FUNCTIONAL_SUPPORT"] = "PENDING"
     state["blocked"] = False
     return state
+
+
+def _terminal_state() -> dict:
+    return deepcopy(yaml.safe_load(STATE_PATH.read_text(encoding="utf-8")))
 
 
 def _pre_step31_state() -> dict:
@@ -112,6 +116,70 @@ def test_post_step31_closure_wins_over_retained_g8_closure() -> None:
         "g7": "PASS",
         "g8": "PASS",
     }
+
+
+def test_terminal_step41_g15_closure_is_accepted_by_historical_g8_path() -> None:
+    state = _terminal_state()
+
+    assert step41_g15_closed(state) is True
+    assert step30_g8_closed(state) is True
+
+
+def _terminal_g15_pending(state: dict) -> None:
+    state["gates"]["G15_RELEASE"] = "PENDING"
+
+
+def _terminal_last_step_40(state: dict) -> None:
+    state["specialist_execution"]["last_completed_step"] = 40
+
+
+def _terminal_current_step_42(state: dict) -> None:
+    state["specialist_execution"]["current_step"] = 42
+
+
+def _terminal_next_step_42(state: dict) -> None:
+    state["specialist_execution"]["next_step"] = "Step42 - Unauthorised Specialist"
+
+
+def _terminal_step41_not_started(state: dict) -> None:
+    state["specialist_execution"].update({"step41_started": False, "step41_status": "NOT_STARTED"})
+
+
+def _terminal_receipt_missing(state: dict) -> None:
+    state["specialist_execution"].pop("step41_documentation", None)
+
+
+def _terminal_prior_gate_pending(state: dict) -> None:
+    state["gates"]["G8_REPRODUCIBLE_BUILD"] = "PENDING"
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        _terminal_g15_pending,
+        _terminal_last_step_40,
+        _terminal_current_step_42,
+        _terminal_next_step_42,
+        _terminal_step41_not_started,
+        _terminal_receipt_missing,
+        _terminal_prior_gate_pending,
+    ],
+    ids=[
+        "g15-pending",
+        "last-completed-step-40",
+        "current-step-42",
+        "next-step-42",
+        "step41-not-started",
+        "missing-step41-receipt",
+        "prior-gate-pending",
+    ],
+)
+def test_terminal_step41_predicate_rejects_incomplete_or_forged_state(mutate) -> None:
+    state = _terminal_state()
+    mutate(state)
+
+    assert step41_g15_closed(state) is False
+    assert step30_g8_closed(state) is False
 
 
 def test_external_ci_blocker_is_distinct_from_completed_or_pre_step31() -> None:

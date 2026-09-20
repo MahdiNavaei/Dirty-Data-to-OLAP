@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from tools.execution_state import step41_g15_closed
+
 
 ROOT = Path(__file__).resolve().parents[1]
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -100,11 +102,19 @@ def validate_state(state: dict[str, Any], *, require_closed: bool = True) -> Non
     gates = state.get("gates", {})
     _require(state.get("blocked") is False, "authoritative state is blocked")
     _require(all(gates.get(key) == "PASS" for key in ("G6_DATA_CORRECTNESS", "G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY")), "upstream gate state is not PASS")
+    _require(gates.get("G13_ADVERSARIAL_SECURITY") == "PASS", "G13 is not PASS")
     if not require_closed:
         _require(specialist.get("current_step") == 39 and specialist.get("step39_started") is False and specialist.get("step39_status") == "NOT_STARTED", "pre-closure state is not Step39")
         _require(gates.get("G13_ADVERSARIAL_SECURITY") == "PENDING", "pre-closure G13 is not pending")
         return
-    if specialist.get("current_step") == 41:
+    terminal = step41_g15_closed(state)
+    if specialist.get("sequence_status") == "COMPLETE" and specialist.get("current_step") is None and not terminal:
+        _require(False, "Step41 closure is incomplete")
+    if terminal:
+        _require(specialist.get("step41_started") is True, "Step41 has not started")
+        _require(specialist.get("step41_status") == "COMPLETED_TECHNICAL_WRITER_G15_PASS", "Step41 closure is incomplete")
+        _require(gates.get("G14_USABILITY") == "PASS", "G14 is not PASS")
+    elif specialist.get("current_step") == 41:
         _require(specialist.get("current_role") == "technical_writer", "current role is not technical_writer")
         _require(specialist.get("current_specialist") == "Step41 - Technical Writer", "current specialist is not Step41")
         _require(specialist.get("last_completed_step") == 40, "last completed step is not 40")
@@ -125,8 +135,7 @@ def validate_state(state: dict[str, Any], *, require_closed: bool = True) -> Non
         _require(specialist.get("step40_started") is False and specialist.get("step40_status") == "NOT_STARTED", "Step40 has started")
         _require(gates.get("G14_USABILITY") == "PENDING", "G14 is not pending")
     _require(specialist.get("step39_started") is True and specialist.get("step39_status") == "COMPLETED_RED_TEAM_G13_PASS", "Step39 closure is incomplete")
-    _require(gates.get("G13_ADVERSARIAL_SECURITY") == "PASS", "G13 is not PASS")
-    _require(gates.get("G15_RELEASE") == "PENDING", "G15 advanced prematurely")
+    _require(gates.get("G15_RELEASE") == ("PASS" if terminal else "PENDING"), "G15 state is invalid")
 
 
 def validate(evidence_path: Path, *, state_path: Path | None = None, expected_commit: str | None = None, require_closed: bool = True) -> dict[str, Any]:

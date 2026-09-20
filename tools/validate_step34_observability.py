@@ -54,10 +54,11 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any]) -> str:
-    from tools.execution_state import step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed
+    from tools.execution_state import step33_application_security_closed, step34_observability_closed, step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed, step41_g15_closed
 
     specialist = mapping(state.get("specialist_execution"), "specialist_execution")
     gates = mapping(state.get("gates"), "gates")
+    terminal = step41_g15_closed(state)
     if state.get("blocked") is not False:
         raise ValidationFailure("Step34 requires blocked=false")
     if gates.get("G6_DATA_CORRECTNESS") != "PASS" or gates.get("G7_END_TO_END_PRODUCT") != "PASS" or gates.get("G8_REPRODUCIBLE_BUILD") != "PASS" or gates.get("G9_FUNCTIONAL_SUPPORT") != "PASS" or gates.get("G10_APPLICATION_SECURITY") != "PASS":
@@ -66,8 +67,10 @@ def validate_state(state: dict[str, Any]) -> str:
     later_step38_closure = specialist.get("current_step") == 39 and gates.get("G11_RESILIENCE") == "PASS" and gates.get("G12_CAPACITY") == "PASS" and all(gates.get(name) == "PENDING" for name in ("G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")) and step38_load_stress_closed(state)
     later_step39_closure = specialist.get("current_step") == 40 and gates.get("G11_RESILIENCE") == "PASS" and gates.get("G12_CAPACITY") == "PASS" and gates.get("G13_ADVERSARIAL_SECURITY") == "PASS" and all(gates.get(name) == "PENDING" for name in ("G14_USABILITY", "G15_RELEASE")) and step39_red_team_closed(state)
     later_step40_closure = specialist.get("current_step") == 41 and gates.get("G11_RESILIENCE") == "PASS" and gates.get("G12_CAPACITY") == "PASS" and gates.get("G13_ADVERSARIAL_SECURITY") == "PASS" and gates.get("G14_USABILITY") == "PASS" and gates.get("G15_RELEASE") == "PENDING" and step40_g14_closed(state)
-    if not (later_step36_closure or later_step38_closure or later_step39_closure or later_step40_closure) and any(gates.get(name) != "PENDING" for name in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
+    if not (terminal or later_step36_closure or later_step38_closure or later_step39_closure or later_step40_closure) and any(gates.get(name) != "PENDING" for name in ("G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
         raise ValidationFailure("G11-G15 must remain PENDING")
+    if terminal:
+        return "STEP34_CLOSURE"
     if specialist.get("current_step") == 34:
         if not step33_application_security_closed(state) or specialist.get("current_role") != "observability_engineer" or specialist.get("step34_started") is not False or specialist.get("step34_status") != "NOT_STARTED":
             raise ValidationFailure("state is not the Step34 content phase")

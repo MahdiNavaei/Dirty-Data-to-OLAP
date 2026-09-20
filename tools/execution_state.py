@@ -8,6 +8,7 @@ steps.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
@@ -53,6 +54,26 @@ CURRENT_ROLE_BY_STEP = {
 PREVIOUS_ROLE_ALIASES = {
     26: {"ux_product_designer", "ux_designer"},
 }
+
+ROOT = Path(__file__).resolve().parents[1]
+TERMINAL_GATE_KEYS = (
+    "G0_PRODUCT_CONTRACT",
+    "G1_DOMAIN_TRUTH",
+    "G2_ARCHITECTURE_READY",
+    "G3_SOURCE_SAFETY",
+    "G4_BOUNDED_INTELLIGENCE",
+    "G5_INFERENCE_VALIDITY",
+    "G6_DATA_CORRECTNESS",
+    "G7_END_TO_END_PRODUCT",
+    "G8_REPRODUCIBLE_BUILD",
+    "G9_FUNCTIONAL_SUPPORT",
+    "G10_APPLICATION_SECURITY",
+    "G11_RESILIENCE",
+    "G12_CAPACITY",
+    "G13_ADVERSARIAL_SECURITY",
+    "G14_USABILITY",
+    "G15_RELEASE",
+)
 
 
 def execution(state: dict[str, Any]) -> dict[str, Any]:
@@ -763,7 +784,7 @@ def step39_red_team_closed(state: dict[str, Any]) -> bool:
     ) or step40_g14_closed(state)
 
 
-def step40_g14_closed(state: dict[str, Any]) -> bool:
+def _step40_g14_handoff_closed(state: dict[str, Any]) -> bool:
     """Recognize the accepted Step40/G14 closure and Step41 handoff."""
 
     specialist = execution(state)
@@ -812,6 +833,106 @@ def step40_g14_closed(state: dict[str, Any]) -> bool:
         and current_gates.get("G15_RELEASE") == "PENDING"
         and state.get("blocked") is False
     )
+
+
+def _is_commit_sha(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 40 and all(character in "0123456789abcdef" for character in value.lower())
+
+
+def _receipt_file_contains(path_value: Any, expected_path: str, *required_values: str) -> bool:
+    if path_value != expected_path or not isinstance(path_value, str):
+        return False
+    candidate = (ROOT / path_value).resolve()
+    try:
+        candidate.relative_to(ROOT.resolve())
+    except ValueError:
+        return False
+    if not candidate.is_file():
+        return False
+    try:
+        text = candidate.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return all(value in text for value in required_values)
+
+
+def _step41_receipt_evidence(state: dict[str, Any]) -> bool:
+    specialist = execution(state)
+    receipt = specialist.get("step41_documentation", {})
+    if not isinstance(receipt, dict):
+        return False
+    content_commit = receipt.get("content_commit")
+    content_ci_run = receipt.get("content_ci_run")
+    if not _is_commit_sha(content_commit) or specialist.get("last_completed_content_commit") != content_commit:
+        return False
+    if not isinstance(content_ci_run, str) or not content_ci_run.isdigit():
+        return False
+    return (
+        receipt.get("status") == "PASS"
+        and receipt.get("validator") == "tools/validate_step41_documentation.py"
+        and str(receipt.get("validator_result", "")).startswith("PASS;")
+        and str(receipt.get("content_ci_result", "")).startswith("PASS;")
+        and _receipt_file_contains(
+            receipt.get("receipt"),
+            "docs/execution/STEP41_TECHNICAL_WRITER_REVIEW.md",
+            content_commit,
+            content_ci_run,
+        )
+        and _receipt_file_contains(
+            receipt.get("gate_receipt"),
+            "docs/execution/gates/G15_RELEASE.md",
+            content_commit,
+            content_ci_run,
+        )
+    )
+
+
+def step41_g15_closed(state: dict[str, Any]) -> bool:
+    """Recognize only the exact terminal Step41/G15 closure."""
+
+    specialist = execution(state)
+    current_gates = gates(state)
+    completed_prior_steps = all(
+        specialist.get(f"step{step}_started") is True
+        and specialist.get(f"step{step}_status") == status
+        for step, status in (
+            (30, "COMPLETED_DEVOPS_G8_PASS"),
+            (31, "COMPLETED_QA_AUTOMATION"),
+            (32, "COMPLETED_COMPATIBILITY_G9_PASS"),
+            (33, "COMPLETED_APPLICATION_SECURITY_G10_PASS"),
+            (34, "COMPLETED_OBSERVABILITY"),
+            (35, "COMPLETED_SRE"),
+            (36, "COMPLETED_RESILIENCE_G11_PASS"),
+            (37, "COMPLETED_PERFORMANCE"),
+            (38, "COMPLETED_LOAD_STRESS_G12_PASS"),
+            (39, "COMPLETED_RED_TEAM_G13_PASS"),
+            (40, "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS"),
+        )
+    )
+    return (
+        specialist.get("sequence_status") == "COMPLETE"
+        and specialist.get("current_step") is None
+        and specialist.get("current_role") is None
+        and specialist.get("current_specialist") is None
+        and specialist.get("last_completed_step") == 41
+        and specialist.get("last_completed_role") == "technical_writer"
+        and specialist.get("last_completed_specialist") == "Step41 - Technical Writer"
+        and specialist.get("next_step") is None
+        and specialist.get("step41_started") is True
+        and specialist.get("step41_status") == "COMPLETED_TECHNICAL_WRITER_G15_PASS"
+        and not any(key.startswith("step42_") for key in specialist)
+        and completed_prior_steps
+        and step29_g7_closed(state)
+        and all(current_gates.get(key) == "PASS" for key in TERMINAL_GATE_KEYS)
+        and state.get("blocked") is False
+        and _step41_receipt_evidence(state)
+    )
+
+
+def step40_g14_closed(state: dict[str, Any]) -> bool:
+    """Recognize Step40/G14 handoff or the later terminal Step41 closure."""
+
+    return _step40_g14_handoff_closed(state) or step41_g15_closed(state)
 
 
 def _step38_incomplete_handoff(state: dict[str, Any]) -> bool:
@@ -921,6 +1042,8 @@ def prior_gate_state_is_coherent(state: dict[str, Any]) -> bool:
             or (key == "G11_RESILIENCE" and current_gates.get(key) == "PASS" and _step36_receipt_evidence(state))
             or (key == "G12_CAPACITY" and current_gates.get(key) == "PASS" and _step38_receipt_evidence(state))
             or (key == "G13_ADVERSARIAL_SECURITY" and step39_red_team_closed(state))
+            or (key == "G14_USABILITY" and step40_g14_closed(state))
+            or (key == "G15_RELEASE" and step41_g15_closed(state))
             for key in ("G7_END_TO_END_PRODUCT", "G8_REPRODUCIBLE_BUILD", "G9_FUNCTIONAL_SUPPORT", "G10_APPLICATION_SECURITY", "G11_RESILIENCE", "G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")
         )
     )

@@ -28,6 +28,7 @@ from tools.execution_state import (
     step38_load_stress_closed,
     step39_red_team_closed,
     step40_g14_closed,
+    step41_g15_closed,
 )
 REPORT = ROOT / "output" / "step32_compatibility_validation.json"
 REQUIRED_DATABASES = {
@@ -55,6 +56,7 @@ def _state() -> dict[str, object]:
     gates = state.get("gates", {})
     current = execution.get("current_step")
     closed = execution.get("step32_started") is True and execution.get("step32_status") == "COMPLETED_COMPATIBILITY_G9_PASS"
+    terminal = step41_g15_closed(state)
     pre = (
         execution.get("current_step") == 32
         and execution.get("current_role") == "compatibility_test_engineer"
@@ -77,6 +79,7 @@ def _state() -> dict[str, object]:
         or (current == 39 and step38_load_stress_closed(state))
         or (current == 40 and step39_red_team_closed(state))
         or (current == 41 and step40_g14_closed(state))
+        or (current is None and terminal)
     )
     if not (pre or post):
         raise ValidationFailure("authoritative execution state is neither the Step32 handoff nor the closed Step32/G9 handoff")

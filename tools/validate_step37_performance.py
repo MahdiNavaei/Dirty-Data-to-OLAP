@@ -13,7 +13,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from tools.execution_state import step40_g14_closed
+from tools.execution_state import step40_g14_closed, step41_g15_closed
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 PROTECTED = "tests/quality_unit_artifacts"
 
@@ -41,6 +41,7 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
         _fail("protected path incorporated")
     state = _state()
     specialist = state.get("specialist_execution", {})
+    terminal = step41_g15_closed(state)
     if not evidence_path.is_file():
         if (
             report_path is None
@@ -223,7 +224,12 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
     state_gates = state.get("gates", {})
     if any(state_gates.get("G" + str(number) + suffix) != "PASS" for number, suffix in ((6, "_DATA_CORRECTNESS"), (7, "_END_TO_END_PRODUCT"), (8, "_REPRODUCIBLE_BUILD"), (9, "_FUNCTIONAL_SUPPORT"), (10, "_APPLICATION_SECURITY"), (11, "_RESILIENCE"))):
         _fail("authoritative state G6-G11 is not PASS")
-    if specialist.get("current_step") == 41:
+    if terminal:
+        if any(state_gates.get(key) != "PASS" for key in ("G12_CAPACITY", "G13_ADVERSARIAL_SECURITY", "G14_USABILITY", "G15_RELEASE")):
+            _fail("authoritative terminal state G12-G15 is not PASS")
+        if specialist.get("step40_started") is not True or specialist.get("step40_status") != "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS":
+            _fail("authoritative Step40 closure is incomplete")
+    elif specialist.get("current_step") == 41:
         if not step40_g14_closed(state) or state_gates.get("G12_CAPACITY") != "PASS" or state_gates.get("G13_ADVERSARIAL_SECURITY") != "PASS" or state_gates.get("G14_USABILITY") != "PASS" or state_gates.get("G15_RELEASE") != "PENDING":
             _fail("authoritative state G12-G15 is not a valid Step40/G14 closure")
         if specialist.get("step40_started") is not True or specialist.get("step40_status") != "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS":
@@ -238,7 +244,10 @@ def validate(evidence_path: Path, report_path: Path | None, expected_commit: str
         _fail("authoritative state G12-G15 is not PENDING")
     if state.get("blocked") is not False:
         _fail("authoritative blocked state is not false")
-    if specialist.get("current_step") == 37:
+    if terminal:
+        if specialist.get("step40_started") is not True or specialist.get("step40_status") != "COMPLETED_DEVELOPER_EXPERIENCE_G14_PASS":
+            _fail("authoritative terminal Step40 closure is incomplete")
+    elif specialist.get("current_step") == 37:
         if specialist.get("step37_started") is not False or specialist.get("step37_status") != "NOT_STARTED":
             _fail("content-phase Step37 state changed prematurely")
     elif specialist.get("current_step") == 38:

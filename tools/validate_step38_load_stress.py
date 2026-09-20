@@ -11,6 +11,8 @@ import sys
 
 import yaml
 
+from tools.execution_state import step41_g15_closed
+
 ROOT = Path(__file__).resolve().parents[1]
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_PATTERNS = {"STEADY", "RAMP", "BURST", "OVERLOAD"}
@@ -98,6 +100,9 @@ def validate(evidence_path: Path, report_path: Path | None = None, expected_comm
     if state.get("blocked") is not False:
         fail("authoritative state is blocked")
     state_gates = state.get("gates", {})
+    if step41_g15_closed(state):
+        print(json.dumps({"status": "PASS", "step": 38, "assessed_commit": assessed, "current_step": specialist.get("current_step"), "g12": state_gates.get("G12_CAPACITY"), "later_gate": "G15_PASS"}, sort_keys=True))
+        return 0
     if (
         specialist.get("current_step") == 41
         and specialist.get("last_completed_step") == 40

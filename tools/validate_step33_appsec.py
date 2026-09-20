@@ -16,7 +16,7 @@ REPORT = ROOT / "output" / "step33_appsec_validation.json"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.execution_state import step32_compatibility_closed, step33_application_security_closed
+from tools.execution_state import step32_compatibility_closed, step33_application_security_closed, step41_g15_closed
 
 
 REQUIRED_SCENARIOS = {
@@ -138,7 +138,8 @@ def _validate_content_commit_binding(document: dict[str, Any], state: dict[str, 
     assessed_commit = document.get("assessed_commit")
     content_commit = appsec.get("content_commit")
     last_completed_content_commit = execution.get("last_completed_content_commit")
-    later_handoff = execution.get("current_step", 0) >= 35
+    current_step = execution.get("current_step")
+    later_handoff = step41_g15_closed(state) or (isinstance(current_step, int) and current_step >= 35)
     if not (
         isinstance(content_commit, str)
         and SHA.fullmatch(content_commit)

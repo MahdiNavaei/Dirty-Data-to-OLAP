@@ -55,10 +55,11 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any], report: dict[str, Any], *, ci: bool) -> str:
-    from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed
+    from tools.execution_state import step35_sre_closed, step36_resilience_closed, step37_performance_closed, step38_load_stress_closed, step39_red_team_closed, step40_g14_closed, step41_g15_closed
 
     specialist = mapping(state.get("specialist_execution"), "specialist_execution")
     gates = mapping(state.get("gates"), "gates")
+    terminal = step41_g15_closed(state)
     if state.get("blocked") is not False:
         raise ValidationFailure("Step36 requires blocked=false")
     if any(gates.get(name) != "PASS" for name in (
@@ -133,6 +134,15 @@ def validate_state(state: dict[str, Any], report: dict[str, Any], *, ci: bool) -
     if specialist.get("current_step") == 41:
         if not step40_g14_closed(state):
             raise ValidationFailure("state is not the authorized later Step40 closure")
+        resilience = mapping(specialist.get("step36_chaos_resilience"), "step36_chaos_resilience")
+        assessed = resilience.get("content_commit")
+        if report.get("phase") != "STEP36_CLOSURE" or report.get("assessed_commit") != assessed:
+            raise ValidationFailure("closure report is not bound to the Step36 content commit")
+        if gates.get("G11_RESILIENCE") != "PASS":
+            raise ValidationFailure("closure state must keep G11 PASS")
+        return "STEP36_CLOSURE"
+
+    if terminal:
         resilience = mapping(specialist.get("step36_chaos_resilience"), "step36_chaos_resilience")
         assessed = resilience.get("content_commit")
         if report.get("phase") != "STEP36_CLOSURE" or report.get("assessed_commit") != assessed:
