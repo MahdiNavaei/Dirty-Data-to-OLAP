@@ -24,6 +24,26 @@ def _payload() -> dict[str, Any]:
 def _closed_state(content_commit: str) -> dict[str, Any]:
     state = yaml.safe_load((ROOT / "docs/execution/MASTER_EXECUTION_STATE.yml").read_text(encoding="utf-8"))
     specialist = state["specialist_execution"]
+    specialist.update(
+        {
+            "current_step": 38,
+            "current_role": "load_stress",
+            "current_specialist": "Step38 - Load / Stress Test Engineer",
+            "last_completed_step": 37,
+            "last_completed_role": "performance_engineer",
+            "last_completed_specialist": "Step37 - Performance Engineer",
+            "next_step": "Step38 - Load / Stress Test Engineer",
+            "step38_started": False,
+            "step38_status": "NOT_STARTED",
+        }
+    )
+    for key in (
+        "G12_CAPACITY",
+        "G13_ADVERSARIAL_SECURITY",
+        "G14_USABILITY",
+        "G15_RELEASE",
+    ):
+        state["gates"][key] = "PENDING"
     specialist["last_completed_content_commit"] = content_commit
     receipt = specialist["step37_performance"]
     receipt.update({"content_commit": content_commit, "content_ci_head": content_commit, "content_ci_result": "PASS", "report_assessed_commit": content_commit, "status": "PASS", "step37_started": True})
