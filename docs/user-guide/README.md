@@ -32,6 +32,8 @@ The run may pause at these typed checkpoints:
 
 Each accepted decision authorizes the next guarded stage. A rationale is
 durable and revision-bound. Stale or incompatible decisions are rejected.
+Each review decision is bound to its exact subject and scope; it is not a
+generic truth flag.
 
 ## What the user sees
 

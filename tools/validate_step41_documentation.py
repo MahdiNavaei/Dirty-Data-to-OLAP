@@ -42,6 +42,7 @@ CURRENT_DOCS = (
     ROOT / "docs" / "release" / "OSS_AND_LICENSE.md",
     ROOT / "docs" / "data-engineering" / "SOURCE_SUPPORT_MATRIX.md",
     ROOT / "docs" / "execution" / "gates" / "G14_USABILITY.md",
+    ROOT / "docs" / "execution" / "gates" / "G15_RELEASE.md",
     ROOT / "docs" / "engineering" / "RELEASE_GATE_MAP.md",
     ROOT / "docs" / "execution" / "STEP41_TECHNICAL_WRITER_REVIEW.md",
 )
@@ -121,6 +122,12 @@ def validate() -> tuple[bool, list[dict[str, Any]]]:
     for path in CURRENT_DOCS:
         if path.is_file():
             text_by_path[path] = path.read_text(encoding="utf-8")
+    if terminal:
+        receipt = specialist.get("step41_documentation", {})
+        receipt_ok = isinstance(receipt, dict) and receipt.get("status") == "PASS" and isinstance(receipt.get("content_ci_run"), str) and isinstance(receipt.get("content_commit"), str)
+        check(results, "terminal G15 state carries Step41 evidence receipt", receipt_ok, repr(receipt))
+        g15_text = text_by_path.get(ROOT / "docs" / "execution" / "gates" / "G15_RELEASE.md", "")
+        check(results, "G15 receipt declares PASS", "Status: `PASS`" in g15_text, "Status: `PASS`")
     all_current = "\n".join(text_by_path.values())
     required_phrases = {
         "current README names managed CSV path": "managed CSV import",
@@ -136,6 +143,35 @@ def validate() -> tuple[bool, list[dict[str, Any]]]:
     }
     for name, phrase in required_phrases.items():
         check(results, name, phrase.lower() in all_current.lower(), phrase)
+
+    unsafe_patterns = (
+        r"(?i)\bOracle\b.{0,40}\b(?:SUPPORTED|LIVE_VERIFIED|REFERENCE_TESTED)\b",
+        r"(?i)\b(?:automatic|automatically)\s+(?:accept|canonical|truth)",
+        r"(?i)\b(?:revenue|GMV)\b.{0,30}\b(?:invented|inferred|guaranteed|calculated)\b",
+        r"(?i)\bproduction[- ]ready\b",
+    )
+    denial_words = re.compile(r"(?i)\b(?:not|no|never|does not|cannot|deferred|unresolved)\b")
+    current_lines = all_current.splitlines()
+    unsafe_hits = []
+    for index, line in enumerate(current_lines):
+        context = f"{current_lines[index - 1]} {line}" if index else line
+        for pattern in unsafe_patterns:
+            if re.search(pattern, line) and not denial_words.search(context):
+                unsafe_hits.append(f"{pattern}: {line.strip()}")
+    check(results, "current docs contain no unsupported overclaim pattern", not unsafe_hits, repr(unsafe_hits))
+
+    documented_commands = ("version", "config", "doctor", "bootstrap", "demo", "check", "frontend", "diagnose", "openapi", "dev", "serve")
+    devx_text = (ROOT / "src" / "dirty_data_to_olap" / "devx.py").read_text(encoding="utf-8")
+    for command in documented_commands:
+        check(results, f"CLI command is present in implementation: {command}", command in devx_text and command in all_current, command)
+
+    terminology_separation = (
+        "canonical identity" in all_current.lower()
+        and "warehouse surrogate" in all_current.lower()
+        and "fact grain" in all_current.lower()
+        and "review decision" in all_current.lower()
+    )
+    check(results, "current docs keep identity, warehouse key, grain, and review distinct", terminology_separation, "canonical identity / warehouse surrogate / fact grain / review decision")
 
     root_text = text_by_path.get(ROOT / "README.md", "")
     stale_root_phrases = ("Steps 01-21 are complete", "G6-G15 remain PENDING", "Next: Step22")

@@ -60,6 +60,11 @@ environment is bootstrapped. Disposable state is kept under project-local
 The older [pre-implementation documentation pack](docs/00_README.md) remains
 available as architectural history. It is not the current user guide.
 
+The preserved specialist record covers Steps 01-21, including Step15, and
+records the historical `G0/G1/G2/G3 PASS` checkpoints. Those references are
+historical evidence; the current implementation and gate status above are
+the authoritative user-facing summary.
+
 ## Release gates
 
 G0 through G14 are PASS in the authoritative execution state. G15 is the
