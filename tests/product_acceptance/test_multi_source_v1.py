@@ -133,10 +133,13 @@ def _prepare_database(admin_url: str, source_url: str, engine_kind: DatabaseEngi
                 connection.exec_driver_sql(f"GRANT USAGE ON SCHEMA public TO \"{safe}\"")
                 connection.exec_driver_sql(f"GRANT SELECT ON TABLE public.\"{TABLE_NAME}\" TO \"{safe}\"")
             elif engine_kind is DatabaseEngine.MYSQL:
-                connection.exec_driver_sql(f"CREATE USER IF NOT EXISTS {_sql_literal(username)}@'%' IDENTIFIED BY {_sql_literal(password)}")
-                connection.exec_driver_sql(f"ALTER USER {_sql_literal(username)}@'%' IDENTIFIED BY {_sql_literal(password)}")
-                connection.exec_driver_sql(f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM {_sql_literal(username)}@'%'")
-                connection.exec_driver_sql(f"GRANT SELECT, SHOW VIEW ON `{parsed.database}`.`{TABLE_NAME}` TO {_sql_literal(username)}@'%'")
+                # PyMySQL treats percent signs in driver SQL as interpolation
+                # markers even when no parameters are supplied. Escape the
+                # wildcard host so the server receives the intended '%' host.
+                connection.exec_driver_sql(f"CREATE USER IF NOT EXISTS {_sql_literal(username)}@'%%' IDENTIFIED BY {_sql_literal(password)}")
+                connection.exec_driver_sql(f"ALTER USER {_sql_literal(username)}@'%%' IDENTIFIED BY {_sql_literal(password)}")
+                connection.exec_driver_sql(f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM {_sql_literal(username)}@'%%'")
+                connection.exec_driver_sql(f"GRANT SELECT, SHOW VIEW ON `{parsed.database}`.`{TABLE_NAME}` TO {_sql_literal(username)}@'%%'")
                 connection.exec_driver_sql("FLUSH PRIVILEGES")
             else:
                 safe = username.replace("]", "]]" )
