@@ -493,4 +493,19 @@ def build_local_product(project_root: Path, *, graph_root: Path | None = None, t
     return platform, backend, runtime
 
 
-__all__ = ["LocalProductRuntime", "build_local_product"]
+def build_multi_source_product(project_root: Path, *, adapters, graph_root: Path | None = None):
+    """Build the additive Prompt02 source-set application boundary.
+
+    Adapters are injected by the trusted composition/CI boundary so runtime
+    credentials and provider security verifiers never enter project metadata.
+    The accepted Step29 ``build_local_product`` composition is unchanged.
+    """
+
+    from dirty_data_to_olap.application.multi_source_product import MultiSourceProductService
+
+    root = Path(project_root).resolve()
+    registry = DurableSourceRegistry(root / "workspace" / "platform" / "prompt02" / "source_registry.json")
+    return MultiSourceProductService(project_root=root, registry=registry, adapters=adapters, graph_root=graph_root or root)
+
+
+__all__ = ["LocalProductRuntime", "build_local_product", "build_multi_source_product"]

@@ -6,15 +6,18 @@ import csv
 import os
 from pathlib import Path
 import re
+from typing import Mapping
 
 from dirty_data_to_olap.application.source_registry import DurableSourceRegistry
 from dirty_data_to_olap.domain.contracts.source import (
     SelectionScope,
     SourceRegistryRecord,
     SourceSelection,
+    SourceSetSelection,
     SourceType,
     source_id_for,
     normalized_file_locator,
+    source_set_fingerprint,
 )
 
 
@@ -143,6 +146,52 @@ class ProductSourceService:
             scope=scope,
             extraction=extraction,
             execution_context_id=execution_context_id,
+        )
+
+    def register_read_only_source(self, record: SourceRegistryRecord, *, owner_subject: str) -> SourceRegistryRecord:
+        """Register an already-provisioned source without accepting secrets.
+
+        SQL credentials remain outside the registry and are resolved only by
+        the injected runtime credential boundary. This method is deliberately
+        additive to the managed CSV upload path.
+        """
+
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", owner_subject):
+            raise ProductSourceError("owner subject is invalid")
+        if not record.read_only:
+            raise ProductSourceError("only read-only sources may be registered")
+        config = dict(record.adapter_config)
+        config[self._OWNER_KEY] = owner_subject
+        try:
+            return self.registry.register(record.model_copy(update={"adapter_config": config}))
+        except ValueError as exc:
+            raise ProductSourceError(str(exc)) from exc
+
+    def source_set_selection(
+        self,
+        *,
+        registry_ids: tuple[str, ...] | list[str],
+        scope: SelectionScope | None = None,
+        scope_by_registry: Mapping[str, SelectionScope] | None = None,
+        extraction,
+        execution_context_id: str,
+    ) -> SourceSetSelection:
+        ids = tuple(registry_ids)
+        if len(ids) < 2 or len(set(ids)) != len(ids):
+            raise ProductSourceError("a multi-source product run requires at least two unique sources")
+        selections = tuple(
+            self.selection(
+                registry_id=registry_id,
+                scope=(scope_by_registry or {}).get(registry_id, scope or SelectionScope()),
+                extraction=extraction,
+                execution_context_id=execution_context_id,
+            )
+            for registry_id in ids
+        )
+        return SourceSetSelection(
+            selections=selections,
+            source_set_fingerprint=source_set_fingerprint(selections),
+            finalized=True,
         )
 
 

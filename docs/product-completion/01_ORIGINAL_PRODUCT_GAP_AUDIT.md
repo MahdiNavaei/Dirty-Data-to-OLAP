@@ -181,6 +181,15 @@ order columns. A generic domain-policy boundary must be completed and then
 proved with a non-order telemetry/device scenario while retaining the order
 plugin as a compatibility test.
 
+## Prompt 02 implementation status (2026-09-21)
+
+The historical audit conclusion above remains unchanged. Prompt 02 has since
+added an additive source-set boundary, a real four-source acceptance harness,
+an independent oracle contract, negative controls, and a CI job. The required
+heterogeneous live run has not completed successfully in this checkout and no
+exact-commit CI receipt exists yet, so the original product acceptance remains
+pending and the multi-source capability is not accepted as PASS.
+
 ## Human-review verdict
 
 `PARTIAL — FOUR CHECKPOINT ACCEPTANCE IS REAL; ORIGINAL ACTION CONTRACT IS NOT

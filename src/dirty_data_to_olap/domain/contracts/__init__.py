@@ -49,6 +49,7 @@ from .source import (
     SourceRecordReference,
     SourceRegistryRecord,
     SourceSelection,
+    SourceSetSelection,
     SourceSnapshot,
     SourceSnapshotResult,
     TableObservationStatus,
@@ -68,6 +69,7 @@ from .source import (
     source_id_for,
     stable_digest,
     stable_id,
+    source_set_fingerprint,
     table_id_for,
 )
 from .visualization import (

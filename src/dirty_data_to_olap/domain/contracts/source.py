@@ -168,6 +168,46 @@ class SourceSelection(_SourceModel):
         return value
 
 
+class SourceSetSelection(_SourceModel):
+    """One immutable, run-scoped selection of two or more source inputs.
+
+    The existing ``SourceSelection`` remains the Step29 single-source
+    contract.  This additive contract binds the complete source set before
+    discovery so later stages cannot silently add, remove, or reorder sources.
+    """
+
+    selections: tuple[SourceSelection, ...] = Field(min_length=2)
+    source_set_fingerprint: str = Field(min_length=1)
+    finalized: bool = True
+
+    @model_validator(mode="after")
+    def validate_source_set(self) -> "SourceSetSelection":
+        registry_ids = tuple(item.registry_id for item in self.selections)
+        if len(set(registry_ids)) != len(registry_ids):
+            raise ValueError("source-set selections must have unique registry IDs")
+        contexts = {item.execution_context_id for item in self.selections}
+        if len(contexts) != 1:
+            raise ValueError("all source selections must share one execution context")
+        canonical = tuple(sorted(self.selections, key=lambda item: item.registry_id))
+        expected = stable_digest({"selections": [item.model_dump(mode="json") for item in canonical]})
+        if self.source_set_fingerprint != expected:
+            raise ValueError("source-set fingerprint does not match its immutable selections")
+        if not self.finalized:
+            raise ValueError("source sets must be finalized before execution")
+        return self
+
+    @property
+    def ordered_selections(self) -> tuple[SourceSelection, ...]:
+        return tuple(sorted(self.selections, key=lambda item: item.registry_id))
+
+
+def source_set_fingerprint(selections: tuple[SourceSelection, ...] | list[SourceSelection]) -> str:
+    """Return the stable fingerprint used by the source-set binding."""
+
+    ordered = tuple(sorted(selections, key=lambda item: item.registry_id))
+    return stable_digest({"selections": [item.model_dump(mode="json") for item in ordered]})
+
+
 class SourceRegistryRecord(_SourceModel):
     registry_id: str = Field(min_length=1)
     source_id: str | None = None

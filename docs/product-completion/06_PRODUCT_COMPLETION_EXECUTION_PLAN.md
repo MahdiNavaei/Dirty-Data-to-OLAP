@@ -1,7 +1,7 @@
 # Product Completion Execution Plan
 
-This plan follows Prompt 01. It is a handoff plan, not authorization to start
-Prompt 02 in the current turn.
+This plan follows Prompt 01. Prompt 02 implementation is now in progress; the
+plan does not authorize Prompt 03 or any later prompt.
 
 ## Completion sequence
 
@@ -27,6 +27,14 @@ explicit no-oracle runtime controls.
 Do not solve generic domain policy, review UI action expansion, or export in
 this prompt except where a minimal shared contract is required to execute the
 scenario.
+
+### Prompt 02 current closure status (2026-09-21)
+
+The additive source-set implementation, real-source acceptance harness,
+independent oracle boundary, negative controls, and CI job are present. The
+exit evidence is still outstanding: no successful live four-source run or
+exact-commit CI PASS receipt has been produced locally, so Prompt 02 remains
+blocked and Prompt 03 is not started.
 
 ## Prompt 03 — Generic product boundary
 
@@ -72,4 +80,3 @@ acceptance state to PASS after all gates are evidenced.
   evidence semantics, and no invented business measures.
 - Every prompt must add focused executable evidence and then inspect the diff
   and working tree before commit.
-

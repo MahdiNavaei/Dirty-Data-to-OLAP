@@ -1,0 +1,37 @@
+oracle_id: prompt02_multi_source_v1_truth
+oracle_version: "1.0"
+fixture_scope: four_source_order_customer_v1
+expected:
+  fact_rows: 9
+  quantity_sum: "19"
+  source_input_records:
+    prompt02-crm-postgres: 3
+    prompt02-erp-mysql: 3
+    prompt02-sales-sqlserver: 3
+    prompt02-legacy-csv: 3
+  source_emitted_records:
+    prompt02-crm-postgres: 3
+    prompt02-erp-mysql: 2
+    prompt02-sales-sqlserver: 2
+    prompt02-legacy-csv: 2
+  dimensions:
+    - dim_customer
+    - dim_date
+    - dim_source
+  measures:
+    - quantity
+  schema_match_labels:
+    - [prompt02-crm-postgres, full_name, prompt02-erp-mysql, customer_name]
+    - [prompt02-sales-sqlserver, booked_on, prompt02-legacy-csv, sale_day]
+    - [prompt02-sales-sqlserver, units, prompt02-legacy-csv, qty]
+  forbidden_measures:
+    - revenue
+    - gmv
+    - unit_price_sum
+  target_tables:
+    - dim_customer
+    - dim_date
+    - dim_source
+    - fact_order
+  hard_negative_order_keys:
+    - [prompt02-erp-mysql, "2003"]

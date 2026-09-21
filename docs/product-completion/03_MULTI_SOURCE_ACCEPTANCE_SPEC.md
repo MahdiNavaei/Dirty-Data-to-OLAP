@@ -1,6 +1,6 @@
 # Multi-Source V1 Acceptance Specification
 
-Status: `SPECIFICATION_ONLY — NOT YET EXECUTED`
+Status: `HARNESS_IMPLEMENTED — LIVE ACCEPTANCE PENDING`
 
 This is the executable acceptance contract for Prompt 02. It is deliberately
 separate from the runtime and from the truth oracle. The current checkout does
@@ -167,3 +167,11 @@ available; a skip is not a product PASS.
 evidence, provider tests, and benchmark fixtures are useful prerequisites but
 do not satisfy this specification until they are composed in one product run.
 
+## Prompt 02 implementation status (2026-09-21)
+
+The executable harness, independent oracle, negative controls, and CI job now
+exist in the repository. The local acceptance test correctly skips when the
+required disposable provider estate is absent; the attempted local live run
+did not reach a completed four-source product receipt. Therefore this
+specification remains `NOT_ACCEPTED` until the mandatory heterogeneous CI run
+produces an exact-commit PASS receipt.

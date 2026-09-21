@@ -19,6 +19,22 @@ prompt01:
     - "05_REVIEW_AND_EXPORT_ACCEPTANCE_SPEC.md"
     - "06_PRODUCT_COMPLETION_EXECUTION_PLAN.md"
     - "07_PRODUCT_ACCEPTANCE_STATE.yml"
+prompt02:
+  status: "BLOCKED"
+  meaning: "Multi-source execution boundary, real-source acceptance harness, independent oracle contract and CI job implemented; acceptance is not PASS until the required live run and CI evidence complete"
+  implementation_map: "PROMPT02_IMPLEMENTATION_MAP.md"
+  artifacts:
+    - "PROMPT02_IMPLEMENTATION_MAP.md"
+    - "tests/product_acceptance/test_multi_source_v1.py"
+    - "tests/product_acceptance/oracle/multi_source_v1_truth.yml"
+    - "tools/validate_prompt02_acceptance.py"
+  blockers:
+    - "Required four-source live acceptance has not completed successfully in this workspace"
+    - "Required CI acceptance job has not produced an exact-commit PASS receipt"
+    - "Existing Step29 focused regression remains provider/lease-environment dependent and is not upgraded by this prompt"
+  blocked_at_local: "2026-09-21"
+  oracle_loaded_after_product_run: false
+  ci_acceptance_executed: false
 product_acceptance:
   original_v1_status: "PENDING"
   overall_status: "AUDIT_COMPLETE_ACCEPTANCE_PENDING"
@@ -34,10 +50,16 @@ product_acceptance:
   safe_export_acceptance_executed: false
   final_product_acceptance: "PENDING"
 next_product_completion_prompt:
-  number: 2
-  title: "Multi-source product composition and acceptance"
+  number: 3
+  title: "Generic product composition and acceptance"
   status: "NOT_STARTED"
-  specification: "03_MULTI_SOURCE_ACCEPTANCE_SPEC.md"
+  specification: "04_GENERIC_PRODUCT_ACCEPTANCE_SPEC.md"
+  prompt02_handoff: "BLOCKED_LIVE_ACCEPTANCE_PENDING"
+future_prompts:
+  prompt03: "NOT_STARTED"
+  prompt04: "NOT_STARTED"
+  prompt05: "NOT_STARTED"
+  prompt06: "NOT_STARTED"
 evidence_boundary:
   exact_ci_run: "35520372671"
   evidence_note: "Terminal specialist CI PASS is not original V1 product acceptance"

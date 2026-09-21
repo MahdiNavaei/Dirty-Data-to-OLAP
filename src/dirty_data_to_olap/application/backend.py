@@ -69,6 +69,7 @@ from dirty_data_to_olap.domain.contracts.product import (
     ProductRelationshipView,
     ProductReviewView,
     ProductSourceBinding,
+    ProductSourceSetBinding,
     ProductSourceView,
     ProductStageView,
     ProductSummary,
@@ -552,6 +553,110 @@ class BackendService:
             raise BackendError("SOURCE_BINDING_CONFLICT", "run changed while source binding was being persisted", status=409) from exc
         except PlatformError as exc:
             raise BackendError("SOURCE_BINDING_REJECTED", "source binding could not be durably persisted", status=409) from exc
+
+    def bind_product_source_set(
+        self,
+        *,
+        run_id: str,
+        registry_ids: tuple[str, ...] | list[str],
+        scope: SelectionScope,
+        extraction: ExtractionPolicy,
+        execution_context_id: str,
+        principal: Principal,
+        idempotency_key: str,
+    ) -> tuple[ProductSourceSetBinding, bool]:
+        """Bind one immutable multi-source selection to a run.
+
+        This additive boundary leaves the accepted single-source binding
+        unchanged and rejects any attempt to mutate an existing run's source
+        scope after publication.
+        """
+
+        self._require_scope(principal, "runs:write")
+        if self.source_service is None:
+            raise BackendError("SOURCE_PRODUCT_UNAVAILABLE", "source selection is not configured", status=503, retryable=True)
+        run = self._get_authorized_run(run_id, principal, mutation=True)
+        key = _safe_key(idempotency_key)
+        ids = tuple(registry_ids)
+        request = {
+            "run_id": run_id,
+            "registry_ids": ids,
+            "scope": scope.model_dump(mode="json"),
+            "extraction": extraction.model_dump(mode="json"),
+            "execution_context_id": execution_context_id,
+        }
+        fingerprint = idempotency_fingerprint(request)
+        idempotency_scope = f"source-set-bind:{run_id}:{principal.subject}"
+        existing = self._existing_idempotency(scope=idempotency_scope, key=key, fingerprint=fingerprint)
+        if existing is not None:
+            body = self._idempotent_response(existing).get("binding")
+            if not isinstance(body, dict):
+                raise BackendError("SOURCE_BIND_REPLAY_INVALID", "source-set replay metadata is incomplete", status=409)
+            return ProductSourceSetBinding.model_validate(body), True
+        try:
+            records = tuple(self.source_service.get_for_owner(registry_id, owner_subject=principal.subject) for registry_id in ids)
+            selection = self.source_service.source_set_selection(
+                registry_ids=ids,
+                scope=scope,
+                extraction=extraction,
+                execution_context_id=execution_context_id,
+            )
+        except (ProductSourceError, ValueError) as exc:
+            raise BackendError("SOURCE_SELECTION_REJECTED", str(exc), status=422) from exc
+        artifact_id = stable_id("source-set-selection", {"run_id": run_id, "selection": selection.model_dump(mode="json")})
+        if run.root_artifact_refs and artifact_id not in run.root_artifact_refs:
+            raise BackendError("SOURCE_ALREADY_BOUND", "this run already has a different source binding", status=409)
+        try:
+            artifact = self.control_store.get_artifact(artifact_id)
+            if artifact is None:
+                from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest
+
+                artifact = self.artifact_store.publish(
+                    ArtifactManifest(
+                        artifact_id=artifact_id,
+                        run_id=run_id,
+                        stage_id="SOURCE_SETUP",
+                        attempt_id="source-set-input",
+                        artifact_kind="SourceSetSelection",
+                        media_type="application/json",
+                        producer="prompt02-product-source-set",
+                        logical_key=f"runs/{run_id}/source-set-selection/{artifact_id}.json",
+                        provenance_refs=("prompt02-product-source-set", selection.source_set_fingerprint),
+                    ),
+                    selection.model_dump_json().encode("utf-8"),
+                )
+                artifact = self.control_store.register_artifact(artifact)
+            elif artifact.run_id != run_id or artifact.artifact_kind != "SourceSetSelection":
+                raise BackendError("SOURCE_BINDING_CONFLICT", "source-set artifact is not scoped to this run", status=409)
+            if artifact_id not in run.root_artifact_refs:
+                self.control_store.update_run(
+                    run.model_copy(update={"root_artifact_refs": tuple((*run.root_artifact_refs, artifact_id))}),
+                    expected_revision=run.revision,
+                )
+            binding = ProductSourceSetBinding(
+                run_id=run_id,
+                registry_ids=tuple(record.registry_id for record in records),
+                source_ids=tuple(record.source_id or record.registry_id for record in records),
+                selection_artifact_id=artifact_id,
+                source_set_fingerprint=selection.source_set_fingerprint,
+                extraction_max_rows=extraction.max_rows,
+                extraction_chunk_size=extraction.chunk_size,
+            )
+            self.control_store.record_idempotency(IdempotencyRecord(
+                scope=idempotency_scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=200,
+                response_body={"binding": binding.model_dump(mode="json")},
+                resource_id=artifact_id,
+            ))
+            return binding, False
+        except BackendError:
+            raise
+        except ConcurrencyConflictError as exc:
+            raise BackendError("SOURCE_BINDING_CONFLICT", "run changed while source-set binding was being persisted", status=409) from exc
+        except PlatformError as exc:
+            raise BackendError("SOURCE_BINDING_REJECTED", "source-set binding could not be durably persisted", status=409) from exc
 
     def product_summary(self, *, run_id: str, principal: Principal) -> ProductSummary:
         self._require_scope(principal, "runs:read")

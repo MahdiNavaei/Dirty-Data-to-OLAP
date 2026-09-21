@@ -38,6 +38,18 @@ class ProductSourceBinding(_SourceModel):
     extraction_chunk_size: int
 
 
+class ProductSourceSetBinding(_SourceModel):
+    """Presentation-safe binding summary for a finalized multi-source run."""
+
+    run_id: str
+    registry_ids: tuple[str, ...] = Field(min_length=2)
+    source_ids: tuple[str, ...] = Field(min_length=2)
+    selection_artifact_id: str
+    source_set_fingerprint: str
+    extraction_max_rows: int | None = None
+    extraction_chunk_size: int
+
+
 class ProductStageView(_SourceModel):
     stage_id: str
     status: str
