@@ -501,7 +501,7 @@ class MultiSourceProductService:
             lineage_refs=(prepared.source_set.source_set_fingerprint, prepared.schema_match.request.request_id, result.spec.spec_id),
             record_accounting_refs=(stable_id("prompt02-accounting", prepared.run_id),),
         )
-        refs = {row["record_ref"]: item.canonical_entity_id for item in canonical.source_record_maps}
+        refs = {item.record_ref: item.canonical_entity_id for item in canonical.source_record_maps}
         return canonical, (evidence_review, identity_review), refs
 
     def _materialize(self, prepared: PreparedMultiSourceRun, canonical: CanonicalModel, refs: Mapping[str, str]) -> tuple[MultiSourceMaterializationEvidence, MultiSourceAnalyticalEvidence, tuple[MultiSourceRecordAccounting, ...]]:
