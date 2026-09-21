@@ -19,11 +19,19 @@ def _commit() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--evidence", type=Path, required=True)
-    parser.add_argument("--oracle", type=Path, required=True)
-    parser.add_argument("--expected-commit", required=True)
+    parser.add_argument("--evidence", type=Path)
+    parser.add_argument("--oracle", type=Path)
+    parser.add_argument("--expected-commit")
     parser.add_argument("--target", type=Path)
+    parser.add_argument("--require-evidence", action="store_true", help="fail when a completed acceptance receipt is not supplied")
     args = parser.parse_args()
+    supplied = (args.evidence, args.oracle, args.expected_commit)
+    if not all(supplied):
+        if args.require_evidence:
+            parser.error("--evidence, --oracle, and --expected-commit are required with --require-evidence")
+        print("PROMPT02_ACCEPTANCE=NOT_RUN")
+        print("reason=no completed Prompt02 receipt supplied")
+        return 0
     receipt = json.loads(args.evidence.read_text(encoding="utf-8"))
     oracle = yaml.safe_load(args.oracle.read_text(encoding="utf-8"))
     errors: list[str] = []

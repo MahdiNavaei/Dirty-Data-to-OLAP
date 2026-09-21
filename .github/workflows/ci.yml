@@ -285,7 +285,7 @@ jobs:
       - name: Validate Prompt02 evidence and exact-head binding
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
-        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --target "${DDO_PROMPT02_EVIDENCE_DIR}/prompt02.duckdb" --expected-commit "${GITHUB_SHA}"
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --require-evidence --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --target "${DDO_PROMPT02_EVIDENCE_DIR}/prompt02.duckdb" --expected-commit "${GITHUB_SHA}"
       - name: Verify Prompt02 content worktree
         run: |
           git diff --check
