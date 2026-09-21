@@ -334,7 +334,15 @@ class MultiSourceProductService:
         )
         schema_match = self.matching.match(match_request, catalogs, snapshots, profiles=profiles, dependencies=dependencies, artifact_root=root / "schema_matching")
         if schema_match.status.value != "COMPLETE":
-            raise MultiSourceProductBlocked("SCHEMA_MATCHING_NOT_COMPLETE", "real Valentine schema matching was not COMPLETE")
+            failure_details = tuple(f"{item.kind.value}:{item.detail}" for item in schema_match.failures)
+            scope = schema_match.observation_scope
+            excluded_columns = sum(len(value) for value in scope.excluded_column_ids_by_table.values())
+            raise MultiSourceProductBlocked(
+                "SCHEMA_MATCHING_NOT_COMPLETE",
+                f"real Valentine schema matching was not COMPLETE; status={schema_match.status.value}; "
+                f"failures={failure_details}; reduced_scope={scope.reduced_scope}; "
+                f"excluded_columns={excluded_columns}; candidates={len(schema_match.candidates)}",
+            )
         stages.append(self._stage("SCHEMA_MATCHING", providers=tuple(item.engine + ":" + item.engine_version for item in schema_match.capabilities), detail=f"{len(schema_match.candidates)} candidate mappings; candidates remain review-only"))
         er_spec = self._er_spec(catalogs, snapshots)
         auth_decision = self.privacy.authorize_entity_resolution_analysis(er_spec.privacy_context, spec=er_spec, source_ids=er_spec.source_ids, snapshot_ids=er_spec.snapshot_ids, table_ids_by_source=er_spec.table_ids_by_source, identity_column_ids=tuple(field.column_id for field in er_spec.identity_fields), batch_ids=tuple(batch.batch_id for source_id in er_spec.source_ids for batch in snapshots[source_id].batches))
