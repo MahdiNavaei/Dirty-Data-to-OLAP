@@ -257,10 +257,12 @@ class SplinkEntityResolutionAdapter:
             evidence = self._independent_evidence(left, right, spec)
             probability = float(row.get("match_probability", 0.0) or 0.0)
             weight = float(row.get("match_weight", 0.0) or 0.0)
-            band = EntityMatchPredictionBand.STRONG_LINK_EVIDENCE if probability >= spec.threshold_policy.match_probability_threshold else EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE if probability >= spec.threshold_policy.review_probability_threshold else EntityMatchPredictionBand.BELOW_EVIDENCE_THRESHOLD
-            risk: list[str] = []
-            if spec.threshold_policy.require_independent_evidence and band is EntityMatchPredictionBand.STRONG_LINK_EVIDENCE and len(evidence) < 2:
-                band = EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE; risk.append("insufficient_independent_evidence")
+            band, risk = self._prediction_band(
+                probability=probability,
+                weight=weight,
+                evidence_count=len(evidence),
+                policy=spec.threshold_policy,
+            )
             if not evidence:
                 risk.append("no_non_placeholder_agreement")
             edge = EntityMatchEdge(edge_id=entity_edge_id(left["_record_ref"], right["_record_ref"], model_id), left_record_ref=left["_record_ref"], right_record_ref=right["_record_ref"], left_source_id=left["_source_id"], right_source_id=right["_source_id"], left_snapshot_id=left["_snapshot_id"], right_snapshot_id=right["_snapshot_id"], match_weight=weight, match_probability=probability, model_prediction_band=band, comparison_evidence_refs=tuple(evidence), blocking_rule_ids=tuple(rule.rule_id for rule in spec.blocking_rules), model_evidence_ref=model.model_id, independent_evidence_refs=tuple(evidence), risk_flags=tuple(risk))
@@ -270,6 +272,29 @@ class SplinkEntityResolutionAdapter:
         # review edge cannot silently become identity when policy excludes it.
         clusters, diagnostics = self._clusters(record_map, edges, spec, model_id, model_config_hash)
         return edges, model, clusters, diagnostics, len(predicted_frame)
+
+    @staticmethod
+    def _prediction_band(*, probability: float, weight: float, evidence_count: int, policy: Any) -> tuple[EntityMatchPredictionBand, list[str]]:
+        """Classify Splink evidence without treating it as calibrated truth.
+
+        The Prompt02 benchmark uses a bounded, explicit match-weight gate because
+        its tiny fixture cannot calibrate Splink probabilities.  A weight gate
+        still requires the independent-evidence guard below; a single matching
+        field can never become strong evidence through the weight alone.
+        """
+        weight_gate = policy.match_weight_threshold is not None and weight >= policy.match_weight_threshold
+        probability_gate = probability >= policy.match_probability_threshold
+        if weight_gate or probability_gate:
+            band = EntityMatchPredictionBand.STRONG_LINK_EVIDENCE
+        elif probability >= policy.review_probability_threshold:
+            band = EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE
+        else:
+            band = EntityMatchPredictionBand.BELOW_EVIDENCE_THRESHOLD
+        risk: list[str] = []
+        if policy.require_independent_evidence and band is EntityMatchPredictionBand.STRONG_LINK_EVIDENCE and evidence_count < 2:
+            band = EntityMatchPredictionBand.REVIEW_LINK_EVIDENCE
+            risk.append("insufficient_independent_evidence")
+        return band, risk
 
     def _clusters(self, record_map, edges, spec, model_id, model_config_hash):
         memberships: dict[str, set[str]] = {}

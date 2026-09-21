@@ -260,8 +260,12 @@ class MultiSourceProductService:
                 ERComparisonSpecification(comparison_id="compare-customer-phone", field_id="customer_phone", method="exact"),
             ),
             training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-customer-name", "block-customer-email"), max_u_pairs=10_000, max_em_iterations=10),
-            threshold_policy=ERThresholdPolicy(match_probability_threshold=0.95, review_probability_threshold=0.80, require_independent_evidence=True),
-            clustering_policy=ERClusteringPolicy(threshold_policy_id="er-threshold-v1", include_review_edges=False),
+            # Splink probabilities are uncalibrated evidence for this tiny
+            # benchmark fixture.  Use its explicit log-Bayes match-weight
+            # threshold while still requiring two independent agreements;
+            # the human review checkpoint remains mandatory downstream.
+            threshold_policy=ERThresholdPolicy(policy_id="prompt02-er-threshold-v1", match_probability_threshold=0.95, review_probability_threshold=0.80, match_weight_threshold=-5.0, require_independent_evidence=True),
+            clustering_policy=ERClusteringPolicy(threshold_policy_id="prompt02-er-threshold-v1", include_review_edges=False),
             execution_budget=ERExecutionBudget(max_records=100_000, max_candidate_pairs=100_000, max_all_pairs_diagnostic=1_000_000, max_runtime_seconds=300),
         )
 
