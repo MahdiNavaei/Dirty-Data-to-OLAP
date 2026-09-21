@@ -277,6 +277,7 @@ jobs:
           uv run --locked --no-sync --python "$(command -v python)" python -m pip install --no-deps \
             valentine==1.0.0 splink==4.0.17 anytree==2.13.0 nltk==3.10.3 PuLP==3.3.2 POT==0.9.7.post1 \
             altair==6.2.2 igraph==1.0.0 networkx==3.4.2 chardet==7.6.0 rapidfuzz==3.14.5 \
+            joblib==1.6.0 regex==2026.9.10 tqdm==4.70.1 \
             scipy==1.15.3 python-dateutil==2.9.0.post0 duckdb==1.5.5 jinja2==3.1.6 sqlglot==30.18.0
       - name: Execute real Prompt02 four-source acceptance
         env:
