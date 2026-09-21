@@ -127,6 +127,7 @@ class MultiSourceProductService:
         "customer_id_ref": ("customer_id_ref", "customer_id", "crm_customer_id", "account_no", "buyer_ref", "client_code"),
         "customer_name": ("customer_name", "full_name", "buyer_name", "client_name", "name"),
         "customer_email": ("email", "email_addr", "buyer_email", "customer_email", "client_email"),
+        "customer_phone": ("phone", "phone_e164", "buyer_phone", "client_phone"),
         "order_date": ("order_date", "booked_on", "sale_day"),
         "quantity": ("quantity", "units", "qty"),
         "unit_price": ("unit_price", "price_each"),
@@ -217,6 +218,7 @@ class MultiSourceProductService:
             for field_id, names, role, anchor in (
                 ("customer_name", self.LOGICAL_COLUMN_ALIASES["customer_name"], "name", False),
                 ("customer_email", self.LOGICAL_COLUMN_ALIASES["customer_email"], "email", True),
+                ("customer_phone", self.LOGICAL_COLUMN_ALIASES["customer_phone"], "phone", False),
             ):
                 column = self._column(catalog, table.table_id, names)
                 if column is None:
@@ -234,8 +236,8 @@ class MultiSourceProductService:
                     is_anchor=anchor,
                     anchor_group="email" if anchor else None,
                 ))
-        if not fields or {item.field_id for item in fields} != {"customer_name", "customer_email"}:
-            raise MultiSourceProductBlocked("IDENTITY_SCOPE_INCOMPLETE", "every source must expose the declared name and email identity fields")
+        if not fields or {item.field_id for item in fields} != {"customer_name", "customer_email", "customer_phone"}:
+            raise MultiSourceProductBlocked("IDENTITY_SCOPE_INCOMPLETE", "every source must expose the declared name, email and phone identity fields")
         source_ids = tuple(sorted(catalogs))
         table_ids = {source_id: (self._order_table(catalogs[source_id]).table_id,) for source_id in source_ids}
         return EntityResolutionSpec(
@@ -246,13 +248,18 @@ class MultiSourceProductService:
             snapshot_ids={key: snapshots[key].snapshot.snapshot_id for key in source_ids},
             table_ids_by_source=table_ids,
             identity_fields=tuple(fields),
-            normalization_rules=(EntityResolutionNormalizationRule(rule_id="identity-normalization-v1", version="1", applies_to=("customer_name", "customer_email")),),
-            blocking_rules=(ERBlockingRule(rule_id="block-customer-email", version="1", field_ids=("customer_email",), sql_expression="l.customer_email = r.customer_email"),),
-            comparisons=(
-                ERComparisonSpecification(comparison_id="compare-customer-name", field_id="customer_name", method="jaro_winkler", thresholds=(0.95, 0.85)),
-                ERComparisonSpecification(comparison_id="compare-customer-email", field_id="customer_email", method="exact"),
+            normalization_rules=(EntityResolutionNormalizationRule(rule_id="identity-normalization-v1", version="1", applies_to=("customer_name", "customer_email", "customer_phone")),),
+            blocking_rules=(
+                ERBlockingRule(rule_id="block-customer-name", version="1", field_ids=("customer_name",), sql_expression="l.customer_name = r.customer_name"),
+                ERBlockingRule(rule_id="block-customer-email", version="1", field_ids=("customer_email",), sql_expression="l.customer_email = r.customer_email"),
+                ERBlockingRule(rule_id="block-customer-phone", version="1", field_ids=("customer_phone",), sql_expression="l.customer_phone = r.customer_phone"),
             ),
-            training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-customer-email",), max_u_pairs=10_000, max_em_iterations=10),
+            comparisons=(
+                ERComparisonSpecification(comparison_id="compare-customer-name", field_id="customer_name", method="exact"),
+                ERComparisonSpecification(comparison_id="compare-customer-email", field_id="customer_email", method="exact"),
+                ERComparisonSpecification(comparison_id="compare-customer-phone", field_id="customer_phone", method="exact"),
+            ),
+            training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-customer-name", "block-customer-email"), max_u_pairs=10_000, max_em_iterations=10),
             threshold_policy=ERThresholdPolicy(match_probability_threshold=0.95, review_probability_threshold=0.80, require_independent_evidence=True),
             clustering_policy=ERClusteringPolicy(threshold_policy_id="er-threshold-v1", include_review_edges=False),
             execution_budget=ERExecutionBudget(max_records=100_000, max_candidate_pairs=100_000, max_all_pairs_diagnostic=1_000_000, max_runtime_seconds=300),
