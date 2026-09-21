@@ -29,7 +29,6 @@ class ProductSourceService:
     """Store bounded CSV imports below the project-owned product workspace."""
 
     MAX_UPLOAD_BYTES = 5 * 1024 * 1024
-    _OWNER_KEY = "_owner_subject"
 
     def __init__(self, project_root: Path, registry: DurableSourceRegistry) -> None:
         self.project_root = Path(project_root).resolve()
@@ -106,8 +105,9 @@ class ProductSourceService:
             scope=SelectionScope(),
             adapter_name="file_source",
             adapter_version="1.0.0",
-            adapter_config={"managed_import": "true", "original_filename": clean_name, self._OWNER_KEY: owner_subject},
+            adapter_config={"managed_import": "true", "original_filename": clean_name},
             read_only=True,
+            owner_subject=owner_subject,
         )
         try:
             return self.registry.register(record)
@@ -123,7 +123,7 @@ class ProductSourceService:
 
     @classmethod
     def _owner_matches(cls, record: SourceRegistryRecord, owner_subject: str) -> bool:
-        return record.adapter_config.get(cls._OWNER_KEY) == owner_subject
+        return record.owner_subject == owner_subject
 
     def get_for_owner(self, registry_id: str, *, owner_subject: str) -> SourceRegistryRecord:
         record = self.get(registry_id)
@@ -160,10 +160,8 @@ class ProductSourceService:
             raise ProductSourceError("owner subject is invalid")
         if not record.read_only:
             raise ProductSourceError("only read-only sources may be registered")
-        config = dict(record.adapter_config)
-        config[self._OWNER_KEY] = owner_subject
         try:
-            return self.registry.register(record.model_copy(update={"adapter_config": config}))
+            return self.registry.register(record.model_copy(update={"owner_subject": owner_subject}))
         except ValueError as exc:
             raise ProductSourceError(str(exc)) from exc
 

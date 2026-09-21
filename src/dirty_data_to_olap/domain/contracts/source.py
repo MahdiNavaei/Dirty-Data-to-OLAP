@@ -220,12 +220,20 @@ class SourceRegistryRecord(_SourceModel):
     adapter_version: str = Field(min_length=1)
     adapter_config: Mapping[str, str] = Field(default_factory=dict)
     read_only: bool = True
+    owner_subject: str | None = None
 
     @field_validator("registry_id", "source_id", "display_name", "adapter_name", "adapter_version")
     @classmethod
     def validate_text(cls, value: str | None) -> str | None:
         if value is not None and "\x00" in value:
             raise ValueError("registry values must be NUL-free")
+        return value
+
+    @field_validator("owner_subject")
+    @classmethod
+    def validate_owner_subject(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value):
+            raise ValueError("owner subject is invalid")
         return value
 
     @model_validator(mode="after")

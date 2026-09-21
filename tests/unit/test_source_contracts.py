@@ -103,6 +103,21 @@ def test_registry_rejects_secret_bearing_adapter_configuration() -> None:
         )
 
 
+def test_registry_owner_is_separate_from_adapter_configuration() -> None:
+    record = SourceRegistryRecord(
+        registry_id="owned-source",
+        display_name="owned source",
+        source_type=SourceType.CSV,
+        file_locator="workspace/tests/owned.csv",
+        adapter_name="file_source",
+        adapter_version="1.0.0",
+        adapter_config={"managed_import": "true"},
+        owner_subject="prompt02-owner",
+    )
+    assert record.owner_subject == "prompt02-owner"
+    assert "_owner_subject" not in record.adapter_config
+
+
 def test_file_source_type_detection_is_explicit() -> None:
     assert detect_file_source_type("orders.csv").value == "csv"
     assert detect_file_source_type("orders.parquet").value == "parquet"
