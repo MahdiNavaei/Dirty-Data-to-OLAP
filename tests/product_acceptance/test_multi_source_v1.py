@@ -75,10 +75,14 @@ def _rows(label: str) -> list[dict[str, Any]]:
 
 class _CredentialResolver:
     def __init__(self, urls: dict[str, str]):
-        self.urls = urls
+        self.urls_by_source_id = {
+            "prompt02-crm-postgres": urls["postgres"],
+            "prompt02-erp-mysql": urls["mysql"],
+            "prompt02-sales-sqlserver": urls["sqlserver"],
+        }
 
     def resolve(self, profile: Any, *, required_purpose: CredentialPurpose, source_id: str) -> RuntimeSqlCredentials:
-        return RuntimeSqlCredentials(self.urls[source_id], credential_reference=f"prompt02-fixture:{source_id}", credential_purpose=required_purpose, credential_version="prompt02-v1", source_id=source_id)
+        return RuntimeSqlCredentials(self.urls_by_source_id[source_id], credential_reference=f"prompt02-fixture:{source_id}", credential_purpose=required_purpose, credential_version="prompt02-v1", source_id=source_id)
 
 
 class _ProviderVerifier:
