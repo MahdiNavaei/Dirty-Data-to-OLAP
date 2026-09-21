@@ -417,7 +417,7 @@ class MultiSourceProductService:
             canonical_entity_type_id=entity_type_id,
             semantic_id="customer",
             business_name="Customer",
-            kind=CanonicalEntityKind.ENTITY,
+            kind=CanonicalEntityKind.IDENTITY,
             entity_resolution_family="customer",
             identity_strategy="REVIEWED_SPLINK_LINKAGE",
             identity_attribute_ids=("customer_name", "customer_email"),
