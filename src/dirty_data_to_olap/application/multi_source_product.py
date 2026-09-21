@@ -247,7 +247,7 @@ class MultiSourceProductService:
             table_ids_by_source=table_ids,
             identity_fields=tuple(fields),
             normalization_rules=(EntityResolutionNormalizationRule(rule_id="identity-normalization-v1", version="1", applies_to=("customer_name", "customer_email")),),
-            blocking_rules=(ERBlockingRule(rule_id="block-customer-email", version="1", field_ids=("customer_email",), sql_expression="l.f_customer_email = r.f_customer_email"),),
+            blocking_rules=(ERBlockingRule(rule_id="block-customer-email", version="1", field_ids=("customer_email",), sql_expression="l.customer_email = r.customer_email"),),
             comparisons=(
                 ERComparisonSpecification(comparison_id="compare-customer-name", field_id="customer_name", method="jaro_winkler", thresholds=(0.95, 0.85)),
                 ERComparisonSpecification(comparison_id="compare-customer-email", field_id="customer_email", method="exact"),
