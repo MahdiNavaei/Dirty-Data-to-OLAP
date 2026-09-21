@@ -224,7 +224,6 @@ jobs:
     env:
       DDO_PROMPT02_REQUIRE_LIVE: "1"
       DESBORDANTE_PROVIDER_IMAGE: dirty-data-to-olap-desbordante-prompt02:${{ github.sha }}
-      DDO_PROMPT02_EVIDENCE_DIR: ${{ runner.temp }}/prompt02-evidence
     steps:
       - name: Check out exact content
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -262,6 +261,7 @@ jobs:
             echo "DDO_PROMPT02_MYSQL_URL=mysql+pymysql://ddo_source:${password}@127.0.0.1:3306/prompt02"
             echo "DDO_PROMPT02_SQLSERVER_ADMIN_URL=mssql+pyodbc://sa:${password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
             echo "DDO_PROMPT02_SQLSERVER_URL=mssql+pyodbc://ddo_source:${password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+            echo "DDO_PROMPT02_EVIDENCE_DIR=${RUNNER_TEMP}/prompt02-evidence"
           } >> "${GITHUB_ENV}"
       - name: Provision pinned Desbordante provider image
         run: |
