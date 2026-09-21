@@ -123,6 +123,8 @@ class MultiSourceProductService:
     VERSION = "prompt02-multi-source-v1"
     LOGICAL_COLUMN_ALIASES = {
         "order_id": ("order_id", "ticket_id", "sale_key"),
+        "customer_id": ("customer_id", "crm_customer_id", "account_no", "buyer_ref", "client_code"),
+        "customer_id_ref": ("customer_id_ref", "customer_id", "crm_customer_id", "account_no", "buyer_ref", "client_code"),
         "customer_name": ("customer_name", "full_name", "buyer_name", "client_name", "name"),
         "customer_email": ("email", "email_addr", "buyer_email", "customer_email", "client_email"),
         "order_date": ("order_date", "booked_on", "sale_day"),
@@ -311,7 +313,7 @@ class MultiSourceProductService:
             dependencies[source_id] = self.dependency.discover(dependency_request, catalog, snapshot, profiles=profiles[source_id], artifact_root=root / "dependencies" / source_id)
             if getattr(dependencies[source_id].status, "value", dependencies[source_id].status) != "COMPLETE":
                 raise MultiSourceProductBlocked("DEPENDENCY_INCOMPLETE", f"dependency discovery for {source_id} is incomplete")
-            quality_request = self.policy.quality_request(catalog, snapshot, profiles[source_id], run_id)
+            quality_request = self.policy.quality_request(catalog, snapshot, profiles[source_id], run_id, column_aliases=self.LOGICAL_COLUMN_ALIASES)
             qualities[source_id] = self.quality.analyze(quality_request, catalog, snapshot, profiles[source_id], artifact_root=root / "quality" / source_id)
             if getattr(qualities[source_id].completeness, "value", qualities[source_id].completeness) != "COMPLETE":
                 raise MultiSourceProductBlocked("QUALITY_INCOMPLETE", f"quality analysis for {source_id} is incomplete")

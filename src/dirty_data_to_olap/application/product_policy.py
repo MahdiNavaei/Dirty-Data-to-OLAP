@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 from dirty_data_to_olap.domain.contracts.analytical import (
@@ -73,8 +73,10 @@ class OrderProductPolicy:
         raise ValueError("the product policy source table is not present in the discovered catalog")
 
     @staticmethod
-    def column(catalog: SourceCatalog, table_id: str, name: str):
-        return next(item for item in catalog.columns if item.table_id == table_id and item.physical_name == name)
+    def column(catalog: SourceCatalog, table_id: str, names: str | Sequence[str]):
+        wanted = (names,) if isinstance(names, str) else tuple(names)
+        normalized = {name.casefold() for name in wanted}
+        return next((item for item in catalog.columns if item.table_id == table_id and item.physical_name.casefold() in normalized), None)
 
     def profile_request(self, catalog: SourceCatalog, snapshot: SourceSnapshotResult, run_id: str) -> ProfileRequest:
         settings = self.data["profiling"]
@@ -90,13 +92,27 @@ class OrderProductPolicy:
             profile_config_version=str(settings["profile_config_version"]),
         )
 
-    def quality_request(self, catalog: SourceCatalog, snapshot: SourceSnapshotResult, profile, run_id: str) -> QualityRequest:
+    def quality_request(
+        self,
+        catalog: SourceCatalog,
+        snapshot: SourceSnapshotResult,
+        profile,
+        run_id: str,
+        *,
+        column_aliases: Mapping[str, Sequence[str]] | None = None,
+    ) -> QualityRequest:
         table = self.source_table(catalog)
         rules = []
         settings = self.data["quality"]
         for raw in settings["rules"]:
             names = tuple(str(item) for item in raw.get("column_names", ()))
-            ids = tuple(self.column(catalog, table.table_id, name).column_id for name in names)
+            ids = []
+            for name in names:
+                aliases = tuple(column_aliases.get(name, (name,))) if column_aliases is not None else (name,)
+                column = self.column(catalog, table.table_id, aliases)
+                if column is None:
+                    raise ValueError(f"quality policy column is not present in the discovered catalog: {name}")
+                ids.append(column.column_id)
             rules.append(QualityRule(
                 rule_id=str(raw["rule_id"]),
                 rule_version=str(settings["version"]),
@@ -105,7 +121,7 @@ class OrderProductPolicy:
                 entity_type=self.data["entity"]["semantic_id"],
                 source_id=catalog.source_id,
                 table_id=table.table_id,
-                column_ids=ids,
+                column_ids=tuple(ids),
                 severity=QualitySeverity.HIGH,
                 repairability=Repairability.REVIEW_REQUIRED,
                 detector_config={},
