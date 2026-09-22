@@ -11,6 +11,7 @@ from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, ArtifactPublicationState, RunRecord, StageAttemptRecord, StageStatus
 from dirty_data_to_olap.entrypoints.api import create_app
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 from dirty_data_to_olap.platform import LocalPlatform
 
 
@@ -139,6 +140,7 @@ def test_artifacts_are_scoped_verified_and_payloads_are_not_generic(api_bundle) 
     corrupted = client.get(f"/api/v1/artifacts/{ref.artifact_id}", headers=AUTH, params={"run_id": first["run_id"]})
     assert corrupted.status_code == 409
     assert corrupted.json()["error"]["code"] == "ARTIFACT_INTEGRITY_FAILED"
+    record_control_observation("NC07", f"ARTIFACT_INTEGRITY_FAILED:{corrupted.status_code}", "tests/api/test_step27_backend.py:141")
 
 
 def test_review_exact_binding_idempotency_concurrency_and_actor_boundary(api_bundle) -> None:
@@ -157,6 +159,7 @@ def test_review_exact_binding_idempotency_concurrency_and_actor_boundary(api_bun
     stale = client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}", headers={**AUTH, "Idempotency-Key": "review-key-2"}, json=body)
     assert stale.status_code == 409
     assert stale.json()["error"]["code"] == "REVIEW_REVISION_CONFLICT"
+    record_control_observation("NC04", f"REVIEW_REVISION_CONFLICT:{stale.status_code}", "tests/api/test_step27_backend.py:159")
     spoof = {**body, "actor": "attacker"}
     assert client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}", headers={**AUTH, "Idempotency-Key": "review-key-3"}, json=spoof).status_code == 422
     assert client.post(f"/api/v1/runs/{run['run_id']}/reviews/{ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY.value}", headers={**AUTH, "Idempotency-Key": "review-key-4"}, json=body).status_code == 422

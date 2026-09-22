@@ -97,22 +97,25 @@ def main() -> int:
     actual_controls = {item.get("control_id") for item in control_evidence}
     if actual_controls != expected_controls or len(control_evidence) != 14:
         errors.append("negative-control evidence does not contain exactly NC01-NC14")
-    if any(item.get("implementation_status") != "IMPLEMENTED" or item.get("execution_status") != "PASS" or item.get("acceptance_status") != "PASS" or not item.get("injected_fault") or not item.get("execution_boundary") or not item.get("actual_rejection") or not item.get("durable_evidence") for item in control_evidence):
+    if any(item.get("implementation_status") != "IMPLEMENTED" or item.get("execution_status") != "PASS" or item.get("acceptance_status") != "PASS" or not item.get("injected_fault") or not item.get("execution_boundary") or not item.get("expected_rejection") or not item.get("observed_rejection") or not item.get("assertion_reference") or not item.get("pytest_node") or not item.get("junit_reference") or not item.get("execution_commit") or not item.get("durable_evidence") for item in control_evidence):
         errors.append("an unexecuted or structurally incomplete negative control is presented as acceptance evidence")
     executed_controls = negative_execution.get("controls", ())
+    execution_commit = negative_execution.get("execution_commit")
+    if not execution_commit or execution_commit != args.expected_commit:
+        errors.append("negative-control execution evidence is not bound to the expected checked-out commit")
     executed_by_id = {item.get("control_id"): item for item in executed_controls}
     if set(executed_by_id) != expected_controls or len(executed_controls) != 14:
         errors.append("negative-control execution result does not contain exactly NC01-NC14")
     for item in control_evidence:
         executed = executed_by_id.get(item.get("control_id"), {})
-        if any(executed.get(field) != item.get(field) for field in ("requirement", "injected_fault", "execution_boundary", "expected_rejection", "actual_rejection", "implementation_status", "execution_status", "acceptance_status")):
+        if any(executed.get(field) != item.get(field) for field in ("requirement", "injected_fault", "execution_boundary", "expected_rejection", "observed_rejection", "assertion_reference", "implementation_status", "execution_status", "acceptance_status", "pytest_node", "junit_reference", "execution_commit")):
             errors.append(f"negative-control receipt row is not identical to executed evidence: {item.get('control_id')}")
             continue
-        if executed.get("pytest_return_code") != 0 or not executed.get("test_node"):
+        if executed.get("pytest_return_code") != 0 or not executed.get("pytest_node") or not executed.get("junit_reference") or not executed.get("observed_rejection") or not executed.get("assertion_reference"):
             errors.append(f"negative-control test did not pass: {item.get('control_id')}")
             continue
         junit_refs = [ref.removeprefix("junit:") for ref in executed.get("durable_evidence", ()) if isinstance(ref, str) and ref.startswith("junit:")]
-        if len(junit_refs) != 1:
+        if len(junit_refs) != 1 or junit_refs[0] != executed.get("junit_reference"):
             errors.append(f"negative-control evidence is missing its JUnit result: {item.get('control_id')}")
             continue
         junit_path = args.negative_control_evidence.parent / junit_refs[0]

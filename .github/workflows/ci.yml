@@ -282,7 +282,7 @@ jobs:
       - name: Execute isolated Prompt02 negative controls
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
-        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra sql --extra files --extra profiling --extra compatibility python tools/run_prompt02_negative_controls.py
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python tools/run_prompt02_negative_controls.py
       - name: Execute real Prompt02 four-source acceptance
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main

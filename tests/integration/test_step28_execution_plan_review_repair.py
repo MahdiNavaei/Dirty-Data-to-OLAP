@@ -29,6 +29,7 @@ from dirty_data_to_olap.domain.contracts.jobs import (
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, RunRecord
 from dirty_data_to_olap.domain.contracts.source import AdapterReference, SelectionScope, SourceCatalog, SourceDescriptor, SourceType, stable_digest, stable_id
 from dirty_data_to_olap.entrypoints.api import create_app
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 
 
 AUTH = {"X-Local-Principal": "step28-plan-review-test"}
@@ -216,6 +217,14 @@ def test_real_evidence_checkpoint_pauses_then_resumes_guarded_downstream(tmp_pat
     assert context == ReviewPolicyService().evidence_context(decision, ())
     assert control.get_current_review(run_id=run.run_id, subject_key=review_subject_key(context)) is None
 
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id, "resume-before-review", ExecutionAction.RESUME), run=run)
+    blocked_resume = worker.run_once()
+    assert blocked_resume.status == JobStatus.BLOCKED.value
+    assert "accepted review is required" in blocked_resume.detail
+    assert control.get_run(run.run_id).status.value == "NEEDS_REVIEW"
+    assert control.get_stage_job(run_id=run.run_id, stage_id="CANONICAL_HYPOTHESES") is None
+    record_control_observation("NC14", f"RESUME_NOT_AUTHORIZED:{blocked_resume.detail};downstream_absent", "tests/integration/test_step28_execution_plan_review_repair.py:218")
+
     client = TestClient(create_app(BackendService(control_store=control, artifact_store=artifacts)), raise_server_exceptions=False)
     reviewed = client.post(
         f"/api/v1/runs/{run.run_id}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}",
@@ -337,6 +346,7 @@ def test_execution_plan_rejects_inconsistent_selection_and_success_guards(tmp_pa
             ),
             selection=_selection(run_id, (_decision("OPTIONAL", selected=False, reason="excluded"),)),
         )
+    record_control_observation("NC08", "ValueError:unselected hard dependency", "tests/integration/test_step28_execution_plan_review_repair.py:341")
     with pytest.raises(ValueError, match="selected review checkpoint guard"):
         ExecutionPlan(
             run_id=run_id,

@@ -62,6 +62,7 @@ from dirty_data_to_olap.domain.contracts.source import (
     SourceType,
     stable_id,
 )
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 from dirty_data_to_olap.observability import TelemetryClient
 from dirty_data_to_olap.application.platform import ArtifactConflictError, ConcurrencyConflictError
 
@@ -365,6 +366,7 @@ def test_chaos_source_001_disappears_after_discovery(tmp_path: Path) -> None:
     assert raised.value.failure.kind is SourceFailureKind.ACCESS_FAILED
     assert not list((tmp_path / "staging").rglob("*.parquet"))
     assert not path.exists() and before.startswith(b"id,")
+    record_control_observation("NC01", f"SourceIngestionError:{raised.value.failure.kind.value}", "tests/chaos/test_step36_chaos.py:365")
 
 
 @pytest.mark.parametrize(

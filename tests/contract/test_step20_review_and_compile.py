@@ -8,6 +8,7 @@ from dirty_data_to_olap.domain.contracts.analytical import AggregationClass, Tar
 from dirty_data_to_olap.domain.contracts.canonical import ReviewDecisionStatus
 
 from tests.step20_support import planned_flow
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 
 
 STAMP = datetime(2026, 9, 11, tzinfo=timezone.utc)
@@ -50,3 +51,4 @@ def test_compiler_rejects_missing_dimension_reference_and_measure_reclassificati
     })
     with pytest.raises(AnalyticalCompilationError, match="SPEC_PACKAGE_STALE"):
         AnalyticalCompilerService().compile(plan, dimensions, fact, grain, (undeclared_revenue, *measures[1:]), binding, fixture, TargetConfig(relative_path="target.duckdb"), review, reviewed_at=STAMP)
+    record_control_observation("NC09", "AnalyticalCompilationError:SPEC_PACKAGE_STALE", "tests/contract/test_step20_review_and_compile.py:52")

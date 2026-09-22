@@ -236,7 +236,7 @@ def run_target_negative_controls(
         ]
         if not detected:
             raise ValidationFailure(f"negative control was not detected: {control_id}")
-        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": detected})
+        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": detected, "observed_rejection": f"ValidationStatus.FAIL:{','.join(detected)}"})
     return results
 
 
@@ -347,7 +347,7 @@ def run_accounting_negative_controls(
         item = next(item for item in outcome.report.checks if item.check_id == check_id)
         if item.status is not ValidationStatus.FAIL:
             raise ValidationFailure(f"accounting control was not detected: {control_id}")
-        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id]})
+        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id], "observed_rejection": f"ValidationStatus.{item.status.value}:{check_id}"})
     return results
 
 
@@ -419,7 +419,7 @@ def run_canonical_negative_controls(
         item = next(item for item in outcome.report.checks if item.check_id == check_id)
         if item.status is not ValidationStatus.FAIL:
             raise ValidationFailure(f"canonical control was not detected: {control_id}")
-        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id]})
+        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id], "observed_rejection": f"ValidationStatus.{item.status.value}:{check_id}"})
     return results
 
 

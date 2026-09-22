@@ -98,11 +98,16 @@ class MultiSourceNegativeControlEvidence(_SourceModel):
     injected_fault: str = Field(min_length=1)
     execution_boundary: str = Field(min_length=1)
     expected_rejection: str = Field(min_length=1)
-    actual_rejection: str = Field(min_length=1)
+    observed_rejection: str = Field(min_length=1)
+    assertion_reference: str = Field(min_length=1)
     durable_evidence: tuple[str, ...] = Field(min_length=1)
     implementation_status: str = Field(pattern=r"^(IMPLEMENTED|NOT_IMPLEMENTED)$")
     execution_status: str = Field(pattern=r"^(PASS|BLOCKED|NOT_EXECUTED)$")
     acceptance_status: str = Field(pattern=r"^(PASS|PENDING)$")
+    pytest_node: str = Field(min_length=1)
+    junit_reference: str = Field(min_length=1)
+    pytest_return_code: int
+    execution_commit: str = Field(min_length=1)
 
 
 class MultiSourceAcceptanceReceipt(_SourceModel):
