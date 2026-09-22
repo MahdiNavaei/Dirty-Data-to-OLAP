@@ -284,10 +284,20 @@ jobs:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
         run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra sql --extra files --extra profiling --extra compatibility python -m pytest tests/product_acceptance/test_multi_source_v1.py -q
       - name: Validate Prompt02 evidence and exact-head binding
+        if: always()
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
-        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --require-evidence --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --target "${DDO_PROMPT02_EVIDENCE_DIR}/prompt02.duckdb" --expected-commit "${GITHUB_SHA}"
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --require-evidence --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --expected-commit "${GITHUB_SHA}"
+      - name: Retain sanitized Prompt02 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prompt02-acceptance-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/prompt02-evidence/*.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Verify Prompt02 content worktree
+        if: always()
         run: |
           git diff --check
           test -z "$(git status --porcelain)"

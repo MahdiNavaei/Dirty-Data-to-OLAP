@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -10,6 +11,11 @@ import sys
 
 import duckdb
 import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from dirty_data_to_olap.domain.contracts.multi_source import MultiSourceAcceptanceReceipt
 
 
 def _commit() -> str:
@@ -35,6 +41,11 @@ def main() -> int:
     receipt = json.loads(args.evidence.read_text(encoding="utf-8"))
     oracle = yaml.safe_load(args.oracle.read_text(encoding="utf-8"))
     errors: list[str] = []
+    try:
+        typed_receipt = MultiSourceAcceptanceReceipt.model_validate(receipt)
+    except ValueError as exc:
+        typed_receipt = None
+        errors.append(f"receipt does not satisfy the typed acceptance contract: {exc}")
     if _commit() != args.expected_commit or receipt.get("content_commit") != args.expected_commit:
         errors.append("receipt and validator are not bound to the exact checked-out commit")
     if receipt.get("status") != "PASS":
@@ -43,12 +54,16 @@ def main() -> int:
         errors.append("independent oracle was not loaded after the product run")
     if receipt.get("oracle", {}).get("oracle_id") != oracle.get("oracle_id"):
         errors.append("receipt oracle ID does not match the independent oracle")
+    if not receipt.get("run_id") or not receipt.get("source_set_fingerprint"):
+        errors.append("receipt is missing durable run or source-set identity")
     expected = oracle.get("expected", {})
     source_evidence = {item.get("source_id"): item for item in receipt.get("sources", ())}
     accounting = {item.get("source_id"): item for item in receipt.get("record_accounting", ())}
     expected_source_ids = set(expected.get("source_input_records", {}))
     if set(source_evidence) != expected_source_ids:
         errors.append("receipt source estate does not match the independent oracle")
+    if any(not item.get("snapshot_id") or not item.get("snapshot_fingerprint") or not item.get("schema_fingerprint") or not item.get("source_unchanged_before_after") for item in source_evidence.values()):
+        errors.append("receipt source evidence is not snapshot-bound and immutable")
     for source_id, expected_count in expected.get("source_input_records", {}).items():
         if source_evidence.get(source_id, {}).get("input_records") != expected_count:
             errors.append(f"input accounting mismatch for {source_id}")
@@ -59,6 +74,12 @@ def main() -> int:
     required_stages = {"SOURCE_DISCOVERY", "SOURCE_SNAPSHOT_STAGE", "SCHEMA_MATCHING", "ENTITY_RESOLUTION", "EVIDENCE_FUSION", "CANONICAL_FINALIZATION", "ANALYTICAL_PLANNING", "MATERIALIZATION", "VALIDATION_RECONCILIATION"}
     if not required_stages.issubset(stages):
         errors.append("required Prompt02 stages are missing from the receipt")
+    for item in receipt.get("stages", ()):
+        if item.get("stage_id") in required_stages and (item.get("status") != "SUCCEEDED" or item.get("attempts", 0) < 1 or not item.get("artifact_refs")):
+            errors.append(f"stage evidence is not a durable successful attempt: {item.get('stage_id')}")
+    reviews = receipt.get("reviews", ())
+    if len(reviews) < 4 or any(item.get("decision") != "ACCEPTED" or not item.get("subject_id") or not item.get("actor") for item in reviews):
+        errors.append("required durable review decisions are absent or incomplete")
     analytical = receipt.get("analytical") or {}
     if set(analytical.get("dimensions", ())) != {"dim_customer", "dim_date", "dim_source"}:
         errors.append("fact output does not contain the required three dimensions")
@@ -68,6 +89,15 @@ def main() -> int:
         errors.append("analytical aggregate does not match the independent oracle")
     if any(value != "PASS" for value in (receipt.get("negative_controls") or {}).values()) or len(receipt.get("negative_controls") or {}) != 14:
         errors.append("all fourteen negative controls are not explicitly PASS")
+    control_evidence = receipt.get("negative_control_evidence") or ()
+    expected_controls = {f"NC{i:02d}" for i in range(1, 15)}
+    actual_controls = {item.get("control_id") for item in control_evidence}
+    if actual_controls != expected_controls or len(control_evidence) != 14:
+        errors.append("negative-control evidence does not contain exactly NC01-NC14")
+    if any(item.get("execution_status") != "PASS" or not item.get("injected_fault") or not item.get("execution_boundary") or not item.get("actual_rejection") or not item.get("durable_evidence") for item in control_evidence):
+        errors.append("an unexecuted or structurally incomplete negative control is presented as acceptance evidence")
+    if typed_receipt is None or typed_receipt.status != "PASS":
+        errors.append("typed receipt status is not PASS")
     if not all(item.get("disposition_complete") for item in receipt.get("record_accounting", ())):
         errors.append("record accounting is incomplete")
     target = args.target or (Path.cwd() / Path(receipt.get("materialization", {}).get("duckdb_relative_path", "")))
@@ -83,6 +113,8 @@ def main() -> int:
             quantity_sum = str(connection.execute("SELECT COALESCE(SUM(quantity), 0) FROM fact_order").fetchone()[0])
             if fact_count != expected.get("fact_rows") or quantity_sum != expected.get("quantity_sum"):
                 errors.append("materialized DuckDB aggregates do not match the independent oracle")
+            if receipt.get("materialization", {}).get("target_file_sha256") != hashlib.sha256(target.read_bytes()).hexdigest():
+                errors.append("receipt target hash does not match the verified materialization")
         finally:
             connection.close()
     if "password" in json.dumps(receipt, sort_keys=True).lower() or "token" in json.dumps(receipt, sort_keys=True).lower():

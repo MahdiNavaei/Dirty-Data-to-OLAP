@@ -92,6 +92,17 @@ class MultiSourceIndependentOracleEvidence(_SourceModel):
     matched_dispositions: bool
 
 
+class MultiSourceNegativeControlEvidence(_SourceModel):
+    control_id: str = Field(pattern=r"^NC(?:0[1-9]|1[0-4])$")
+    requirement: str = Field(min_length=1)
+    injected_fault: str = Field(min_length=1)
+    execution_boundary: str = Field(min_length=1)
+    expected_rejection: str = Field(min_length=1)
+    actual_rejection: str = Field(min_length=1)
+    durable_evidence: tuple[str, ...] = Field(min_length=1)
+    execution_status: str = Field(pattern=r"^(PASS|BLOCKED|NOT_EXECUTED)$")
+
+
 class MultiSourceAcceptanceReceipt(_SourceModel):
     receipt_id: str
     run_id: str
@@ -105,10 +116,10 @@ class MultiSourceAcceptanceReceipt(_SourceModel):
     materialization: MultiSourceMaterializationEvidence | None = None
     oracle: MultiSourceIndependentOracleEvidence | None = None
     negative_controls: Mapping[str, str] = Field(default_factory=dict)
+    negative_control_evidence: tuple[MultiSourceNegativeControlEvidence, ...] = ()
     status: str
     blocked_reasons: tuple[str, ...] = ()
 
     @property
     def content_hash(self) -> str:
         return stable_digest(self.model_dump(mode="json"))
-

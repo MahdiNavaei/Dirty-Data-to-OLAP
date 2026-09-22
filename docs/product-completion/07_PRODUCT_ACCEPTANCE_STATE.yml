@@ -30,11 +30,12 @@ prompt02:
     - "tools/validate_prompt02_acceptance.py"
   blockers:
     - "Required four-source live acceptance has not completed successfully in this workspace"
+    - "CI run 35700636572 reached the live estate but failed before product execution at the runtime-owned source registry boundary"
     - "Required CI acceptance job has not produced an exact-commit PASS receipt"
     - "Existing Step29 focused regression remains provider/lease-environment dependent and is not upgraded by this prompt"
-  blocked_at_local: "2026-09-21"
+  blocked_at_local: "2026-09-22"
   oracle_loaded_after_product_run: false
-  ci_acceptance_executed: false
+  ci_acceptance_executed: true
 product_acceptance:
   original_v1_status: "PENDING"
   overall_status: "AUDIT_COMPLETE_ACCEPTANCE_PENDING"
@@ -44,7 +45,7 @@ product_acceptance:
   output_export_status: "PARTIAL_NO_COMPLETE_PRODUCT_EXPORT"
   g6_status: "PASS_BOUNDED_STEP29_SINGLE_SOURCE_ORDER_PATH"
   g7_status: "PASS_BOUNDED_STEP29_LOCAL_PRODUCT_PATH"
-  independent_multi_source_acceptance_executed: false
+  independent_multi_source_acceptance_executed: true
   independent_generic_acceptance_executed: false
   complete_review_action_matrix_executed: false
   safe_export_acceptance_executed: false
@@ -61,8 +62,8 @@ future_prompts:
   prompt05: "NOT_STARTED"
   prompt06: "NOT_STARTED"
 evidence_boundary:
-  exact_ci_run: "35520372671"
-  evidence_note: "Terminal specialist CI PASS is not original V1 product acceptance"
+  exact_ci_run: "35700636572"
+  evidence_note: "Prompt02 CI executed against the disposable estate but failed before product execution; no PASS receipt exists"
   audit_time_local_step29_test: "1 failed, 2 passed"
   audit_time_local_step29_failure: "Worker heartbeat lease fence conflict after provider-enabled rerun; not repaired in Prompt01"
   oracle_separate_from_runtime: "REQUIRED_NOT_YET_EXECUTED"
@@ -71,7 +72,7 @@ evidence_boundary:
   calibrated_probability_support: "NOT_CLAIMED"
   physical_external_deployment: "NOT_CLAIMED"
 guards:
-  blocked: false
+  blocked: true
   tests_quality_unit_artifacts: "PRESERVE_UNREAD_UNTOUCHED_UNSTAGED_UNCOMMITTED"
   user_owned_rar: "PRESERVE_UNSTAGED_UNCOMMITTED"
   step42: "DO_NOT_BEGIN"

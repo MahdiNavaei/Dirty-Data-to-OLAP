@@ -55,3 +55,27 @@ and Step42 remain `NOT_STARTED`.
 The protected `tests/quality_unit_artifacts/` directory and the user-owned RAR
 remain unmodified, unstaged and uncommitted. No reset, clean, amend, rebase,
 force push, or history rewrite was used.
+
+## R3 live observation and R4 correction
+
+The historical pre-CI statements above are preserved. The subsequent recovery
+branch state was:
+
+- Branch: `codex/prompt02-r3-recovery`
+- R3 HEAD and CI content SHA: `9e51a15333106b70325e90cbcd093ce9fcfff17c`
+- Draft PR: `#1`
+- CI run `35700636572`: completed `failure`; G8, image scan, Step31, Step32,
+  Step33, Step34, Step35, Step36 and Step37 completed successfully, while
+  Secret Scan and Prompt02 acceptance failed.
+- Gitleaks reported four `generic-api-key` matches in the R3 commit: one
+  disposable idempotency fixture and three logical warehouse key mappings.
+  The values were not credentials; no secret value is reproduced here.
+- Prompt02 acceptance reached the real CI estate but failed before product
+  execution because the harness accessed nonexistent `runtime.registry`
+  instead of the runtime-owned source service registry.
+
+R4 adds a commit/path/rule-scoped Gitleaks exception for those historical
+logical identifiers, corrects the runtime-owned registry access, writes
+sanitized failure/acceptance evidence, retains JSON evidence in CI, and makes
+the independent validator reject missing or unexecuted NC01-NC14 controls.
+Prompt02 remains `BLOCKED` until all fourteen controls execute honestly.

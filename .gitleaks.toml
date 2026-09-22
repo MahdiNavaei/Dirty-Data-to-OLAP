@@ -1,0 +1,17 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Prompt02 logical identifiers incorrectly classified as generic API keys"
+commits = ["9e51a15333106b70325e90cbcd093ce9fcfff17c"]
+paths = [
+  '''^tests/product_acceptance/test_multi_source_v1\.py$''',
+  '''^src/dirty_data_to_olap/application/multi_source_runtime\.py$''',
+]
+rules = ["generic-api-key"]
+regexes = [
+  '''idempotency_key="prompt02-submit"''',
+  '''customer_key", "customer_id"''',
+  '''source_key", "source_id"''',
+  '''date_key", "date_key"''',
+]
