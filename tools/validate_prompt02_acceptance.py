@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 import duckdb
 import yaml
@@ -28,17 +29,19 @@ def main() -> int:
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--oracle", type=Path)
     parser.add_argument("--expected-commit")
+    parser.add_argument("--negative-control-evidence", type=Path)
     parser.add_argument("--target", type=Path)
     parser.add_argument("--require-evidence", action="store_true", help="fail when a completed acceptance receipt is not supplied")
     args = parser.parse_args()
-    supplied = (args.evidence, args.oracle, args.expected_commit)
+    supplied = (args.evidence, args.oracle, args.expected_commit, args.negative_control_evidence)
     if not all(supplied):
         if args.require_evidence:
-            parser.error("--evidence, --oracle, and --expected-commit are required with --require-evidence")
+            parser.error("--evidence, --negative-control-evidence, --oracle, and --expected-commit are required with --require-evidence")
         print("PROMPT02_ACCEPTANCE=NOT_RUN")
         print("reason=no completed Prompt02 receipt supplied")
         return 0
     receipt = json.loads(args.evidence.read_text(encoding="utf-8"))
+    negative_execution = json.loads(args.negative_control_evidence.read_text(encoding="utf-8"))
     oracle = yaml.safe_load(args.oracle.read_text(encoding="utf-8"))
     errors: list[str] = []
     try:
@@ -94,8 +97,33 @@ def main() -> int:
     actual_controls = {item.get("control_id") for item in control_evidence}
     if actual_controls != expected_controls or len(control_evidence) != 14:
         errors.append("negative-control evidence does not contain exactly NC01-NC14")
-    if any(item.get("execution_status") != "PASS" or not item.get("injected_fault") or not item.get("execution_boundary") or not item.get("actual_rejection") or not item.get("durable_evidence") for item in control_evidence):
+    if any(item.get("implementation_status") != "IMPLEMENTED" or item.get("execution_status") != "PASS" or item.get("acceptance_status") != "PASS" or not item.get("injected_fault") or not item.get("execution_boundary") or not item.get("actual_rejection") or not item.get("durable_evidence") for item in control_evidence):
         errors.append("an unexecuted or structurally incomplete negative control is presented as acceptance evidence")
+    executed_controls = negative_execution.get("controls", ())
+    executed_by_id = {item.get("control_id"): item for item in executed_controls}
+    if set(executed_by_id) != expected_controls or len(executed_controls) != 14:
+        errors.append("negative-control execution result does not contain exactly NC01-NC14")
+    for item in control_evidence:
+        executed = executed_by_id.get(item.get("control_id"), {})
+        if any(executed.get(field) != item.get(field) for field in ("requirement", "injected_fault", "execution_boundary", "expected_rejection", "actual_rejection", "implementation_status", "execution_status", "acceptance_status")):
+            errors.append(f"negative-control receipt row is not identical to executed evidence: {item.get('control_id')}")
+            continue
+        if executed.get("pytest_return_code") != 0 or not executed.get("test_node"):
+            errors.append(f"negative-control test did not pass: {item.get('control_id')}")
+            continue
+        junit_refs = [ref.removeprefix("junit:") for ref in executed.get("durable_evidence", ()) if isinstance(ref, str) and ref.startswith("junit:")]
+        if len(junit_refs) != 1:
+            errors.append(f"negative-control evidence is missing its JUnit result: {item.get('control_id')}")
+            continue
+        junit_path = args.negative_control_evidence.parent / junit_refs[0]
+        try:
+            root = ET.parse(junit_path).getroot()
+            suites = (root,) if root.tag == "testsuite" else tuple(root.findall("testsuite"))
+            passed = bool(suites) and all(int(suite.attrib.get("tests", "0")) == 1 and int(suite.attrib.get("failures", "0")) == 0 and int(suite.attrib.get("errors", "0")) == 0 and int(suite.attrib.get("skipped", "0")) == 0 for suite in suites)
+        except (ET.ParseError, OSError, ValueError):
+            passed = False
+        if not passed:
+            errors.append(f"negative-control JUnit result is not a single passing test: {item.get('control_id')}")
     if typed_receipt is None or typed_receipt.status != "PASS":
         errors.append("typed receipt status is not PASS")
     if not all(item.get("disposition_complete") for item in receipt.get("record_accounting", ())):

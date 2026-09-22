@@ -279,6 +279,10 @@ jobs:
             altair==6.2.2 igraph==1.0.0 networkx==3.4.2 chardet==7.6.0 rapidfuzz==3.14.5 \
             joblib==1.6.0 regex==2026.9.10 tqdm==4.70.1 \
             scipy==1.15.3 python-dateutil==2.9.0.post0 duckdb==1.5.5 jinja2==3.1.6 sqlglot==30.18.0
+      - name: Execute isolated Prompt02 negative controls
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra sql --extra files --extra profiling --extra compatibility python tools/run_prompt02_negative_controls.py
       - name: Execute real Prompt02 four-source acceptance
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
@@ -287,13 +291,13 @@ jobs:
         if: always()
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
-        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --require-evidence --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --expected-commit "${GITHUB_SHA}"
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --require-evidence --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --negative-control-evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_NEGATIVE_CONTROLS.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --expected-commit "${GITHUB_SHA}"
       - name: Retain sanitized Prompt02 evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: prompt02-acceptance-evidence-${{ github.run_id }}
-          path: ${{ runner.temp }}/prompt02-evidence/*.json
+          path: ${{ runner.temp }}/prompt02-evidence/*
           if-no-files-found: ignore
           retention-days: 14
       - name: Verify Prompt02 content worktree

@@ -1,17 +1,20 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
+[[rules]]
+id = "generic-api-key"
 description = "Prompt02 logical identifiers incorrectly classified as generic API keys"
-commits = ["9e51a15333106b70325e90cbcd093ce9fcfff17c"]
-paths = [
-  '''^tests/product_acceptance/test_multi_source_v1\.py$''',
-  '''^src/dirty_data_to_olap/application/multi_source_runtime\.py$''',
-]
-rules = ["generic-api-key"]
-regexes = [
-  '''idempotency_key="prompt02-submit"''',
-  '''customer_key", "customer_id"''',
-  '''source_key", "source_id"''',
-  '''date_key", "date_key"''',
-]
+
+  [[rules.allowlists]]
+  description = "Only the four redacted historical false positives from Prompt02-R3"
+  condition = "AND"
+  commits = ["9e51a15333106b70325e90cbcd093ce9fcfff17c"]
+  paths = [
+    '''^tests/product_acceptance/test_multi_source_v1\.py$''',
+    '''^src/dirty_data_to_olap/application/multi_source_runtime\.py$''',
+  ]
+  regexTarget = "line"
+  regexes = [
+    '''idempotency_key="prompt02-submit"''',
+    '''(?:customer|source|date)_key''',
+  ]

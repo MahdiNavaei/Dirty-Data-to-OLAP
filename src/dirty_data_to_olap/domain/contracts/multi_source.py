@@ -100,7 +100,9 @@ class MultiSourceNegativeControlEvidence(_SourceModel):
     expected_rejection: str = Field(min_length=1)
     actual_rejection: str = Field(min_length=1)
     durable_evidence: tuple[str, ...] = Field(min_length=1)
+    implementation_status: str = Field(pattern=r"^(IMPLEMENTED|NOT_IMPLEMENTED)$")
     execution_status: str = Field(pattern=r"^(PASS|BLOCKED|NOT_EXECUTED)$")
+    acceptance_status: str = Field(pattern=r"^(PASS|PENDING)$")
 
 
 class MultiSourceAcceptanceReceipt(_SourceModel):

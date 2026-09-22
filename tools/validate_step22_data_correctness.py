@@ -286,6 +286,18 @@ def run_accounting_negative_controls(
     )
     controls = [
         (
+            "missing_source_disposition",
+            context.inputs.accounting.model_copy(update={
+                "scopes": (
+                    context.inputs.accounting.scopes[0].model_copy(update={
+                        "entries": tuple(item for item in context.inputs.accounting.scopes[0].entries if item.input_record_ref != source_ref),
+                    }),
+                    *context.inputs.accounting.scopes[1:],
+                ),
+            }),
+            "source_record_accounting",
+        ),
+        (
             "wrong_source_disposition",
             replace_accounting_entry(
                 context.inputs.accounting,
