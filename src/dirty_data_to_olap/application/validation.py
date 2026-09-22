@@ -318,14 +318,28 @@ class ValidationService:
         all_source_refs = truth.record_refs
         source_snapshots = {item.snapshot_id for item in truth.records}
         source_schema = truth.source_schema_fingerprints
+        expected_source_snapshots = (
+            {truth.source_snapshot_id}
+            if not truth.source_snapshot_ids
+            else {truth.source_snapshot_ids[item.source_id] for item in truth.records}
+        )
+        snapshot_map_errors = (
+            []
+            if not truth.source_snapshot_ids
+            else [
+                item.record_ref
+                for item in truth.records
+                if truth.source_snapshot_ids.get(item.source_id) != item.snapshot_id
+            ]
+        )
         add_check(
             "source_snapshot_universe",
             "source snapshot universe and hash",
-            ValidationStatus.PASS if source_snapshots == {truth.source_snapshot_id} and source_schema else ValidationStatus.FAIL,
+            ValidationStatus.PASS if source_snapshots == expected_source_snapshots and source_schema and not snapshot_map_errors else ValidationStatus.FAIL,
             ValidationScope.SOURCE_SNAPSHOT,
-            "independent source truth declares one pinned snapshot and a complete source schema fingerprint map",
-            expected={"snapshot_id": truth.source_snapshot_id, "record_count": len(all_source_refs)},
-            observed={"snapshot_ids": sorted(source_snapshots), "record_count": len(all_source_refs), "snapshot_hash": truth.source_snapshot_fingerprint},
+            "independent source truth declares the pinned snapshot universe and complete source schema fingerprint map",
+            expected={"snapshot_id": truth.source_snapshot_id, "source_snapshot_ids": dict(sorted(truth.source_snapshot_ids.items())), "record_count": len(all_source_refs)},
+            observed={"snapshot_ids": sorted(source_snapshots), "record_count": len(all_source_refs), "snapshot_map_errors": snapshot_map_errors, "snapshot_hash": truth.source_snapshot_fingerprint},
         )
 
         def accounting_scope(boundary: str):
