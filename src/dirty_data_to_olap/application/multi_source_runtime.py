@@ -57,6 +57,20 @@ _SOURCE_KEY = "source_key"
 _DATE_KEY = "date_key"
 
 
+def _artifact_source_key(value: Any, artifact_id: str) -> str:
+    """Return the durable source identity carried by a typed artifact."""
+
+    for candidate in (
+        getattr(value, "source_id", None),
+        getattr(getattr(value, "snapshot", None), "source_id", None),
+        getattr(getattr(value, "profile_request", None), "source_id", None),
+        getattr(getattr(value, "request", None), "source_id", None),
+    ):
+        if candidate:
+            return str(candidate)
+    return artifact_id
+
+
 class MultiSourceStageHandlers(LocalProductStageHandlers):
     """Registered Prompt02 handlers sharing the accepted product platform."""
 
@@ -119,7 +133,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
             try:
                 actual, payload = self._read(request.run_id, ref.artifact_id, kind)
                 value = model.model_validate(payload)
-                key = getattr(value, "source_id", None) or getattr(getattr(value, "snapshot", None), "source_id", None) or actual.artifact_id
+                key = _artifact_source_key(value, actual.artifact_id)
                 values[str(key)] = (actual, value)
             except (ValueError, TypeError):
                 continue
