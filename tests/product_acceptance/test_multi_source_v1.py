@@ -32,7 +32,7 @@ from sqlalchemy.pool import NullPool
 
 from dirty_data_to_olap.adapters.sources.files import FileSourceAdapter
 from dirty_data_to_olap.adapters.sources.sql.dlt_sql import DltSqlSourceAdapter, RuntimeSqlCredentials
-from dirty_data_to_olap.application.backend import Principal
+from dirty_data_to_olap.application.backend import BackendError, Principal
 from dirty_data_to_olap.application.product_sources import ProductSourceService
 from dirty_data_to_olap.application.product_runtime import build_multi_source_product
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewDecisionStatus
@@ -298,32 +298,117 @@ def _durable_exception_type(job) -> str | None:
     return _safe_diagnostic_code(metadata.get("error_type"))
 
 
+_BACKEND_PAGE_SIZE = 100
+_MAX_BACKEND_PAGES = 100
+
+
+def _collect_backend_pages(*, label: str, fetch_page, item_key) -> tuple[Any, ...]:
+    """Collect every bounded public-API page, rejecting ambiguous pagination."""
+
+    items: list[Any] = []
+    seen_offsets: set[int] = set()
+    seen_item_ids: set[str] = set()
+    offset = 0
+    for _ in range(_MAX_BACKEND_PAGES):
+        if offset in seen_offsets:
+            raise AssertionError(f"{label} pagination repeated offset {offset}")
+        seen_offsets.add(offset)
+        page = fetch_page(page_size=_BACKEND_PAGE_SIZE, offset=offset)
+        for item in page.items:
+            identity = item_key(item)
+            if not isinstance(identity, str) or not identity:
+                raise AssertionError(f"{label} pagination returned a record without a stable identity")
+            if identity in seen_item_ids:
+                raise AssertionError(f"{label} pagination returned duplicate record identity {identity}")
+            seen_item_ids.add(identity)
+            items.append(item)
+        next_offset = page.next_offset
+        if next_offset is None:
+            return tuple(items)
+        if len(page.items) != _BACKEND_PAGE_SIZE:
+            raise AssertionError(f"{label} pagination reported another page after an incomplete page")
+        if not isinstance(next_offset, int) or next_offset <= offset:
+            raise AssertionError(f"{label} pagination did not advance from offset {offset}")
+        if next_offset != offset + _BACKEND_PAGE_SIZE:
+            raise AssertionError(f"{label} pagination returned a non-contiguous next offset {next_offset}")
+        if next_offset in seen_offsets:
+            raise AssertionError(f"{label} pagination repeated next offset {next_offset}")
+        offset = next_offset
+    raise AssertionError(f"{label} pagination exceeded {_MAX_BACKEND_PAGES} pages")
+
+
+def _all_attempts(*, backend, run_id: str, principal, status: str | None = None) -> tuple[Any, ...]:
+    return _collect_backend_pages(
+        label="attempts",
+        fetch_page=lambda **page: backend.list_attempts(
+            run_id=run_id,
+            stage_id=None,
+            status=status,
+            principal=principal,
+            **page,
+        ),
+        item_key=lambda item: item.attempt_id,
+    )
+
+
+def _all_jobs(*, backend, run_id: str, principal, status: str | None = None) -> tuple[Any, ...]:
+    return _collect_backend_pages(
+        label="jobs",
+        fetch_page=lambda **page: backend.list_jobs(
+            run_id=run_id,
+            status=status,
+            principal=principal,
+            **page,
+        ),
+        item_key=lambda item: item.job_id,
+    )
+
+
+def _all_reviews(*, backend, run_id: str, principal) -> tuple[Any, ...]:
+    return _collect_backend_pages(
+        label="reviews",
+        fetch_page=lambda **page: backend.list_reviews(
+            run_id=run_id,
+            subject_key=None,
+            principal=principal,
+            **page,
+        ),
+        item_key=lambda item: getattr(item, "history_id", None) or f"{item.subject_key}:{item.revision}",
+    )
+
+
 def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal) -> dict[str, Any]:
     """Read safe durable projections only; never read source artifacts or queue payloads."""
 
-    summary = backend.product_summary(run_id=run_id, principal=principal)
-    attempts = backend.list_attempts(
-        run_id=run_id,
-        stage_id=None,
-        status=None,
-        page_size=500,
-        offset=0,
-        principal=principal,
-    ).items
-    jobs = backend.list_jobs(
-        run_id=run_id,
-        status=None,
-        page_size=500,
-        offset=0,
-        principal=principal,
-    ).items
-    reviews = backend.list_reviews(
-        run_id=run_id,
-        subject_key=None,
-        page_size=500,
-        offset=0,
-        principal=principal,
-    ).items
+    diagnostic_errors: list[str] = []
+
+    def collect(label: str, callback, fallback):
+        try:
+            return callback()
+        except Exception as diagnostic_error:
+            diagnostic_errors.append(f"{label}: {_safe_failure_detail(diagnostic_error)}")
+            return fallback
+
+    summary = collect(
+        "product_summary",
+        lambda: backend.product_summary(run_id=run_id, principal=principal),
+        None,
+    )
+    attempts = collect(
+        "attempts",
+        lambda: _all_attempts(backend=backend, run_id=run_id, principal=principal),
+        (),
+    )
+    jobs = collect(
+        "jobs",
+        lambda: _all_jobs(backend=backend, run_id=run_id, principal=principal),
+        (),
+    )
+    reviews = collect(
+        "reviews",
+        lambda: _all_reviews(backend=backend, run_id=run_id, principal=principal),
+        (),
+    )
 
     stage_views = tuple(
         {
@@ -335,7 +420,7 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
             "artifact_ids": _safe_diagnostic_ids(stage.artifact_ids),
         }
         for stage in summary.stages
-    )
+    ) if summary is not None else ()
     attempt_views = tuple(
         {
             "attempt_id": _safe_diagnostic_id(attempt.attempt_id),
@@ -373,7 +458,7 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
             "persisted": True,
         }
         for item in reviews
-    ) + tuple(
+    ) + (() if summary is None else tuple(
         {
             "checkpoint": _safe_diagnostic_id(item.checkpoint),
             "state": _projection_value(item.state),
@@ -382,17 +467,21 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
             "persisted": False,
         }
         for item in summary.pending_reviews
-    )
+    ))
 
-    artifact_views = ()
+    artifact_views = None
     if control_store is not None:
-        artifact_views = tuple(
-            {
-                "artifact_id": _safe_diagnostic_id(artifact.artifact_id),
-                "artifact_kind": _safe_diagnostic_id(artifact.artifact_kind),
-                "stage_id": _safe_diagnostic_id(artifact.stage_id),
-            }
-            for artifact in control_store.list_artifacts(run_id=run_id, limit=10000)
+        artifact_views = collect(
+            "artifacts",
+            lambda: tuple(
+                {
+                    "artifact_id": _safe_diagnostic_id(artifact.artifact_id),
+                    "artifact_kind": _safe_diagnostic_id(artifact.artifact_kind),
+                    "stage_id": _safe_diagnostic_id(artifact.stage_id),
+                }
+                for artifact in control_store.list_artifacts(run_id=run_id, limit=10000)
+            ),
+            None,
         )
 
     failed_statuses = {"FAILED", "BLOCKED", "CANCELLED"}
@@ -407,6 +496,16 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
         if item["stage_id"] is not None
         and (item["status"] in failed_statuses or item["failure_code"] is not None)
     )
+    successful_stage_ids = {
+        item["stage_id"]
+        for item in stage_views
+        if item["stage_id"] is not None and item["status"] == "SUCCEEDED"
+    }
+    successful_stage_ids.update(
+        item["stage_id"]
+        for item in attempt_views
+        if item["stage_id"] is not None and item["status"] == "SUCCEEDED"
+    )
     stage_ids = sorted({item["stage_id"] for item in attempt_views if item["stage_id"] is not None})
     attempt_counts = tuple(
         {
@@ -420,25 +519,25 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
     )
     snapshot_artifacts = tuple(
         item["artifact_id"]
-        for item in artifact_views
+        for item in artifact_views or ()
         if item["artifact_kind"] == "SourceSnapshotResult" and item["artifact_id"] is not None
     )
     materialization_reached = (
-        _projection_value(summary.materialization.status) != "NOT_EVALUATED"
+        None
+        if summary is None and not attempts
+        else (summary is not None and _projection_value(summary.materialization.status) != "NOT_EVALUATED")
         or any(item["stage_id"] == "MATERIALIZATION" for item in attempt_views)
     )
     g6_reached = (
-        _projection_value(summary.validation.g6_status) != "PENDING"
+        None
+        if summary is None and not attempts
+        else (summary is not None and _projection_value(summary.validation.g6_status) != "PENDING")
         or any(item["stage_id"] == "VALIDATION_RECONCILIATION" for item in attempt_views)
     )
     return {
-        "terminal_run_status": _projection_value(summary.status),
+        "terminal_run_status": None if summary is None else _projection_value(summary.status),
         "failed_stage_ids": tuple(sorted(failed_stage_ids)),
-        "successful_stage_ids": tuple(
-            item["stage_id"]
-            for item in stage_views
-            if item["stage_id"] is not None and item["status"] == "SUCCEEDED"
-        ),
+        "successful_stage_ids": tuple(sorted(successful_stage_ids)),
         "stages": stage_views,
         "failed_attempts": tuple(
             item
@@ -454,9 +553,10 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
         "review_checkpoints": review_views,
         "artifacts": artifact_views,
         "source_snapshot_artifact_count": len(snapshot_artifacts),
-        "all_four_selected_source_snapshots_produced": len(snapshot_artifacts) == 4,
+        "all_four_selected_source_snapshots_produced": None if artifact_views is None else len(snapshot_artifacts) == 4,
         "materialization_reached": materialization_reached,
         "g6_reached": g6_reached,
+        "diagnostic_collection_errors": tuple(diagnostic_errors),
     }
 
 
@@ -471,6 +571,7 @@ def _write_failure_evidence(*, run_id: str | None, error: BaseException, backend
                 run_id=run_id,
                 principal=principal,
             )
+            diagnostic_errors.extend(runtime_snapshot["diagnostic_collection_errors"])
         except Exception as diagnostic_error:
             diagnostic_errors.append(_safe_failure_detail(diagnostic_error))
     payload = {
@@ -503,7 +604,7 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
         materialization=SimpleNamespace(status="NOT_EVALUATED"),
         validation=SimpleNamespace(g6_status="PENDING"),
     )
-    attempt = SimpleNamespace(
+    failed_attempt = SimpleNamespace(
         attempt_id="attempt-dependency-1",
         stage_id="DEPENDENCY_DISCOVERY",
         attempt_number=1,
@@ -513,7 +614,7 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
         input_artifact_refs=("artifact-catalog",),
         output_artifact_refs=(),
     )
-    job = SimpleNamespace(
+    failed_job = SimpleNamespace(
         job_id="job-dependency-1",
         stage_id="DEPENDENCY_DISCOVERY",
         attempt_id="attempt-dependency-1",
@@ -524,27 +625,81 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
         result_refs=(),
         durable_result={"metadata": {"error_type": "ConnectionError"}},
     )
-    review = SimpleNamespace(
-        decision=SimpleNamespace(
-            review_checkpoint_id="REVIEW_EVIDENCE_DECISIONS",
-            decision="ACCEPTED",
-            subject_artifact_id="artifact-review",
-        ),
-        revision=1,
+    attempts = tuple(
+        SimpleNamespace(
+            attempt_id=f"attempt-source-{index}",
+            stage_id="SOURCE_DISCOVERY",
+            attempt_number=index + 1,
+            status="SUCCEEDED",
+            failure_code=None,
+            failure_reason=None,
+            input_artifact_refs=(),
+            output_artifact_refs=(f"artifact-source-{index}",),
+        )
+        for index in range(100)
+    ) + (failed_attempt,)
+    jobs = tuple(
+        SimpleNamespace(
+            job_id=f"job-source-{index}",
+            stage_id="SOURCE_DISCOVERY",
+            attempt_id=f"attempt-source-{index}",
+            job_kind="STAGE",
+            status="SUCCEEDED",
+            failure_code=None,
+            failure_classification=None,
+            failure_reason=None,
+            result_refs=(f"artifact-source-{index}",),
+            durable_result=None,
+        )
+        for index in range(100)
+    ) + (failed_job,)
+    reviews = tuple(
+        SimpleNamespace(
+            history_id=f"review-{index}",
+            subject_key=f"review-subject-{index}",
+            decision=SimpleNamespace(
+                review_checkpoint_id="REVIEW_EVIDENCE_DECISIONS",
+                decision="ACCEPTED",
+                subject_artifact_id=f"artifact-review-{index}",
+            ),
+            revision=1,
+        )
+        for index in range(101)
     )
 
     class Backend:
+        def __init__(self) -> None:
+            self.page_requests = {"attempts": [], "jobs": [], "reviews": []}
+            self.fail_jobs = False
+
+        @staticmethod
+        def _page(items, *, page_size: int, offset: int):
+            if page_size < 1 or page_size > 100 or offset < 0:
+                raise BackendError(
+                    "INVALID_PAGE",
+                    "page_size exceeds the bounded API limit or offset is invalid",
+                    status=400,
+                )
+            page_items = tuple(items[offset:offset + page_size])
+            next_offset = offset + page_size if offset + page_size < len(items) else None
+            return SimpleNamespace(items=page_items, next_offset=next_offset)
+
         def product_summary(self, **_kwargs):
             return summary
 
-        def list_attempts(self, **_kwargs):
-            return SimpleNamespace(items=(attempt,))
+        def list_attempts(self, *, page_size: int, offset: int, **_kwargs):
+            self.page_requests["attempts"].append((page_size, offset))
+            return self._page(attempts, page_size=page_size, offset=offset)
 
-        def list_jobs(self, **_kwargs):
-            return SimpleNamespace(items=(job,))
+        def list_jobs(self, *, page_size: int, offset: int, **_kwargs):
+            self.page_requests["jobs"].append((page_size, offset))
+            if self.fail_jobs:
+                raise BackendError("JOBS_UNAVAILABLE", "durable job lookup failed", status=503)
+            return self._page(jobs, page_size=page_size, offset=offset)
 
-        def list_reviews(self, **_kwargs):
-            return SimpleNamespace(items=(review,))
+        def list_reviews(self, *, page_size: int, offset: int, **_kwargs):
+            self.page_requests["reviews"].append((page_size, offset))
+            return self._page(reviews, page_size=page_size, offset=offset)
 
     class ControlStore:
         def list_artifacts(self, **_kwargs):
@@ -557,10 +712,11 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
                 for index in range(1, 5)
             )
 
+    backend = Backend()
     _write_failure_evidence(
         run_id="run-failed",
         error=RuntimeError("runtime failure postgresql://user:password@host/example password=unsafe"),
-        backend=Backend(),
+        backend=backend,
         control_store=ControlStore(),
         principal=object(),
     )
@@ -575,10 +731,47 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
     assert snapshot["failed_attempts"][0]["attempt_id"] == "attempt-dependency-1"
     assert snapshot["failed_jobs"][0]["job_id"] == "job-dependency-1"
     assert snapshot["failed_jobs"][0]["exception_type"] == "ConnectionError"
+    assert len(snapshot["stage_attempt_counts"]) == 2
+    assert len(snapshot["review_checkpoints"]) == 102
     assert snapshot["successful_stage_ids"] == ["SOURCE_DISCOVERY"]
     assert snapshot["all_four_selected_source_snapshots_produced"] is True
     assert snapshot["materialization_reached"] is False and snapshot["g6_reached"] is False
+    assert snapshot["diagnostic_collection_errors"] == []
+    assert backend.page_requests == {
+        "attempts": [(100, 0), (100, 100)],
+        "jobs": [(100, 0), (100, 100)],
+        "reviews": [(100, 0), (100, 100)],
+    }
     assert "postgresql://" not in serialized and "password=unsafe" not in serialized and "token=unsafe" not in serialized
+
+    backend.fail_jobs = True
+    _write_failure_evidence(
+        run_id="run-failed",
+        error=RuntimeError("runtime failure"),
+        backend=backend,
+        control_store=ControlStore(),
+        principal=object(),
+    )
+    partial_payload = json.loads((tmp_path / "PROMPT02_FAILURE.json").read_text(encoding="utf-8"))
+    partial_snapshot = partial_payload["runtime_snapshot"]
+    assert partial_payload["status"] == "BLOCKED"
+    assert partial_snapshot["failed_attempts"][0]["attempt_id"] == "attempt-dependency-1"
+    assert partial_snapshot["failed_jobs"] == []
+    assert len(partial_snapshot["review_checkpoints"]) == 102
+    assert any(error.startswith("jobs: BackendError:") for error in partial_payload["diagnostic_collection_errors"])
+
+
+def test_backend_page_collection_rejects_nonadvancing_offsets() -> None:
+    page = SimpleNamespace(
+        items=tuple(SimpleNamespace(attempt_id=f"attempt-{index}") for index in range(100)),
+        next_offset=0,
+    )
+    with pytest.raises(AssertionError, match="did not advance"):
+        _collect_backend_pages(
+            label="attempts",
+            fetch_page=lambda **_page: page,
+            item_key=lambda item: item.attempt_id,
+        )
 
 
 def _latest_artifact(platform, *, run_id: str, artifact_kind: str, model):
@@ -670,7 +863,16 @@ def _build_receipt(*, platform, backend, run, binding, records, final_summary, r
             "staged_records": snapshot.metrics.staged_records,
             "source_unchanged_before_after": snapshot.snapshot.consistency.value != "BEST_EFFORT",
         })
-    attempts = backend.list_attempts(run_id=run.run_id, stage_id=None, status=None, page_size=500, offset=0, principal=Principal(subject="prompt02-acceptance", source="LOCAL_TEST_AUTH", scopes=frozenset({"runs:read"}))).items
+    read_principal = Principal(
+        subject="prompt02-acceptance",
+        source="LOCAL_TEST_AUTH",
+        scopes=frozenset({"runs:read"}),
+    )
+    attempts = _all_attempts(
+        backend=backend,
+        run_id=run.run_id,
+        principal=read_principal,
+    )
     stages = []
     for stage in final_summary.stages:
         stage_attempts = [item for item in attempts if item.stage_id == stage.stage_id]
@@ -682,7 +884,11 @@ def _build_receipt(*, platform, backend, run, binding, records, final_summary, r
             "artifact_refs": tuple(sorted({ref for item in stage_attempts for ref in item.output_artifact_refs})),
             "detail": "durable stage-attempt projection",
         })
-    reviews = backend.list_reviews(run_id=run.run_id, subject_key=None, page_size=500, offset=0, principal=Principal(subject="prompt02-acceptance", source="LOCAL_TEST_AUTH", scopes=frozenset({"runs:read"}))).items
+    reviews = _all_reviews(
+        backend=backend,
+        run_id=run.run_id,
+        principal=read_principal,
+    )
     review_evidence = [{
         "checkpoint": item.decision.review_checkpoint_id.value,
         "subject_id": item.decision.subject_semantic_id,
@@ -827,12 +1033,26 @@ def test_multi_source_v1_real_pipeline_and_independent_oracle(tmp_path: Path) ->
         _assert_submission_lifecycle(first_submission, backend.product_summary(run_id=run.run_id, principal=principal))
         final_summary, reviewed = _drive_runtime(backend, run.run_id, principal)
         assert final_summary.status == "SUCCEEDED", final_summary
-        attempts = backend.list_attempts(run_id=run.run_id, stage_id=None, status="SUCCEEDED", page_size=500, offset=0, principal=principal).items
-        jobs = backend.list_jobs(run_id=run.run_id, status="SUCCEEDED", page_size=500, offset=0, principal=principal).items
+        attempts = _all_attempts(
+            backend=backend,
+            run_id=run.run_id,
+            principal=principal,
+            status="SUCCEEDED",
+        )
+        jobs = _all_jobs(
+            backend=backend,
+            run_id=run.run_id,
+            principal=principal,
+            status="SUCCEEDED",
+        )
         assert {item.stage_id for item in attempts} >= {"SOURCE_DISCOVERY", "SOURCE_SNAPSHOT_STAGE", "PROFILING", "DEPENDENCY_DISCOVERY", "SCHEMA_MATCHING", "QUALITY_ANALYSIS", "EVIDENCE_FUSION", "CANONICAL_HYPOTHESES", "ENTITY_RESOLUTION", "CANONICAL_IDENTITY_PREPARATION", "CANONICAL_FINALIZATION", "ANALYTICAL_PLANNING", "COMPILATION", "MATERIALIZATION", "SEMANTIC_MODELING", "VALIDATION_RECONCILIATION"}
         assert len(jobs) >= len(attempts)
         assert len(reviewed) >= 4
-        reviews = backend.list_reviews(run_id=run.run_id, subject_key=None, page_size=500, offset=0, principal=principal).items
+        reviews = _all_reviews(
+            backend=backend,
+            run_id=run.run_id,
+            principal=principal,
+        )
         assert reviews and all(item.decision.decision is ReviewDecisionStatus.ACCEPTED for item in reviews)
         validation = final_summary.validation
         assert validation.g6_status == "PASS" and validation.g6_eligible
@@ -854,7 +1074,11 @@ def test_multi_source_v1_real_pipeline_and_independent_oracle(tmp_path: Path) ->
         assert final_summary.analytical.measure_ids == ("measure_quantity",)
         quality_refs = platform.control_store.list_artifacts(run_id=run.run_id, artifact_kind="QualityResult", limit=100)
         quality_results = tuple(QualityResult.model_validate(json.loads(platform.artifact_store.read(ref))) for ref in quality_refs)
-        observed_quality = {(item.source_id, issue.issue_type) for result in quality_results for issue in result.issues}
+        observed_quality = {
+            (result.source_id, issue.issue_type)
+            for result in quality_results
+            for issue in result.issues
+        }
         assert ("prompt02-erp-mysql", "UNIQUE_VALUES_VIOLATION") in observed_quality
         assert ("prompt02-legacy-csv", "REQUIRED_VALUE_MISSING") in observed_quality
         schema_refs = platform.control_store.list_artifacts(run_id=run.run_id, artifact_kind="SchemaMatchResult", limit=10)
