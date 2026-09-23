@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import time
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -247,22 +248,337 @@ def _evidence_dir() -> Path:
     return path
 
 
-def _safe_failure_detail(error: BaseException) -> str:
-    detail = str(error)
+def _safe_diagnostic_text(value: object | None) -> str | None:
+    if value is None:
+        return None
+    detail = str(value)
     detail = re.sub(r"(?i)(?:[a-z][a-z0-9+.-]*)://[^\s]+", "<redacted-connection>", detail)
     detail = re.sub(r"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+", r"\1=<redacted>", detail)
-    return f"{type(error).__name__}: {detail}"[:1000]
+    return detail[:1000] or None
 
 
-def _write_failure_evidence(*, run_id: str | None, error: BaseException) -> None:
+def _safe_failure_detail(error: BaseException) -> str:
+    return f"{type(error).__name__}: {_safe_diagnostic_text(error) or '<empty>'}"[:1000]
+
+
+def _projection_value(value: object | None) -> str | None:
+    if value is None:
+        return None
+    resolved = getattr(value, "value", value)
+    return str(resolved)
+
+
+def _safe_diagnostic_id(value: object | None) -> str | None:
+    resolved = _projection_value(value)
+    if resolved is None:
+        return None
+    return resolved if re.fullmatch(r"[A-Za-z0-9_.:-]{1,256}", resolved) else "<redacted-id>"
+
+
+def _safe_diagnostic_code(value: object | None) -> str | None:
+    resolved = _projection_value(value)
+    if resolved is None:
+        return None
+    return resolved if re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", resolved) else "<redacted-code>"
+
+
+def _safe_diagnostic_ids(values: object) -> tuple[str, ...]:
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        return ()
+    return tuple(sorted(item for item in (_safe_diagnostic_id(value) for value in values) if item is not None))
+
+
+def _durable_exception_type(job) -> str | None:
+    result = getattr(job, "durable_result", None)
+    if not isinstance(result, dict):
+        return None
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    return _safe_diagnostic_code(metadata.get("error_type"))
+
+
+def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal) -> dict[str, Any]:
+    """Read safe durable projections only; never read source artifacts or queue payloads."""
+
+    summary = backend.product_summary(run_id=run_id, principal=principal)
+    attempts = backend.list_attempts(
+        run_id=run_id,
+        stage_id=None,
+        status=None,
+        page_size=500,
+        offset=0,
+        principal=principal,
+    ).items
+    jobs = backend.list_jobs(
+        run_id=run_id,
+        status=None,
+        page_size=500,
+        offset=0,
+        principal=principal,
+    ).items
+    reviews = backend.list_reviews(
+        run_id=run_id,
+        subject_key=None,
+        page_size=500,
+        offset=0,
+        principal=principal,
+    ).items
+
+    stage_views = tuple(
+        {
+            "stage_id": _safe_diagnostic_id(stage.stage_id),
+            "status": _projection_value(stage.status),
+            "selected": bool(stage.selected),
+            "required": bool(stage.required),
+            "artifact_kinds": _safe_diagnostic_ids(stage.artifact_kinds),
+            "artifact_ids": _safe_diagnostic_ids(stage.artifact_ids),
+        }
+        for stage in summary.stages
+    )
+    attempt_views = tuple(
+        {
+            "attempt_id": _safe_diagnostic_id(attempt.attempt_id),
+            "stage_id": _safe_diagnostic_id(attempt.stage_id),
+            "attempt_number": attempt.attempt_number,
+            "status": _projection_value(attempt.status),
+            "failure_code": _safe_diagnostic_code(attempt.failure_code),
+            "failure_message": _safe_diagnostic_text(attempt.failure_reason),
+            "input_artifact_ids": _safe_diagnostic_ids(attempt.input_artifact_refs),
+            "output_artifact_ids": _safe_diagnostic_ids(attempt.output_artifact_refs),
+        }
+        for attempt in attempts
+    )
+    job_views = tuple(
+        {
+            "job_id": _safe_diagnostic_id(job.job_id),
+            "stage_id": _safe_diagnostic_id(job.stage_id),
+            "attempt_id": _safe_diagnostic_id(job.attempt_id),
+            "job_kind": _projection_value(job.job_kind),
+            "status": _projection_value(job.status),
+            "failure_code": _safe_diagnostic_code(job.failure_code),
+            "failure_classification": _safe_diagnostic_code(getattr(job, "failure_classification", None)),
+            "exception_type": _durable_exception_type(job),
+            "failure_message": _safe_diagnostic_text(job.failure_reason),
+            "result_artifact_ids": _safe_diagnostic_ids(job.result_refs),
+        }
+        for job in jobs
+    )
+    review_views = tuple(
+        {
+            "checkpoint": _safe_diagnostic_id(item.decision.review_checkpoint_id),
+            "state": _projection_value(item.decision.decision),
+            "revision": item.revision,
+            "subject_artifact_id": _safe_diagnostic_id(item.decision.subject_artifact_id),
+            "persisted": True,
+        }
+        for item in reviews
+    ) + tuple(
+        {
+            "checkpoint": _safe_diagnostic_id(item.checkpoint),
+            "state": _projection_value(item.state),
+            "revision": item.revision,
+            "subject_artifact_id": _safe_diagnostic_id(item.subject_artifact_id),
+            "persisted": False,
+        }
+        for item in summary.pending_reviews
+    )
+
+    artifact_views = ()
+    if control_store is not None:
+        artifact_views = tuple(
+            {
+                "artifact_id": _safe_diagnostic_id(artifact.artifact_id),
+                "artifact_kind": _safe_diagnostic_id(artifact.artifact_kind),
+                "stage_id": _safe_diagnostic_id(artifact.stage_id),
+            }
+            for artifact in control_store.list_artifacts(run_id=run_id, limit=10000)
+        )
+
+    failed_statuses = {"FAILED", "BLOCKED", "CANCELLED"}
+    failed_stage_ids = {
+        item["stage_id"]
+        for item in stage_views
+        if item["stage_id"] is not None and item["status"] in failed_statuses
+    }
+    failed_stage_ids.update(
+        item["stage_id"]
+        for item in attempt_views + job_views
+        if item["stage_id"] is not None
+        and (item["status"] in failed_statuses or item["failure_code"] is not None)
+    )
+    stage_ids = sorted({item["stage_id"] for item in attempt_views if item["stage_id"] is not None})
+    attempt_counts = tuple(
+        {
+            "stage_id": stage_id,
+            "total": len(items),
+            "succeeded": sum(item["status"] == "SUCCEEDED" for item in items),
+            "failed": sum(item["status"] in failed_statuses for item in items),
+        }
+        for stage_id in stage_ids
+        for items in (tuple(item for item in attempt_views if item["stage_id"] == stage_id),)
+    )
+    snapshot_artifacts = tuple(
+        item["artifact_id"]
+        for item in artifact_views
+        if item["artifact_kind"] == "SourceSnapshotResult" and item["artifact_id"] is not None
+    )
+    materialization_reached = (
+        _projection_value(summary.materialization.status) != "NOT_EVALUATED"
+        or any(item["stage_id"] == "MATERIALIZATION" for item in attempt_views)
+    )
+    g6_reached = (
+        _projection_value(summary.validation.g6_status) != "PENDING"
+        or any(item["stage_id"] == "VALIDATION_RECONCILIATION" for item in attempt_views)
+    )
+    return {
+        "terminal_run_status": _projection_value(summary.status),
+        "failed_stage_ids": tuple(sorted(failed_stage_ids)),
+        "successful_stage_ids": tuple(
+            item["stage_id"]
+            for item in stage_views
+            if item["stage_id"] is not None and item["status"] == "SUCCEEDED"
+        ),
+        "stages": stage_views,
+        "failed_attempts": tuple(
+            item
+            for item in attempt_views
+            if item["status"] in failed_statuses or item["failure_code"] is not None
+        ),
+        "failed_jobs": tuple(
+            item
+            for item in job_views
+            if item["status"] in failed_statuses or item["failure_code"] is not None
+        ),
+        "stage_attempt_counts": attempt_counts,
+        "review_checkpoints": review_views,
+        "artifacts": artifact_views,
+        "source_snapshot_artifact_count": len(snapshot_artifacts),
+        "all_four_selected_source_snapshots_produced": len(snapshot_artifacts) == 4,
+        "materialization_reached": materialization_reached,
+        "g6_reached": g6_reached,
+    }
+
+
+def _write_failure_evidence(*, run_id: str | None, error: BaseException, backend=None, control_store=None, principal=None) -> None:
+    diagnostic_errors = []
+    runtime_snapshot = None
+    if run_id is not None and backend is not None and principal is not None:
+        try:
+            runtime_snapshot = _failure_runtime_snapshot(
+                backend=backend,
+                control_store=control_store,
+                run_id=run_id,
+                principal=principal,
+            )
+        except Exception as diagnostic_error:
+            diagnostic_errors.append(_safe_failure_detail(diagnostic_error))
     payload = {
         "status": "BLOCKED",
         "run_id": run_id or "unavailable",
         "content_commit": _content_commit(),
         "blocked_reasons": (_safe_failure_detail(error),),
+        "terminal_exception_type": type(error).__name__,
+        "terminal_exception_message": _safe_diagnostic_text(error),
         "evidence_kind": "failure-diagnostics",
+        "runtime_snapshot": runtime_snapshot,
+        "diagnostic_collection_errors": tuple(diagnostic_errors),
     }
     (_evidence_dir() / "PROMPT02_FAILURE.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A terminal runtime failure stays failed while its durable state is actionable and safe."""
+
+    monkeypatch.setattr("test_multi_source_v1._evidence_dir", lambda: tmp_path)
+    summary = SimpleNamespace(
+        status="FAILED",
+        stages=(
+            SimpleNamespace(stage_id="SOURCE_DISCOVERY", status="SUCCEEDED", selected=True, required=True, artifact_kinds=("SourceCatalog",), artifact_ids=("artifact-catalog",)),
+            SimpleNamespace(stage_id="DEPENDENCY_DISCOVERY", status="FAILED", selected=True, required=True, artifact_kinds=(), artifact_ids=()),
+        ),
+        pending_reviews=(
+            SimpleNamespace(checkpoint="REVIEW_EVIDENCE_DECISIONS", state="ACCEPTED", revision=1, subject_artifact_id="artifact-review"),
+        ),
+        materialization=SimpleNamespace(status="NOT_EVALUATED"),
+        validation=SimpleNamespace(g6_status="PENDING"),
+    )
+    attempt = SimpleNamespace(
+        attempt_id="attempt-dependency-1",
+        stage_id="DEPENDENCY_DISCOVERY",
+        attempt_number=1,
+        status="FAILED",
+        failure_code="PROVIDER_UNAVAILABLE",
+        failure_reason="provider connection postgresql://user:password@host/example token=unsafe",
+        input_artifact_refs=("artifact-catalog",),
+        output_artifact_refs=(),
+    )
+    job = SimpleNamespace(
+        job_id="job-dependency-1",
+        stage_id="DEPENDENCY_DISCOVERY",
+        attempt_id="attempt-dependency-1",
+        job_kind="STAGE",
+        status="FAILED",
+        failure_code="PROVIDER_UNAVAILABLE",
+        failure_reason="provider connection postgresql://user:password@host/example token=unsafe",
+        result_refs=(),
+        durable_result={"metadata": {"error_type": "ConnectionError"}},
+    )
+    review = SimpleNamespace(
+        decision=SimpleNamespace(
+            review_checkpoint_id="REVIEW_EVIDENCE_DECISIONS",
+            decision="ACCEPTED",
+            subject_artifact_id="artifact-review",
+        ),
+        revision=1,
+    )
+
+    class Backend:
+        def product_summary(self, **_kwargs):
+            return summary
+
+        def list_attempts(self, **_kwargs):
+            return SimpleNamespace(items=(attempt,))
+
+        def list_jobs(self, **_kwargs):
+            return SimpleNamespace(items=(job,))
+
+        def list_reviews(self, **_kwargs):
+            return SimpleNamespace(items=(review,))
+
+    class ControlStore:
+        def list_artifacts(self, **_kwargs):
+            return tuple(
+                SimpleNamespace(
+                    artifact_id=f"artifact-snapshot-{index}",
+                    artifact_kind="SourceSnapshotResult",
+                    stage_id="SOURCE_SNAPSHOT_STAGE",
+                )
+                for index in range(1, 5)
+            )
+
+    _write_failure_evidence(
+        run_id="run-failed",
+        error=RuntimeError("runtime failure postgresql://user:password@host/example password=unsafe"),
+        backend=Backend(),
+        control_store=ControlStore(),
+        principal=object(),
+    )
+
+    payload = json.loads((tmp_path / "PROMPT02_FAILURE.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(payload, sort_keys=True)
+    snapshot = payload["runtime_snapshot"]
+    assert payload["status"] == "BLOCKED"
+    assert payload["terminal_exception_type"] == "RuntimeError"
+    assert snapshot["terminal_run_status"] == "FAILED"
+    assert snapshot["failed_stage_ids"] == ["DEPENDENCY_DISCOVERY"]
+    assert snapshot["failed_attempts"][0]["attempt_id"] == "attempt-dependency-1"
+    assert snapshot["failed_jobs"][0]["job_id"] == "job-dependency-1"
+    assert snapshot["failed_jobs"][0]["exception_type"] == "ConnectionError"
+    assert snapshot["successful_stage_ids"] == ["SOURCE_DISCOVERY"]
+    assert snapshot["all_four_selected_source_snapshots_produced"] is True
+    assert snapshot["materialization_reached"] is False and snapshot["g6_reached"] is False
+    assert "postgresql://" not in serialized and "password=unsafe" not in serialized and "token=unsafe" not in serialized
 
 
 def _latest_artifact(platform, *, run_id: str, artifact_kind: str, model):
@@ -482,7 +798,7 @@ def test_multi_source_v1_real_pipeline_and_independent_oracle(tmp_path: Path) ->
         admins[label] = admin
     workspace = ROOT / "workspace" / "tests" / f"prompt02_{uuid4().hex}"
     workspace.mkdir(parents=True, exist_ok=True)
-    platform = backend = runtime = run = None
+    platform = backend = runtime = run = principal = None
     try:
         for label, engine, *_ in LIVE_TARGETS:
             _wait_for_database(admins[label])
@@ -553,7 +869,13 @@ def test_multi_source_v1_real_pipeline_and_independent_oracle(tmp_path: Path) ->
         (_evidence_dir() / "PROMPT02_MULTI_SOURCE_ACCEPTANCE.json").write_text(json.dumps(receipt, indent=2, sort_keys=True), encoding="utf-8")
         assert all(item["execution_status"] == "PASS" for item in control_evidence), "Prompt02 negative-control set is incomplete"
     except Exception as error:
-        _write_failure_evidence(run_id=None if run is None else run.run_id, error=error)
+        _write_failure_evidence(
+            run_id=None if run is None else run.run_id,
+            error=error,
+            backend=backend,
+            control_store=None if platform is None else platform.control_store,
+            principal=principal,
+        )
         raise
     finally:
         if runtime is not None:
