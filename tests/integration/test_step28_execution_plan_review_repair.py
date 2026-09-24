@@ -12,10 +12,11 @@ from dirty_data_to_olap.application.backend import BackendService
 from dirty_data_to_olap.application.jobs import DurableExecutionSubmission, JobWorker, StageHandlerRegistry
 from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
+from dirty_data_to_olap.application.review_subjects import ReviewCheckpointSubjectResolver
 from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand
 from dirty_data_to_olap.domain.contracts.canonical import CanonicalEntityKind, CanonicalEntityType, CanonicalModelHypothesis, EntityResolutionRequirement, ReviewCheckpoint, review_subject_key
-from dirty_data_to_olap.domain.contracts.evidence_fusion import DecisionExplanation, DecisionState, FusionScore, RelationshipDecision
+from dirty_data_to_olap.domain.contracts.evidence_fusion import DomainAssertion, DecisionExplanation, DecisionState, FusionScore, RelationshipDecision
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
     ExecutionPlanIntent,
@@ -294,6 +295,60 @@ def test_multiple_real_evidence_subjects_are_explicitly_retained(tmp_path: Path)
     assert job.review_context is None
     assert len(job.review_contexts) == 2
     assert {context.subject_artifact_id for context in job.review_contexts} == {value.decision_id for value in decisions}
+    control.close()
+
+
+def test_evidence_review_context_scopes_domain_assertions_to_each_subject(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path, "scoped-evidence")
+    decisions = (_relationship_decision("relationship-one"), _relationship_decision("relationship-two"))
+    assertions = tuple(
+        DomainAssertion(
+            assertion_id=f"assertion-{index}",
+            subject_id=decision.subject_id,
+            statement=f"reviewed assertion for {decision.subject_id}",
+            status="ACTIVE",
+            scope_id=f"scope-{index}",
+            asserted_by="step28-test",
+        )
+        for index, decision in enumerate(decisions, start=1)
+    )
+    refs = tuple(
+        _publish_typed(
+            control,
+            artifacts,
+            run_id=run.run_id,
+            stage_id="EVIDENCE_FUSION",
+            attempt_id="evidence-attempt",
+            artifact_id=value_id,
+            artifact_kind=kind,
+            value=value,
+        )
+        for value_id, kind, value in (
+            (assertion.assertion_id, "DomainAssertion", assertion) for assertion in assertions
+        )
+    ) + tuple(
+        _publish_typed(
+            control,
+            artifacts,
+            run_id=run.run_id,
+            stage_id="EVIDENCE_FUSION",
+            attempt_id="evidence-attempt",
+            artifact_id=decision.decision_id,
+            artifact_kind="RelationshipDecision",
+            value=decision,
+        )
+        for decision in decisions
+    )
+
+    derivation = ReviewCheckpointSubjectResolver(control, artifacts).derive(
+        run_id=run.run_id,
+        checkpoint=ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS,
+        upstream_artifacts=refs,
+    )
+
+    by_subject = {context.subject_artifact_id: context for context in derivation.contexts}
+    assert by_subject["relationship-one"].domain_assertion_refs == ("assertion-1",)
+    assert by_subject["relationship-two"].domain_assertion_refs == ("assertion-2",)
     control.close()
 
 

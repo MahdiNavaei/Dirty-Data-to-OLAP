@@ -89,16 +89,21 @@ class ReviewCheckpointSubjectResolver:
         verified: list[tuple[ArtifactRef, object]],
         unresolved: list[str],
     ) -> ReviewSubjectDerivation:
-        # Keep semantic assertion identities in the review context while the
-        # subject itself is the run-scoped persisted artifact identity.
-        domain_refs = tuple(sorted(payload.assertion_id for artifact, payload in verified if artifact.artifact_kind == "DomainAssertion" and isinstance(payload, DomainAssertion)))
+        # Keep only the assertions for the reviewed decision in its context.
+        # The canonical stage reconstructs this same per-subject scope from
+        # evidence_domain_assertion_refs; using every assertion in the run
+        # would make an otherwise valid persisted review fail compatibility.
+        domain_refs_by_subject: dict[str, list[str]] = {}
+        for artifact, payload in verified:
+            if artifact.artifact_kind == "DomainAssertion" and isinstance(payload, DomainAssertion):
+                domain_refs_by_subject.setdefault(payload.subject_id, []).append(payload.assertion_id)
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, payload in verified:
             if artifact.artifact_kind == "RelationshipDecision" and isinstance(payload, RelationshipDecision):
-                context = self.review_policy.evidence_context(payload, domain_refs, subject_content_hash=artifact.content_hash)
+                context = self.review_policy.evidence_context(payload, tuple(sorted(domain_refs_by_subject.get(payload.subject_id, ()))), subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "SemanticMappingDecision" and isinstance(payload, SemanticMappingDecision):
-                context = self.review_policy.evidence_context(payload, domain_refs, subject_content_hash=artifact.content_hash)
+                context = self.review_policy.evidence_context(payload, tuple(sorted(domain_refs_by_subject.get(payload.subject_id, ()))), subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "EvidenceFusionResult" and isinstance(payload, EvidenceFusionResult):
                 # A container with more than one decision is never collapsed
