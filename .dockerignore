@@ -20,6 +20,7 @@ privacy_ephemeral
 *.duckdb
 *.log
 tmp*/
+docs/Dirty-Data-to-OLAP_Codex_Specialist_Knowledge_Base.rar
 frontend/node_modules
 frontend/dist
 frontend/.vite

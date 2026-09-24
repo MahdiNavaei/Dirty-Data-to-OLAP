@@ -493,7 +493,11 @@ class DltSqlSourceAdapter(SourceAdapter):
         transaction_connection = None
         transaction = None
         try:
-            isolation_level = "SERIALIZABLE" if engine.dialect.name == "mssql" else "REPEATABLE READ"
+            # SQL Server and SQLite expose SERIALIZABLE as their strongest
+            # portable transaction level. PostgreSQL/MySQL use the
+            # repeatable-read snapshot required by the bounded source
+            # contract; SQLite rejects that isolation-level name outright.
+            isolation_level = "SERIALIZABLE" if engine.dialect.name in {"mssql", "sqlite"} else "REPEATABLE READ"
             transaction_connection = engine.connect().execution_options(isolation_level=isolation_level)
             transaction = transaction_connection.begin()
             transaction_holder["connection"] = transaction_connection

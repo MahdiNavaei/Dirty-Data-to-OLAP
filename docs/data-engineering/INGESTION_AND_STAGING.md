@@ -26,10 +26,10 @@ fingerprint immediately before and after extraction. `FILE_IMMUTABLE` means
 content-fingerprint-pinned for the observed extraction; it does not claim that
 the operating-system file can never change. A mismatch invalidates the
 snapshot and publishes no complete snapshot result. The SQLite dlt reference
-path is read-only, but dlt receives the engine rather than the specific
-transaction connection, so its consistency is honestly reported as
-`BEST_EFFORT`. This is not a cross-provider claim. Non-SQL database providers
-are not live-verified in Step07.
+path is read-only, and the selected tables are loaded through one explicit
+transaction connection, so the published snapshot reports
+`TRANSACTION_SCOPED`. This is not a cross-provider claim. Non-SQL database
+providers are not live-verified in Step07.
 
 Retries use content-derived batch IDs. Existing identical complete artifacts
 are reused, while incomplete files are never consumed. Changed content creates

@@ -173,7 +173,7 @@ def test_sqlite_reference_matrix_reaches_project_staging(workspace: Path) -> Non
     )
     assert result.accounting.input_records_observed == 2
     assert result.accounting.successfully_staged_records == 2
-    assert result.snapshot.consistency.value == "BEST_EFFORT"
+    assert result.snapshot.consistency.value == "TRANSACTION_SCOPED"
     assert "password" not in result.model_dump_json().lower()
 
 

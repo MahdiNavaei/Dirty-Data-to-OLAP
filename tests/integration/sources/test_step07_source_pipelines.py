@@ -126,7 +126,7 @@ def test_sqlite_dlt_discovery_extraction_and_staging(step07_workspace: Path) -> 
     )
     assert result.accounting.input_records_observed == 11
     assert result.accounting.successfully_staged_records == 11
-    assert result.snapshot.consistency.value == "BEST_EFFORT"
+    assert result.snapshot.consistency.value == "TRANSACTION_SCOPED"
     assert len(result.batches) >= 5
     assert all(batch.publication_state is PublicationState.COMPLETE for batch in result.batches)
     assert all((ROOT / batch.artifact_location).is_file() for batch in result.batches)
