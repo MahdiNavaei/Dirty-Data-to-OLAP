@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from dirty_data_to_olap.application.jobs import _safe_exception_detail
+from dirty_data_to_olap.application.product_runtime import LocalProductStageHandlers
+from dirty_data_to_olap.domain.contracts.jobs import StageExecutionRequest, StageResultStatus
 from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SourceSelection, SourceSetSelection, source_set_fingerprint
+from dirty_data_to_olap.observability import TelemetryClient, safe_exception_detail
 
 
 def _selection(registry_id: str) -> SourceSelection:
@@ -26,7 +28,7 @@ def test_source_set_rejects_single_source_and_stale_fingerprint() -> None:
 
 
 def test_worker_exception_detail_is_bounded_and_redacted() -> None:
-    detail = _safe_exception_detail(
+    detail = safe_exception_detail(
         RuntimeError("planner rejected input\npassword=unsafe token=unsafe postgresql://user:secret@host/db")
     )
 
@@ -36,3 +38,35 @@ def test_worker_exception_detail_is_bounded_and_redacted() -> None:
     assert "secret@" not in detail.lower()
     assert "\n" not in detail and "\r" not in detail
     assert len(detail) <= 512
+
+
+def test_product_stage_failure_persists_safe_exception_detail() -> None:
+    handlers = object.__new__(LocalProductStageHandlers)
+    handlers.telemetry = TelemetryClient()
+
+    def raise_stage_failure(_request: StageExecutionRequest) -> None:
+        raise RuntimeError("planner rejected input password=unsafe")
+
+    handlers._execute = raise_stage_failure
+    request = StageExecutionRequest(
+        request_id="request-1",
+        job_id="job-1",
+        run_id="run-1",
+        stage_id="ANALYTICAL_PLANNING",
+        attempt_id="attempt-1",
+        plan_id="plan-1",
+        configuration_fingerprint="config",
+        policy_config_fingerprint="policy",
+        cancellation_token_id="cancel-1",
+    )
+
+    class Probe:
+        def is_cancelled(self) -> bool:
+            return False
+
+    result = handlers.execute_with_context(request, Probe())
+
+    assert result.status is StageResultStatus.FAILED
+    assert result.metadata["error_type"] == "RuntimeError"
+    assert "planner rejected input" in result.metadata["error_detail"]
+    assert "password" not in result.metadata["error_detail"].lower()

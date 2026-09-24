@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-import re
 from threading import Event
 from typing import Callable, Mapping, Protocol, Sequence
 
@@ -54,26 +53,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
 )
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
-from dirty_data_to_olap.observability import TelemetryClient, classify_error, redact_value
-
-
-_EXCEPTION_SECRET = re.compile(
-    r"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential|connection[_-]?string|raw[_-]?dsn)"
-    r"\s*(?:=|:)?\s*[^\s,;]+"
-)
-_EXCEPTION_UNSAFE = re.compile(r"(?i)(?:raw[_-]?row|stack[_-]?trace|traceback|exception[_-]?text|request[_-]?body)")
-
-
-def _safe_exception_detail(error: BaseException) -> str:
-    """Return bounded, durable diagnostic detail without persisting raw exception text."""
-
-    detail = str(error) or repr(error)
-    detail = str(redact_value(detail))
-    detail = "".join(character if character.isprintable() else " " for character in detail)
-    detail = re.sub(r"\s+", " ", detail).strip()
-    detail = _EXCEPTION_SECRET.sub("<redacted-secret>", detail)
-    detail = _EXCEPTION_UNSAFE.sub("<redacted-detail>", detail)
-    return detail[:512] or "<empty>"
+from dirty_data_to_olap.observability import TelemetryClient, classify_error, safe_exception_detail
 
 
 class StageExecutorPort(Protocol):
@@ -539,7 +519,7 @@ class JobWorker:
                 failure_code="STAGE_OUTCOME_UNKNOWN",
                 failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT,
                 failure_reason="stage execution outcome is unknown after worker delivery",
-                metadata={"error_type": type(exc).__name__, "error_detail": _safe_exception_detail(exc)},
+                metadata={"error_type": type(exc).__name__, "error_detail": safe_exception_detail(exc)},
             )
         self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
         self.telemetry.operation(event_name="stage.result_recorded", component="worker", operation="result_record", correlation=correlation, status=result.status.value, error_class=classify_error(result.failure_code, result.failure_classification.value if result.failure_classification else None) if result.failure_code else None, details={"output_artifact_count": len(result.output_artifact_refs)})

@@ -31,6 +31,11 @@ _SECRET = re.compile(
 _URL_CREDENTIAL = re.compile(r"(?i)([a-z][a-z0-9+.-]*://)([^/@\s:]+):([^/@\s]+)@")
 _PATH = re.compile(r"(?:[A-Za-z]:[\\/]|/)(?:[^\s\\/]+[\\/])+[^\s]+")
 _CANARY = re.compile(r"(?i)(?:step\d+_[a-z0-9_]+_canary|secret[_-]?canary|pii[_-]?canary)")
+_EXCEPTION_DETAIL_SECRET = re.compile(
+    r"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential|connection[_-]?string|raw[_-]?dsn)"
+    r"\s*(?:=|:)?\s*[^\s,;]+"
+)
+_EXCEPTION_DETAIL_UNSAFE = re.compile(r"(?i)(?:raw[_-]?row|stack[_-]?trace|traceback|exception[_-]?text|request[_-]?body)")
 
 
 def utc_now() -> datetime:
@@ -55,6 +60,18 @@ def redact_value(value: Any) -> Any:
     if "\\" in text or (":" in text and _PATH.search(text)):
         text = _PATH.sub("<redacted-path>", text)
     return text[:512]
+
+
+def safe_exception_detail(error: BaseException) -> str:
+    """Return bounded durable exception detail without raw traceback or secrets."""
+
+    detail = str(error) or repr(error)
+    detail = str(redact_value(detail))
+    detail = "".join(character if character.isprintable() else " " for character in detail)
+    detail = re.sub(r"\s+", " ", detail).strip()
+    detail = _EXCEPTION_DETAIL_SECRET.sub("<redacted>", detail)
+    detail = _EXCEPTION_DETAIL_UNSAFE.sub("<redacted-detail>", detail)
+    return detail[:512] or "<empty>"
 
 
 class BoundedErrorClass(str, Enum):
@@ -530,5 +547,5 @@ class TelemetryClient:
 
 
 __all__ = [
-    "ALLOWED_METRIC_LABELS", "METRIC_DEFINITIONS", "BoundedErrorClass", "CorrelationContext", "DiagnosticBundle", "FORBIDDEN_METRIC_LABELS", "InMemoryTelemetrySink", "MetricDefinition", "MetricSample", "NoopTelemetrySink", "StructuredEvent", "TelemetryClient", "TelemetrySink", "TraceSpan", "classify_error", "redact_value",
+    "ALLOWED_METRIC_LABELS", "METRIC_DEFINITIONS", "BoundedErrorClass", "CorrelationContext", "DiagnosticBundle", "FORBIDDEN_METRIC_LABELS", "InMemoryTelemetrySink", "MetricDefinition", "MetricSample", "NoopTelemetrySink", "StructuredEvent", "TelemetryClient", "TelemetrySink", "TraceSpan", "classify_error", "redact_value", "safe_exception_detail",
 ]

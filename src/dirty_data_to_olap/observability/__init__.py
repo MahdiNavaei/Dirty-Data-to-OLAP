@@ -22,6 +22,7 @@ from .telemetry import (
     TraceSpan,
     classify_error,
     redact_value,
+    safe_exception_detail,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     "TraceSpan",
     "classify_error",
     "redact_value",
+    "safe_exception_detail",
 ]

@@ -50,8 +50,8 @@ from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, P
 from dirty_data_to_olap.domain.contracts.quality import QualityResult
 from dirty_data_to_olap.domain.contracts.semantic import SemanticModel, SemanticValidationResult
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSelection, SourceSnapshotResult, SourceType, stable_digest, stable_id
-from dirty_data_to_olap.domain.contracts.validation import ValidationArtifactBindings, ValidationReport
-from dirty_data_to_olap.observability import TelemetryClient
+from dirty_data_to_olap.domain.contracts.validation import ValidationArtifactBindings
+from dirty_data_to_olap.observability import TelemetryClient, safe_exception_detail
 
 
 def _json(value: Any) -> bytes:
@@ -105,7 +105,7 @@ class LocalProductStageHandlers:
             try:
                 result = self._execute(request)
             except Exception as exc:
-                result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__})
+                result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__, "error_detail": safe_exception_detail(exc)})
         duration = max(0.0, monotonic() - started)
         self.telemetry.observe_adapter_operation(self._adapter_kind(request.stage_id), duration, result.status.value)
         self.telemetry.observe_stage_result(correlation=correlation, stage_id=request.stage_id, status=result.status.value, duration_seconds=duration, metadata=result.metadata, failure_code=result.failure_code, failure_classification=result.failure_classification.value if result.failure_classification else None)
