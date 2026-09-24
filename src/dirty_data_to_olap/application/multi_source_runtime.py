@@ -387,11 +387,22 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         er_ref, er_result = self._typed_from_run(request.run_id, "EntityResolutionResult", EntityResolutionResult)
         catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
         snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
+        domain_assertions = tuple(value for _ref, value in self._all(request, "DomainAssertion", DomainAssertion).values())
+        identity_domain_assertions = tuple(
+            sorted(
+                (item for item in domain_assertions if item.assertion_id in set(hypothesis.domain_assertion_refs)),
+                key=lambda item: item.assertion_id,
+            )
+        )
+        if not identity_domain_assertions:
+            raise ValueError("canonical identity proposal requires durable domain assertions")
+        identity_domain_assertion_refs = tuple(item.assertion_id for item in identity_domain_assertions)
+        identity_asserted_by = identity_domain_assertions[0].asserted_by
         memberships = []
         for cluster in er_result.clusters:
             if cluster.decision == "CANDIDATE_CLUSTER":
                 if len(cluster.record_refs) == 1:
-                    memberships.append(CanonicalIdentityMembership(membership_group_id=cluster.cluster_id, canonical_entity_type_id="entity_customer", entity_resolution_family="customer", source_record_refs=cluster.record_refs, derivation_basis=IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW, domain_assertion_refs=cluster.diagnostic_refs, cluster_evidence_refs=cluster.diagnostic_refs, evidence_refs=cluster.diagnostic_refs, policy_refs=(self.multi_source.policy.provenance,), rationale="no authorized linkage edge was observed; the registry row remains a reviewed singleton customer identity", provenance_refs=(hypothesis_ref.artifact_id, er_ref.artifact_id)))
+                    memberships.append(CanonicalIdentityMembership(membership_group_id=cluster.cluster_id, canonical_entity_type_id="entity_customer", entity_resolution_family="customer", source_record_refs=cluster.record_refs, derivation_basis=IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW, actor=identity_asserted_by, actor_source="DOMAIN_ASSERTION", domain_assertion_refs=identity_domain_assertion_refs, cluster_evidence_refs=cluster.diagnostic_refs, evidence_refs=cluster.diagnostic_refs, policy_refs=(self.multi_source.policy.provenance,), rationale="no authorized linkage edge was observed; the registry row remains a reviewed singleton customer identity", provenance_refs=(hypothesis_ref.artifact_id, er_ref.artifact_id)))
                 else:
                     memberships.append(CanonicalIdentityMembership(membership_group_id=cluster.cluster_id, canonical_entity_type_id="entity_customer", entity_resolution_family="customer", source_record_refs=cluster.record_refs, derivation_basis=IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE, authorized_edge_refs=cluster.edge_refs, cluster_evidence_refs=cluster.diagnostic_refs, evidence_refs=tuple(sorted(set(cluster.edge_refs) | set(cluster.diagnostic_refs))), policy_refs=(self.multi_source.policy.provenance,), rationale="customer membership is derived from the authorized Splink candidate cluster and remains review-gated", provenance_refs=(hypothesis_ref.artifact_id, er_ref.artifact_id)))
         for source_id, catalog in sorted(catalogs.items()):
