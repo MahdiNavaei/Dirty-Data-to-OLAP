@@ -214,7 +214,11 @@ def test_real_evidence_checkpoint_pauses_then_resumes_guarded_downstream(tmp_pat
     assert control.get_stage_job(run_id=run.run_id, stage_id="CANONICAL_HYPOTHESES") is None
     context = review_job.review_context
     assert context is not None
-    assert context == ReviewPolicyService().evidence_context(decision, ())
+    subject = control.get_artifact(context.subject_artifact_id)
+    assert subject is not None
+    expected_context = ReviewPolicyService().evidence_context(decision, (), subject_content_hash=subject.content_hash).model_copy(update={"subject_artifact_id": subject.artifact_id})
+    assert context == expected_context
+    assert context.subject_content_hash == subject.content_hash
     assert control.get_current_review(run_id=run.run_id, subject_key=review_subject_key(context)) is None
 
     DurableExecutionSubmission(control).submit_command(command=_command(run.run_id, "resume-before-review", ExecutionAction.RESUME), run=run)
@@ -229,7 +233,7 @@ def test_real_evidence_checkpoint_pauses_then_resumes_guarded_downstream(tmp_pat
     reviewed = client.post(
         f"/api/v1/runs/{run.run_id}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}",
         headers={**AUTH, "Idempotency-Key": "real-evidence-review"},
-        json={"subject_artifact_id": decision.decision_id, "subject_content_hash": control.get_artifact(decision.decision_id).content_hash, "decision": "ACCEPTED", "rationale": "reviewed typed evidence subject", "expected_revision": 0},
+        json={"subject_artifact_id": decision.decision_id, "subject_content_hash": subject.content_hash, "context": context.model_dump(mode="json"), "decision": "ACCEPTED", "rationale": "reviewed typed evidence subject", "expected_revision": 0},
     )
     assert reviewed.status_code == 200, reviewed.text
     assert control.get_current_review(run_id=run.run_id, subject_key=review_subject_key(context)) is not None

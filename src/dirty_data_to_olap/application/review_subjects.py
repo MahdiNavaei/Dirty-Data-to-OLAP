@@ -95,10 +95,10 @@ class ReviewCheckpointSubjectResolver:
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, payload in verified:
             if artifact.artifact_kind == "RelationshipDecision" and isinstance(payload, RelationshipDecision):
-                context = self.review_policy.evidence_context(payload, domain_refs)
+                context = self.review_policy.evidence_context(payload, domain_refs, subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "SemanticMappingDecision" and isinstance(payload, SemanticMappingDecision):
-                context = self.review_policy.evidence_context(payload, domain_refs)
+                context = self.review_policy.evidence_context(payload, domain_refs, subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "EvidenceFusionResult" and isinstance(payload, EvidenceFusionResult):
                 # A container with more than one decision is never collapsed

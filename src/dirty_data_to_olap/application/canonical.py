@@ -121,7 +121,7 @@ class CanonicalHypothesisService:
             if review is None:
                 raise CanonicalizationError("INCOMPLETE_REVIEW", f"relationship {relationship.relationship_id} references an unknown review")
             try:
-                expected_context = self.review_policy.evidence_context(upstream, domain_by_decision.get(upstream.decision_id, ())).model_copy(update={"subject_artifact_id": review.subject_artifact_id})
+                expected_context = self.review_policy.evidence_context(upstream, domain_by_decision.get(upstream.decision_id, ())).model_copy(update={"subject_artifact_id": review.subject_artifact_id, "subject_content_hash": review.subject_content_hash})
                 self.review_policy.require_compatible(review, expected_context)
             except ReviewCompatibilityError as error:
                 raise CanonicalizationError("INCOMPLETE_REVIEW", str(error)) from error
@@ -134,7 +134,7 @@ class CanonicalHypothesisService:
             if review is None:
                 raise CanonicalizationError("INCOMPLETE_REVIEW", f"mapping {mapping.mapping_id} references an unknown review")
             try:
-                expected_context = self.review_policy.evidence_context(upstream, domain_by_decision.get(upstream.decision_id, ())).model_copy(update={"subject_artifact_id": review.subject_artifact_id})
+                expected_context = self.review_policy.evidence_context(upstream, domain_by_decision.get(upstream.decision_id, ())).model_copy(update={"subject_artifact_id": review.subject_artifact_id, "subject_content_hash": review.subject_content_hash})
                 self.review_policy.require_compatible(review, expected_context)
             except ReviewCompatibilityError as error:
                 raise CanonicalizationError("INCOMPLETE_REVIEW", str(error)) from error
