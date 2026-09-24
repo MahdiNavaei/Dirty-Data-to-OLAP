@@ -71,6 +71,12 @@ def _artifact_source_key(value: Any, artifact_id: str) -> str:
     return artifact_id
 
 
+def _ordered_snapshot_ids(source_ids: tuple[str, ...], snapshots: Mapping[str, Any]) -> tuple[str, ...]:
+    """Keep source and snapshot positions aligned in aggregate assertions."""
+
+    return tuple(str(snapshots[source_id].snapshot.snapshot_id) for source_id in sorted(source_ids))
+
+
 class MultiSourceStageHandlers(LocalProductStageHandlers):
     """Registered Prompt02 handlers sharing the accepted product platform."""
 
@@ -278,7 +284,9 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         qualities = tuple(value for _ref, value in self._qualities(request).values())
         schema_ref, schema = self._typed_from_run(request.run_id, "SchemaMatchResult", SchemaMatchResult)
         candidates = self._relationship_candidates(catalogs)
-        assertions = tuple(DomainAssertion(assertion_id=f"prompt02:{item['candidate_id']}", subject_id="rel:" + item["from_table"] + ":" + ",".join(item["from_columns"]) + "->" + item["to_table"] + ":" + ",".join(item["to_columns"]), statement="the source-role relationship is declared for review by Prompt02 policy", status="ACTIVE", source_ids=tuple(sorted(catalogs)), snapshot_ids=tuple(sorted(snapshots[key].snapshot.snapshot_id for key in snapshots)), scope_id=stable_id("prompt02-domain-scope", item["candidate_id"]), asserted_by="prompt02-role-policy", evidence_refs=(item["candidate_id"],)) for item in candidates)
+        source_ids = tuple(sorted(catalogs))
+        snapshot_ids = _ordered_snapshot_ids(source_ids, snapshots)
+        assertions = tuple(DomainAssertion(assertion_id=f"prompt02:{item['candidate_id']}", subject_id="rel:" + item["from_table"] + ":" + ",".join(item["from_columns"]) + "->" + item["to_table"] + ":" + ",".join(item["to_columns"]), statement="the source-role relationship is declared for review by Prompt02 policy", status="ACTIVE", source_ids=source_ids, snapshot_ids=snapshot_ids, scope_id=stable_id("prompt02-domain-scope", item["candidate_id"]), asserted_by="prompt02-role-policy", evidence_refs=(item["candidate_id"],)) for item in candidates)
         from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
         fusion_request = EvidenceFusionRequest(request_id=stable_id("relationship-fusion-request", {"run": request.run_id, "schema": schema_ref.content_hash}), execution_context_id=next(iter(snapshots.values())).snapshot.execution_context_id, relationship_candidate_ids=tuple(item["candidate_id"] for item in candidates), subject_kind=FusionSubjectKind.RELATIONSHIP, policy=EvidenceFusionService.load_policy("relationship", policy_root=self.graph_root / "policies" / "evidence-fusion"))
         # Relationship and schema-mapping subjects are intentionally fused in
