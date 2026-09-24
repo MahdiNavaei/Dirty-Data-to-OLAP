@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from dirty_data_to_olap.application.product_runtime import LocalProductStageHandlers
+from dirty_data_to_olap.application.multi_source_runtime import MultiSourceStageHandlers
 from dirty_data_to_olap.domain.contracts.jobs import StageExecutionRequest, StageResultStatus
 from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SourceSelection, SourceSetSelection, source_set_fingerprint
 from dirty_data_to_olap.observability import TelemetryClient, safe_exception_detail
@@ -25,6 +28,11 @@ def test_source_set_rejects_single_source_and_stale_fingerprint() -> None:
     selections = (_selection("source-a"), _selection("source-b"))
     with pytest.raises(ValueError, match="fingerprint"):
         SourceSetSelection(selections=selections, source_set_fingerprint="stale")
+
+
+def test_multi_source_null_marker_does_not_enter_decimal_conversion() -> None:
+    assert MultiSourceStageHandlers._typed_value("", "DECIMAL") is None
+    assert MultiSourceStageHandlers._typed_value("23.0000", "DECIMAL") == Decimal("23.0000")
 
 
 def test_worker_exception_detail_is_bounded_and_redacted() -> None:

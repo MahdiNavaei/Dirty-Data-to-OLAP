@@ -434,6 +434,8 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
     def _typed_value(value, logical_type):
         if value is None:
             return None
+        if isinstance(value, str) and not value.strip():
+            return None
         if logical_type == "DATE":
             return value if isinstance(value, date) else date.fromisoformat(str(value))
         if logical_type == "DECIMAL":
