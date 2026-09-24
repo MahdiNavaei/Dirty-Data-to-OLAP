@@ -118,7 +118,7 @@ class ReviewPolicyService:
             raise ValueError("invalidation requires a reason")
         return decision.model_copy(update={"decision": ReviewDecisionStatus.INVALIDATED, "invalidation_reason": reason})
 
-    def analytical_plan_context(self, plan: AnalyticalPlan) -> ReviewCompatibilityContext:
+    def analytical_plan_context(self, plan: AnalyticalPlan, *, subject_content_hash: str | None = None) -> ReviewCompatibilityContext:
         """Bind analytical review to the exact plan and finalized canonical model."""
 
         semantic_scope = {
@@ -146,7 +146,10 @@ class ReviewPolicyService:
             review_checkpoint_id=ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN,
             subject_stage="ANALYTICAL_PLANNING",
             subject_artifact_id=plan.plan_id,
-            subject_content_hash=plan.content_hash,
+            # Domain callers retain the semantic model hash by default. The
+            # durable review boundary supplies the immutable artifact-store
+            # hash so the API can bind the assertion to published bytes.
+            subject_content_hash=subject_content_hash or plan.content_hash,
             subject_schema_version=plan.schema_version,
             model_version=plan.plan_version,
             source_schema_fingerprints={
@@ -167,6 +170,8 @@ class ReviewPolicyService:
         compiled_plan: CompiledPlan,
         generated_sql: GeneratedSQL,
         target_config: TargetConfig,
+        *,
+        subject_content_hash: str | None = None,
     ) -> ReviewCompatibilityContext:
         """Bind materialization approval to compiled SQL and controlled target."""
 
@@ -179,7 +184,10 @@ class ReviewPolicyService:
             review_checkpoint_id=ReviewCheckpoint.REVIEW_MATERIALIZATION_PLAN,
             subject_stage="COMPILATION",
             subject_artifact_id=compiled_plan.compiled_plan_id,
-            subject_content_hash=subject_hash,
+            # Domain callers retain the semantic binding by default. The
+            # durable review boundary overrides this with the compiled-plan
+            # artifact-store hash.
+            subject_content_hash=subject_content_hash or subject_hash,
             subject_schema_version=compiled_plan.schema_version,
             model_version=compiled_plan.compiler_version,
             source_schema_fingerprints={

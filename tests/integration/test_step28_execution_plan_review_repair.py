@@ -267,7 +267,12 @@ def test_real_analytical_checkpoint_derives_context_without_provider_handler(tmp
     assert worker.run_once().status == JobStatus.NEEDS_REVIEW.value
     checkpoint_job = control.get_stage_job(run_id=run.run_id, stage_id="REVIEW_ANALYTICAL_PLAN")
     assert checkpoint_job is not None and checkpoint_job.status is JobStatus.NEEDS_REVIEW
-    assert checkpoint_job.review_context == ReviewPolicyService().analytical_plan_context(analytical_plan)
+    subject = control.get_artifact(analytical_plan.plan_id)
+    assert subject is not None
+    expected_context = ReviewPolicyService().analytical_plan_context(analytical_plan).model_copy(
+        update={"subject_content_hash": subject.content_hash, "subject_artifact_id": subject.artifact_id}
+    )
+    assert checkpoint_job.review_context == expected_context
     control.close()
 
 

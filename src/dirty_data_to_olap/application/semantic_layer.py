@@ -188,7 +188,11 @@ class SemanticLayerService:
         if analytical_review is not None:
             if analytical_review.decision is not ReviewDecisionStatus.ACCEPTED:
                 raise SemanticLayerError("REVIEW_REQUIRED: analytical-plan review is not accepted")
-            review_errors = analytical_review.compatibility_errors(ReviewPolicyService().analytical_plan_context(plan))
+            review_errors = analytical_review.compatibility_errors(
+                ReviewPolicyService().analytical_plan_context(plan).model_copy(
+                    update={"subject_content_hash": analytical_review.subject_content_hash}
+                )
+            )
             if review_errors:
                 raise SemanticLayerError("STALE_ANALYTICAL_REVIEW: " + ",".join(review_errors))
         elif compiled_plan.review_state.value != "ACCEPTED":

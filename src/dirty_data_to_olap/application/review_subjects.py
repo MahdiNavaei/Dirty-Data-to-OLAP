@@ -75,7 +75,7 @@ class ReviewCheckpointSubjectResolver:
             return self._identity_contexts(run_id, verified, unresolved)
         if checkpoint is ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN:
             contexts = tuple(
-                self.review_policy.analytical_plan_context(payload)
+                self.review_policy.analytical_plan_context(payload, subject_content_hash=artifact.content_hash).model_copy(update={"subject_artifact_id": artifact.artifact_id})
                 for artifact, payload in verified
                 if artifact.artifact_kind == "AnalyticalPlan" and isinstance(payload, AnalyticalPlan) and payload.plan_id == artifact.artifact_id
             )
@@ -263,7 +263,14 @@ class ReviewCheckpointSubjectResolver:
                 # transport hashes are independently checked above and by
                 # _read_verified; they are deliberately not substituted for
                 # the builder's semantic review hash.
-                contexts.append(self.review_policy.materialization_context(compiled_plan, sql, target))
+                contexts.append(
+                    self.review_policy.materialization_context(
+                        compiled_plan,
+                        sql,
+                        target,
+                        subject_content_hash=compiled_artifact.content_hash,
+                    ).model_copy(update={"subject_artifact_id": compiled_artifact.artifact_id})
+                )
         return ReviewSubjectDerivation(
             contexts=self._unique_contexts(contexts),
             unresolved_subject_ids=tuple(sorted(set(unresolved))),

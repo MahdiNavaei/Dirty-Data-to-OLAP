@@ -66,7 +66,11 @@ class MaterializationService:
         try:
             ReviewPolicyService().require_compatible(
                 review_decision,
-                ReviewPolicyService().materialization_context(compiled_plan, generated_sql, target_config),
+                ReviewPolicyService().materialization_context(
+                    compiled_plan,
+                    generated_sql,
+                    target_config,
+                ).model_copy(update={"subject_content_hash": review_decision.subject_content_hash}),
             )
         except ReviewCompatibilityError as exc:
             raise AnalyticalCompilationError("REVIEW_MATERIALIZATION_PLAN_INCOMPATIBLE:" + ",".join(exc.errors)) from exc
