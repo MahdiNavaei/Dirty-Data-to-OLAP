@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from dirty_data_to_olap.application.jobs import _safe_exception_detail
 from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SourceSelection, SourceSetSelection, source_set_fingerprint
 
 
@@ -23,3 +24,15 @@ def test_source_set_rejects_single_source_and_stale_fingerprint() -> None:
     with pytest.raises(ValueError, match="fingerprint"):
         SourceSetSelection(selections=selections, source_set_fingerprint="stale")
 
+
+def test_worker_exception_detail_is_bounded_and_redacted() -> None:
+    detail = _safe_exception_detail(
+        RuntimeError("planner rejected input\npassword=unsafe token=unsafe postgresql://user:secret@host/db")
+    )
+
+    assert "planner rejected input" in detail
+    assert "password" not in detail.lower()
+    assert "token" not in detail.lower()
+    assert "secret@" not in detail.lower()
+    assert "\n" not in detail and "\r" not in detail
+    assert len(detail) <= 512

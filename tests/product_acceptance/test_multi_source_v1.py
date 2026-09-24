@@ -298,6 +298,16 @@ def _durable_exception_type(job) -> str | None:
     return _safe_diagnostic_code(metadata.get("error_type"))
 
 
+def _durable_exception_detail(job) -> str | None:
+    result = getattr(job, "durable_result", None)
+    if not isinstance(result, dict):
+        return None
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    return _safe_diagnostic_text(metadata.get("error_detail"))
+
+
 _BACKEND_PAGE_SIZE = 100
 _MAX_BACKEND_PAGES = 100
 
@@ -517,6 +527,7 @@ def _failure_runtime_snapshot(*, backend, control_store, artifact_store=None, ru
             "failure_code": _safe_diagnostic_code(job.failure_code),
             "failure_classification": _safe_diagnostic_code(getattr(job, "failure_classification", None)),
             "exception_type": _durable_exception_type(job),
+            "exception_detail": _durable_exception_detail(job),
             "failure_message": _safe_diagnostic_text(job.failure_reason),
             "result_artifact_ids": _safe_diagnostic_ids(job.result_refs),
         }
@@ -710,7 +721,12 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
         failure_code="PROVIDER_UNAVAILABLE",
         failure_reason="provider connection postgresql://user:password@host/example token=unsafe",
         result_refs=(),
-        durable_result={"metadata": {"error_type": "ConnectionError"}},
+        durable_result={
+            "metadata": {
+                "error_type": "ConnectionError",
+                "error_detail": "planner connection was unavailable",
+            }
+        },
     )
     attempts = tuple(
         SimpleNamespace(
@@ -818,6 +834,7 @@ def test_failure_evidence_preserves_failed_run_and_exposes_safe_durable_context(
     assert snapshot["failed_attempts"][0]["attempt_id"] == "attempt-dependency-1"
     assert snapshot["failed_jobs"][0]["job_id"] == "job-dependency-1"
     assert snapshot["failed_jobs"][0]["exception_type"] == "ConnectionError"
+    assert snapshot["failed_jobs"][0]["exception_detail"] == "planner connection was unavailable"
     assert len(snapshot["stage_attempt_counts"]) == 2
     assert len(snapshot["review_checkpoints"]) == 102
     assert snapshot["successful_stage_ids"] == ["SOURCE_DISCOVERY"]
