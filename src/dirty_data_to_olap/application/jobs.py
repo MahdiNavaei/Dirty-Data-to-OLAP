@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
+from threading import Event, Thread
 from typing import Callable, Mapping, Protocol, Sequence
 
 from dirty_data_to_olap.application.platform import (
@@ -489,7 +489,37 @@ class JobWorker:
             self.telemetry.operation(event_name="stage.delivery_started", component="worker", operation="handler_delivery", correlation=correlation, status="STARTED")
             attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.HANDLER_DELIVERY_STARTED.value})
             self._inject_fault("after_handler_delivery_marker", job, attempt)
-            result = self._execute(stage.handler_key, request, probe)
+            heartbeat_stop = Event()
+            heartbeat_errors: list[Exception] = []
+
+            def renew_delivery_lease() -> None:
+                interval = max(0.5, self.lease_seconds / 3)
+                while not heartbeat_stop.wait(interval):
+                    try:
+                        self.control_store.heartbeat_job(
+                            job_id=job.job_id,
+                            worker_id=self.worker_id,
+                            lease_generation=job.lease_generation,
+                            now=_safe_now(self.clock),
+                            lease_seconds=self.lease_seconds,
+                        )
+                    except Exception as exc:
+                        heartbeat_errors.append(exc)
+                        return
+
+            heartbeat_thread = Thread(
+                target=renew_delivery_lease,
+                name=f"{self.worker_id}-lease-heartbeat",
+                daemon=True,
+            )
+            heartbeat_thread.start()
+            try:
+                result = self._execute(stage.handler_key, request, probe)
+                if heartbeat_errors:
+                    raise heartbeat_errors[0]
+            finally:
+                heartbeat_stop.set()
+                heartbeat_thread.join()
             self._inject_fault("after_handler_returns_before_result_record", job, attempt)
             self._inject_fault("after_artifact_publication", job, attempt)
             after = _safe_now(self.clock)

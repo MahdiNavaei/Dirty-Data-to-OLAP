@@ -21,7 +21,7 @@
   "profiling": {
     "metric_policy_version": "order-profile-v1",
     "profile_config_version": "order-profile-config-v1",
-    "null_markers": []
+    "null_markers": [""]
   },
   "quality": {
     "rule_set_id": "order-runtime-quality",

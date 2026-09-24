@@ -979,6 +979,11 @@ def _build_receipt(*, platform, backend, run, binding, records, final_summary, r
     )
     stages = []
     for stage in final_summary.stages:
+        # An unselected optional branch is part of the server-owned plan
+        # vocabulary, but it has no execution attempt and therefore cannot
+        # produce MultiSourceStageEvidence (whose attempts are >= 1).
+        if not stage.selected:
+            continue
         stage_attempts = [item for item in attempts if item.stage_id == stage.stage_id]
         stages.append({
             "stage_id": stage.stage_id,

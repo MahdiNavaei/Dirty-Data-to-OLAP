@@ -42,7 +42,7 @@ from dirty_data_to_olap.domain.contracts.evidence_fusion import (
     SemanticMappingDecision,
 )
 from dirty_data_to_olap.domain.contracts.jobs import FailureClassification, StageExecutionRequest, StageExecutionResult, StageResultStatus
-from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchRequest, SchemaMatchResult
+from dirty_data_to_olap.domain.contracts.schema_matching import SchemaMatchRequest, SchemaMatchResult, SchemaMatchSearchPolicy
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSetSelection, SourceSnapshotResult, stable_digest, stable_id
 from dirty_data_to_olap.domain.contracts.validation import ValidationArtifactBindings
 from dirty_data_to_olap.domain.contracts.semantic import SemanticModel, SemanticValidationResult
@@ -242,7 +242,19 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         source_ids = tuple(sorted(catalogs))
         table_ids = {source_id: tuple(item.table_id for item in catalogs[source_id].tables) for source_id in source_ids}
         selected_columns = {table_id: tuple(item.column_id for catalog in catalogs.values() for item in catalog.columns if item.table_id == table_id) for table_id in {table_id for values in table_ids.values() for table_id in values}}
-        match_request = SchemaMatchRequest(request_id=stable_id("schema-match-request", {"run": request.run_id, "sources": source_ids}), source_ids=source_ids, snapshot_ids={key: snapshots[key].snapshot.snapshot_id for key in source_ids}, selected_table_ids_by_source=table_ids, selected_column_ids_by_table=selected_columns)
+        # Prompt02 deliberately spans heterogeneous dirty sources (for example a
+        # SQL DATE beside a CSV text date, and an integer beside a CSV numeric
+        # string).  Physical type incompatibility remains a recorded structural
+        # risk signal, but must not preclude the official matcher from producing
+        # a review candidate for a semantically corresponding field.
+        match_request = SchemaMatchRequest(
+            request_id=stable_id("schema-match-request", {"run": request.run_id, "sources": source_ids}),
+            source_ids=source_ids,
+            snapshot_ids={key: snapshots[key].snapshot.snapshot_id for key in source_ids},
+            selected_table_ids_by_source=table_ids,
+            selected_column_ids_by_table=selected_columns,
+            search_policy=SchemaMatchSearchPolicy(reject_type_incompatible=False, top_k_per_left_column=5),
+        )
         result = self.multi_source.matching.match(match_request, catalogs, snapshots, profiles=profiles, dependencies=dependencies, artifact_root=self._run_root(request.run_id) / "schema_matching")
         ref = self._publish(request, "SchemaMatchResult", result, artifact_id=stable_id("schema-match-result", {"run": request.run_id, "request": match_request.request_id}), provenance=(match_request.request_id, stable_digest(result.model_dump(mode="json"))), producer="application.schema_matching")
         if getattr(result.status, "value", result.status) != "COMPLETE":
@@ -438,6 +450,11 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
             return None
         if logical_type == "DATE":
             return value if isinstance(value, date) else date.fromisoformat(str(value))
+        if logical_type == "INTEGER":
+            numeric = Decimal(str(value))
+            if numeric != numeric.to_integral_value():
+                raise ValueError(f"non-integral value for INTEGER field: {value!r}")
+            return int(numeric)
         if logical_type == "DECIMAL":
             return value if isinstance(value, Decimal) else Decimal(str(value))
         return str(value) if logical_type == "STRING" else value
@@ -483,7 +500,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
 
         customer_table = make_table("customer_input", "customer", tuple(customer_rows.values()), (("customer_id", "STRING", False), ("customer_name", "STRING", False), ("email", "STRING", True), ("phone", "STRING", True), ("source_count", "INTEGER", False)))
         source_table = make_table("source_input", "source", tuple(source_rows), (("source_id", "STRING", False), ("source_role", "STRING", False)))
-        event_table = make_table("event_input", "order", tuple(event_rows), (("order_id", "STRING", False), ("customer_id", "STRING", True), ("canonical_customer_id", "STRING", True), ("order_date", "DATE", False), ("source_id", "STRING", False), ("quantity", "DECIMAL", False), ("unit_price", "DECIMAL", True)))
+        event_table = make_table("event_input", "order", tuple(event_rows), (("order_id", "STRING", False), ("customer_id", "STRING", True), ("canonical_customer_id", "STRING", True), ("order_date", "DATE", False), ("source_id", "STRING", False), ("quantity", "INTEGER", False), ("unit_price", "DECIMAL", True)))
         dataset = AnalyticalInputDataset(dataset_id=stable_id("analytical-dataset", {"run": request.run_id, "canonical": canonical.model_id, "rows": [row.row_ref for table in (customer_table, source_table, event_table) for row in table.rows]}), canonical_model_id=canonical.model_id, canonical_model_content_hash=canonical.content_hash, tables=(customer_table, source_table, event_table), source_schema_fingerprints={key: catalogs[key].source.schema_fingerprint for key in catalogs}, source_snapshot_fingerprints={key: snapshots[key].snapshot.source_fingerprint or snapshots[key].snapshot.schema_fingerprint for key in snapshots}, allow_literal_sql=False, provenance_refs=(request.run_id, canonical.model_id, *source_refs))
         binding = AnalyticalInputBinding(binding_id=stable_id("input-binding", {"run": request.run_id, "dataset": dataset.dataset_id}), canonical_model_id=canonical.model_id, canonical_model_content_hash=canonical.content_hash, dataset_id=dataset.dataset_id, dataset_content_hash=dataset.content_hash, source_schema_fingerprints=dict(dataset.source_schema_fingerprints), source_snapshot_fingerprints=dict(dataset.source_snapshot_fingerprints), row_counts=dataset.row_counts, provenance_refs=(dataset.dataset_id, canonical.model_id))
         relationships = tuple(item for _ref, item in self._all(request, "RelationshipDecision", RelationshipDecision).values())
@@ -496,7 +513,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         time_rel = stable_id("time_role", {"run": request.run_id})
         fact = FactSpec(fact_id="fact_order", table_name="fact_order", input_table_id="event_input", fact_type=FactType.TRANSACTION, canonical_event_type_id="entity_order", canonical_event_refs=tuple(row.canonical_reference for row in event_table.rows), grain_spec_id="grain_order", dimension_foreign_keys=(FactForeignKeySpec(relationship_ref=customer_rel.decision_id, dimension_id="dim_customer", fact_column=_CUSTOMER_KEY, dimension_key_column=_CUSTOMER_KEY, canonical_entity_type_id="entity_customer", input_reference_column="canonical_customer_id"), FactForeignKeySpec(relationship_ref=source_rel.decision_id, dimension_id="dim_source", fact_column=_SOURCE_KEY, dimension_key_column=_SOURCE_KEY, canonical_entity_type_id="entity_source", input_reference_column="source_id"), FactForeignKeySpec(relationship_ref=time_rel, relationship_scope=FactRelationshipScope.ANALYTICAL_TIME_ROLE, dimension_id="dim_date", fact_column=_DATE_KEY, dimension_key_column=_DATE_KEY, canonical_entity_type_id="cet_date", input_reference_column="order_date")), degenerate_dimension_columns=("source_id", "customer_id"), measure_ids=("measure_quantity",), date_role_columns=("order_date",), relationship_refs=(customer_rel.decision_id, source_rel.decision_id, time_rel), provenance_refs=lineage)
         grain = GrainSpec(grain_id="grain_order", fact_id="fact_order", human_readable_grain="one row per source and source-local order key", key_columns=("source_id", "order_id"), null_policy=GrainNullPolicy.REJECT_NULLS, observed_row_count=0, duplicate_key_count=0, evidence_refs=source_refs, provenance_refs=lineage)
-        measure = MeasureSpec(measure_id="measure_quantity", fact_id="fact_order", field_name="quantity", semantic_name="Order quantity", aggregation_class=AggregationClass.ADDITIVE, aggregation_rule="SUM(quantity)", unit_semantics="source quantity units", currency_semantics="not applicable; unit price is retained as a non-aggregated attribute", logical_type="DECIMAL", nullable=False, domain_assertion_refs=("prompt02:quantity",), provenance_refs=lineage)
+        measure = MeasureSpec(measure_id="measure_quantity", fact_id="fact_order", field_name="quantity", semantic_name="Order quantity", aggregation_class=AggregationClass.ADDITIVE, aggregation_rule="SUM(quantity)", unit_semantics="source quantity units", currency_semantics="not applicable; unit price is retained as a non-aggregated attribute", logical_type="INTEGER", nullable=False, domain_assertion_refs=("prompt02:quantity",), provenance_refs=lineage)
         planning = AnalyticalPlanningRequest(request_id=stable_id("analytical-request", {"run": request.run_id, "canonical": canonical.model_id}), dimensions=(customer_dimension, date_dimension, source_dimension), facts=(fact,), grains=(grain,), measures=(measure,), accepted_relationship_refs=(customer_rel.decision_id, source_rel.decision_id), domain_assertion_refs=("prompt02:source-roles", "prompt02:quantity"), provenance_refs=lineage)
         return dataset, binding, planning
 

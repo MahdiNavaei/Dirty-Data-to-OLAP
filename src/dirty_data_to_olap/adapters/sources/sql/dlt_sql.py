@@ -388,11 +388,28 @@ class DltSqlSourceAdapter(SourceAdapter):
         chunk_size: int,
         *,
         security_context: AssuredSqlOperation,
+        transaction_holder: dict[str, Any] | None = None,
     ) -> Any:
         if security_context.assurance.status.value != "PASS":
             raise _failure(SourceFailureKind.ACCESS_FAILED, "initialize_dlt_sql_source", "dlt requires passed database security assurance")
         try:
             from dlt.sources.sql_database import sql_database
+            table_loader_class = None
+            if transaction_holder is not None:
+                from dlt.sources.sql_database.helpers import TableLoader
+
+                class _Prompt02TransactionTableLoader(TableLoader):
+                    def _load_rows(self, query, backend_kwargs):
+                        connection = transaction_holder.get("connection")
+                        if connection is None:
+                            raise RuntimeError("Prompt02 SQL snapshot transaction is unavailable")
+                        result = connection.execution_options(yield_per=self.chunk_size).execute(query)
+                        try:
+                            yield from self._convert_result(result, backend_kwargs)
+                        finally:
+                            result.close()
+
+                table_loader_class = _Prompt02TransactionTableLoader
             return sql_database(
                 credentials=engine,
                 table_names=list(table_names) if table_names else None,
@@ -404,6 +421,7 @@ class DltSqlSourceAdapter(SourceAdapter):
                 table_adapter_callback=None,
                 query_adapter_callback=None,
                 engine_adapter_callback=None,
+                table_loader_class=table_loader_class,
             )
         except Exception as error:
             raise _failure(SourceFailureKind.ACCESS_FAILED, "initialize_dlt_sql_source", f"dlt SQL source initialization failed ({error.__class__.__name__})") from None
@@ -458,9 +476,11 @@ class DltSqlSourceAdapter(SourceAdapter):
         security_context = self._require_security_from_catalog(catalog, selection)
         engine = self._engine(profile, source_id=security_context.source_id, runtime_credentials=security_context.runtime_credentials)
         snapshot_id = snapshot_id_for(catalog.source_id, catalog.source.schema_fingerprint, catalog.source.selection_scope, selection.extraction, execution_context_id)
-        # dlt receives the engine, not the specific connection used by a
-        # separate transaction.  The extraction is therefore best-effort.
-        consistency = SnapshotConsistency.BEST_EFFORT
+        # All selected tables are read through one explicit read transaction.
+        # The loader below reuses this connection instead of letting dlt open a
+        # separate connection per table, so the published snapshot can carry a
+        # truthful transaction-scoped consistency guarantee.
+        consistency = SnapshotConsistency.TRANSACTION_SCOPED
         snapshot = SourceSnapshot(source_id=catalog.source_id, snapshot_id=snapshot_id, execution_context_id=execution_context_id, schema_fingerprint=catalog.source.schema_fingerprint, source_fingerprint=catalog.source.source_fingerprint, observed_at=utc_now(), selection_scope=catalog.source.selection_scope, observation_scope=ObservationScope(mode=ObservationMode.BOUNDED if selection.extraction.max_rows is not None else ObservationMode.FULL, chunk_size=selection.extraction.chunk_size, max_rows=selection.extraction.max_rows, max_rows_scope=selection.extraction.max_rows_scope, input_records_observed=0), extraction_policy=selection.extraction, consistency=consistency, adapter_reference=catalog.source.adapter_reference)
         stager = SourceFaithfulParquetStager(self.project_root, adapter_reference=catalog.source.adapter_reference)
         batches = []
@@ -469,9 +489,16 @@ class DltSqlSourceAdapter(SourceAdapter):
         observed = 0
         staged = 0
         resource_iterator = None
+        transaction_holder: dict[str, Any] = {}
+        transaction_connection = None
+        transaction = None
         try:
+            isolation_level = "SERIALIZABLE" if engine.dialect.name == "mssql" else "REPEATABLE READ"
+            transaction_connection = engine.connect().execution_options(isolation_level=isolation_level)
+            transaction = transaction_connection.begin()
+            transaction_holder["connection"] = transaction_connection
             names = [table.physical_name for table in catalog.tables]
-            source = self._dlt_database(engine, names, catalog.source.selection_scope, selection.extraction.chunk_size, security_context=security_context)
+            source = self._dlt_database(engine, names, catalog.source.selection_scope, selection.extraction.chunk_size, security_context=security_context, transaction_holder=transaction_holder)
             resource_by_name = {str(resource.name): resource for resource in source.resources.values()}
             for table in catalog.tables:
                 if (
@@ -534,13 +561,21 @@ class DltSqlSourceAdapter(SourceAdapter):
                 table_observations.append(TableSnapshotObservation(table_id=table.table_id, rows_observed=table_ordinal, status=table_status))
                 if selection.extraction.max_rows_scope is MaxRowsScope.SOURCE_WIDE and selection.extraction.max_rows is not None and observed >= selection.extraction.max_rows:
                     continue
+            transaction.commit()
         except SourceIngestionError:
+            if transaction is not None and transaction.is_active:
+                transaction.rollback()
             stager.discard_batches(batches)
             raise
         except Exception:
+            if transaction is not None and transaction.is_active:
+                transaction.rollback()
             stager.discard_batches(batches)
             raise _failure(SourceFailureKind.EXTRACTION_FAILED, "extract_sql_source", "dlt SQL extraction failed") from None
         finally:
+            transaction_holder.clear()
+            if transaction_connection is not None:
+                transaction_connection.close()
             engine.dispose()
         accounting = RowAccounting(input_records_observed=observed, successfully_staged_records=staged, explicitly_quarantined_records=0, unresolved_records=0, accounting_complete=True)
         result = SourceSnapshotResult(snapshot=snapshot.model_copy(update={"observation_scope": snapshot.observation_scope.model_copy(update={"input_records_observed": observed})}), batches=tuple(batches), record_references=tuple(references), accounting=accounting, metrics=ExtractionMetrics(input_records_observed=observed, staged_records=staged, batch_count=len(batches), configured_chunk_size=selection.extraction.chunk_size, bytes_staged=sum((self.project_root / batch.artifact_location).stat().st_size for batch in batches)), table_observations=tuple(table_observations))
