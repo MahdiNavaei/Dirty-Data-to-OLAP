@@ -132,11 +132,38 @@ class ReviewCheckpointSubjectResolver:
             for artifact, payload in verified
             if artifact.artifact_kind == "CanonicalIdentityProposal" and isinstance(payload, CanonicalIdentityProposal) and payload.proposal_id == artifact.artifact_id
         ]
-        er_results = {
-            artifact.artifact_id: payload
-            for artifact, payload in verified
-            if artifact.artifact_kind == "EntityResolutionResult" and isinstance(payload, EntityResolutionResult)
-        }
+        er_results: dict[str, EntityResolutionResult] = {}
+        verified_er_ids: set[str] = set()
+
+        def bind_er_result(artifact: ArtifactRef, payload: EntityResolutionResult) -> None:
+            # CanonicalIdentityProposal.er_result_refs bind the proposal to
+            # the durable ER output references carried inside the typed
+            # EntityResolutionResult.  Retain both the outer published
+            # artifact identity and each verified nested result reference.
+            er_results[artifact.artifact_id] = payload
+            verified_er_ids.add(artifact.artifact_id)
+            for result_artifact in payload.artifacts:
+                er_results[result_artifact.artifact_id] = payload
+
+        for artifact, payload in verified:
+            if artifact.artifact_kind == "EntityResolutionResult" and isinstance(payload, EntityResolutionResult):
+                bind_er_result(artifact, payload)
+
+        # REVIEW_CANONICAL_IDENTITY directly depends on the proposal.  The
+        # proposal's typed references may therefore point to the ER artifact
+        # without that artifact being present in the review job's direct input
+        # list.  Rehydrate only run-scoped, published, integrity-verified ER
+        # outputs from the durable artifact registry; no review context is
+        # synthesized and no unregistered payload is accepted.
+        for candidate in self.control_store.list_artifacts(run_id=run_id, artifact_kind="EntityResolutionResult", limit=10000):
+            if candidate.artifact_id in verified_er_ids:
+                continue
+            try:
+                actual, payload = self._read_verified(run_id, candidate)
+            except (KeyError, OSError, PlatformError, ValueError):
+                continue
+            if isinstance(payload, EntityResolutionResult):
+                bind_er_result(actual, payload)
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, proposal in proposals:
             hypothesis = hypotheses.get(proposal.hypothesis_artifact_id)
