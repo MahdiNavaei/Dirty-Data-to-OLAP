@@ -377,7 +377,80 @@ def _all_reviews(*, backend, run_id: str, principal) -> tuple[Any, ...]:
     )
 
 
-def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal) -> dict[str, Any]:
+def _evidence_fusion_projection(*, control_store, artifact_store, run_id: str) -> tuple[dict[str, Any], ...]:
+    """Expose bounded fusion outcomes without retaining source-level payloads."""
+
+    views = []
+    refs = control_store.list_artifacts(run_id=run_id, artifact_kind="EvidenceFusionResult", limit=10000)
+    for ref in refs:
+        payload = json.loads(artifact_store.read(ref).decode("utf-8"))
+        failures = payload.get("failures", ())
+        relationships = payload.get("relationships", ())
+        mappings = payload.get("mappings", ())
+        views.append(
+            {
+                "artifact_id": _safe_diagnostic_id(ref.artifact_id),
+                "completeness": _safe_diagnostic_code(payload.get("completeness")),
+                "failure_kinds": tuple(
+                    sorted(
+                        item
+                        for item in (_safe_diagnostic_code(value.get("kind")) for value in failures if isinstance(value, dict))
+                        if item is not None
+                    )
+                ),
+                "failure_details": tuple(
+                    detail
+                    for detail in (
+                        _safe_diagnostic_text(value.get("detail"))
+                        for value in failures
+                        if isinstance(value, dict)
+                    )
+                    if detail is not None
+                )[:20],
+                "relationship_count": len(relationships) if isinstance(relationships, list) else 0,
+                "relationship_decision_states": tuple(
+                    sorted(
+                        item
+                        for item in (
+                            _safe_diagnostic_code(value.get("decision_state"))
+                            for value in relationships
+                            if isinstance(value, dict)
+                        )
+                        if item is not None
+                    )
+                ),
+                "relationship_missing_evidence_counts": tuple(
+                    sorted(
+                        len(value.get("missing_evidence_refs", ()))
+                        for value in relationships
+                        if isinstance(value, dict)
+                    )
+                ),
+                "mapping_count": len(mappings) if isinstance(mappings, list) else 0,
+                "mapping_decision_states": tuple(
+                    sorted(
+                        item
+                        for item in (
+                            _safe_diagnostic_code(value.get("decision_state"))
+                            for value in mappings
+                            if isinstance(value, dict)
+                        )
+                        if item is not None
+                    )
+                ),
+                "mapping_missing_evidence_counts": tuple(
+                    sorted(
+                        len(value.get("missing_evidence_refs", ()))
+                        for value in mappings
+                        if isinstance(value, dict)
+                    )
+                ),
+            }
+        )
+    return tuple(views)
+
+
+def _failure_runtime_snapshot(*, backend, control_store, artifact_store=None, run_id: str, principal) -> dict[str, Any]:
     """Read safe durable projections only; never read source artifacts or queue payloads."""
 
     diagnostic_errors: list[str] = []
@@ -484,6 +557,18 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
             None,
         )
 
+    evidence_fusion_views = None
+    if control_store is not None and artifact_store is not None:
+        evidence_fusion_views = collect(
+            "evidence_fusion",
+            lambda: _evidence_fusion_projection(
+                control_store=control_store,
+                artifact_store=artifact_store,
+                run_id=run_id,
+            ),
+            None,
+        )
+
     failed_statuses = {"FAILED", "BLOCKED", "CANCELLED"}
     failed_stage_ids = {
         item["stage_id"]
@@ -552,6 +637,7 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
         "stage_attempt_counts": attempt_counts,
         "review_checkpoints": review_views,
         "artifacts": artifact_views,
+        "evidence_fusion": evidence_fusion_views,
         "source_snapshot_artifact_count": len(snapshot_artifacts),
         "all_four_selected_source_snapshots_produced": None if artifact_views is None else len(snapshot_artifacts) == 4,
         "materialization_reached": materialization_reached,
@@ -560,7 +646,7 @@ def _failure_runtime_snapshot(*, backend, control_store, run_id: str, principal)
     }
 
 
-def _write_failure_evidence(*, run_id: str | None, error: BaseException, backend=None, control_store=None, principal=None) -> None:
+def _write_failure_evidence(*, run_id: str | None, error: BaseException, backend=None, control_store=None, artifact_store=None, principal=None) -> None:
     diagnostic_errors = []
     runtime_snapshot = None
     if run_id is not None and backend is not None and principal is not None:
@@ -568,6 +654,7 @@ def _write_failure_evidence(*, run_id: str | None, error: BaseException, backend
             runtime_snapshot = _failure_runtime_snapshot(
                 backend=backend,
                 control_store=control_store,
+                artifact_store=artifact_store,
                 run_id=run_id,
                 principal=principal,
             )
@@ -1098,6 +1185,7 @@ def test_multi_source_v1_real_pipeline_and_independent_oracle(tmp_path: Path) ->
             error=error,
             backend=backend,
             control_store=None if platform is None else platform.control_store,
+            artifact_store=None if platform is None else platform.artifact_store,
             principal=principal,
         )
         raise
