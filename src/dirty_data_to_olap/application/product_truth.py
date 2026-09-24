@@ -113,7 +113,8 @@ def build_multi_source_truth_and_accounting(
         if row.get("role") != "registry":
             continue
         mapping = maps.get(str(row["record_ref"]))
-        customer_id = row.get("customer_id")
+        logical_values = row.get("logical_values", {})
+        customer_id = logical_values.get("customer_id")
         if mapping is not None and customer_id is not None:
             registry_key_to_canonical.setdefault(str(customer_id), mapping.canonical_entity_id)
 
