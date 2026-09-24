@@ -192,7 +192,14 @@ class ReviewCheckpointSubjectResolver:
                 er_hashes[result.spec.entity_family] = stable_digest(result.model_dump(mode="json"))
             else:
                 try:
-                    contexts.append(self.canonical_finalization.identity_context(hypothesis, proposal, er_hashes))
+                    contexts.append(
+                        self.canonical_finalization.identity_context(
+                            hypothesis,
+                            proposal,
+                            er_hashes,
+                            subject_content_hash=artifact.content_hash,
+                        )
+                    )
                 except ValueError:
                     unresolved.append(artifact.artifact_id)
         return ReviewSubjectDerivation(

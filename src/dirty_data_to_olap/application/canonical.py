@@ -351,7 +351,14 @@ class CanonicalFinalizationService:
     def __init__(self, review_policy: ReviewPolicyService | None = None) -> None:
         self.review_policy = review_policy or ReviewPolicyService()
 
-    def identity_context(self, hypothesis: CanonicalModelHypothesis, identity_proposal: CanonicalIdentityProposal, er_hashes: Mapping[str, str] | None = None) -> ReviewCompatibilityContext:
+    def identity_context(
+        self,
+        hypothesis: CanonicalModelHypothesis,
+        identity_proposal: CanonicalIdentityProposal,
+        er_hashes: Mapping[str, str] | None = None,
+        *,
+        subject_content_hash: str | None = None,
+    ) -> ReviewCompatibilityContext:
         if identity_proposal.hypothesis_artifact_id != hypothesis.artifact_id:
             raise CanonicalizationError("STALE_REVIEW", "identity proposal does not bind the hypothesis")
         supplied_er_hashes = dict(er_hashes or {})
@@ -363,7 +370,10 @@ class CanonicalFinalizationService:
             review_checkpoint_id=ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY,
             subject_stage="CANONICAL_IDENTITY_PROPOSAL",
             subject_artifact_id=identity_proposal.proposal_id,
-            subject_content_hash=identity_proposal.content_hash,
+            # Domain callers retain the semantic model hash by default.  The
+            # durable review boundary supplies the immutable artifact-store
+            # hash so the API can bind the assertion to the published bytes.
+            subject_content_hash=subject_content_hash or identity_proposal.content_hash,
             subject_schema_version=identity_proposal.schema_version,
             model_version=hypothesis.model_version,
             source_schema_fingerprints=fingerprints,
@@ -396,7 +406,15 @@ class CanonicalFinalizationService:
                 raise CanonicalizationError("MISSING_REQUIRED_ER", family)
             CanonicalIdentityProposalService._validate_er_result_compatibility(hypothesis, result, family)
         try:
-            self.review_policy.require_compatible(identity_review, self.identity_context(hypothesis, identity_proposal, er_hashes))
+            self.review_policy.require_compatible(
+                identity_review,
+                self.identity_context(
+                    hypothesis,
+                    identity_proposal,
+                    er_hashes,
+                    subject_content_hash=identity_review.subject_content_hash,
+                ),
+            )
         except ReviewCompatibilityError as error:
             raise CanonicalizationError("STALE_REVIEW", str(error)) from error
         if any(requirement is EntityResolutionRequirement.ER_REQUIRED for requirement in hypothesis.entity_resolution_requirements.values()) and identity_review.decision is ReviewDecisionStatus.SKIPPED:
