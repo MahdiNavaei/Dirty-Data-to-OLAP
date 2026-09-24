@@ -308,7 +308,11 @@ def test_real_materialization_checkpoint_uses_published_target_config_and_resume
     assert checkpoint is not None and checkpoint.status is JobStatus.NEEDS_REVIEW
     assert control.get_stage_job(run_id=run.run_id, stage_id="MATERIALIZATION") is None
     assert calls == []
-    expected_context = ReviewPolicyService().materialization_context(compiled, generated, target)
+    subject = control.get_artifact(compiled.compiled_plan_id)
+    assert subject is not None
+    expected_context = ReviewPolicyService().materialization_context(compiled, generated, target).model_copy(
+        update={"subject_content_hash": subject.content_hash, "subject_artifact_id": subject.artifact_id}
+    )
     assert checkpoint.review_context == expected_context
     assert {ref.artifact_kind for ref in control.list_artifacts(run_id=run.run_id)} >= {"CompiledPlan", "GeneratedSQL", "TargetConfig"}
 
