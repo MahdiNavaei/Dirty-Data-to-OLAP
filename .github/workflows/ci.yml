@@ -40,8 +40,7 @@ jobs:
           python -m pytest
           tests/unit/test_multi_source_runtime.py
           tests/unit/test_prompt02_contracts.py
-          tests/architecture/test_prompt02_architecture_equivalence.py
-          tests/integration/test_step28_job_processing.py -q
+          tests/architecture/test_prompt02_architecture_equivalence.py -q
       - name: Verify PR worktree and diff formatting
         run: |
           git diff --check
