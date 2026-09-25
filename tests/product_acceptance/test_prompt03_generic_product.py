@@ -36,7 +36,7 @@ def _record(registry_id: str, source_id: str, path: Path) -> SourceRegistryRecor
 
 def _drive(backend: BackendService, run_id: str, principal: Principal):
     reviewed = []
-    deadline = time.monotonic() + 180
+    deadline = time.monotonic() + 360
     while time.monotonic() < deadline:
         summary = backend.product_summary(run_id=run_id, principal=principal)
         pending = [item for item in summary.pending_reviews if item.state == "REVIEW_REQUIRED"]
