@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Event
+import time
 
 import pytest
 
@@ -24,13 +26,13 @@ from dirty_data_to_olap.domain.contracts.platform import RunRecord
 from dirty_data_to_olap.domain.contracts.source import stable_id
 
 
-def _command(run_id: str) -> ExecutionCommand:
+def _command(run_id: str, *, action: ExecutionAction = ExecutionAction.SUBMIT, key: str = "backup-recovery") -> ExecutionCommand:
     return ExecutionCommand(
-        command_id=stable_id("step35-command", {"run": run_id}),
+        command_id=stable_id("step35-command", {"run": run_id, "action": action.value, "key": key}),
         run_id=run_id,
-        action=ExecutionAction.SUBMIT,
+        action=action,
         idempotency_scope=f"step35:{run_id}",
-        idempotency_key="backup-recovery",
+        idempotency_key=key,
         request_fingerprint="a" * 64,
         principal_subject="step35-test",
         principal_source="TEST",
@@ -109,6 +111,48 @@ class _IdleWorker:
 class _FailingSubmission:
     def submit_command(self, *, command, run):
         raise OSError("control-store-backed delivery is unavailable")
+
+
+class _GatePool:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.first_started = Event()
+        self.release = Event()
+        self.shutdown_requested = False
+
+    def pump(self):
+        self.calls += 1
+        if self.calls == 1:
+            self.first_started.set()
+            self.release.wait(2)
+        return ()
+
+    def request_shutdown(self) -> None:
+        self.shutdown_requested = True
+
+
+def test_local_submission_replays_wakeup_arriving_during_active_pump(tmp_path: Path) -> None:
+    control = SQLiteControlStore(tmp_path / "control.sqlite", project_root=tmp_path)
+    run = control.create_run(RunRecord(run_id="run-wake", project_id="wake", configuration_fingerprint="cfg"))
+    pool = _GatePool()
+    submission = LocalProductExecutionSubmission(control, pool)
+    try:
+        first = submission.submit_command(command=_command(run.run_id), run=run)
+        assert first.status == "ACCEPTED"
+        assert pool.first_started.wait(2)
+
+        second = submission.submit_command(command=_command(run.run_id, action=ExecutionAction.RESUME, key="resume"), run=run)
+        assert second.status == "ACCEPTED"
+        pool.release.set()
+
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and pool.calls < 2:
+            time.sleep(0.01)
+        assert pool.calls >= 2
+        assert len(control.list_jobs(run_id=run.run_id)) == 2
+    finally:
+        submission.close()
+        control.close()
 
 
 def test_shutdown_stops_new_claims_and_submission_after_close_is_unavailable(tmp_path: Path) -> None:

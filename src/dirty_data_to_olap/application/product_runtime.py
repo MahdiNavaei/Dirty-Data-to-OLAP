@@ -434,6 +434,7 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
         self.pool = pool
         self._lock = Lock()
         self._thread: Thread | None = None
+        self._wake_pending = False
         self._closed = False
 
     def submit_command(self, *, command, run):
@@ -457,6 +458,7 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
         with self._lock:
             if self._closed:
                 return
+            self._wake_pending = True
             if self._thread is not None and self._thread.is_alive():
                 return
             self._thread = Thread(target=self._pump, name="step29-product-worker", daemon=True)
@@ -464,7 +466,15 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
 
     def _pump(self) -> None:
         try:
-            self.pool.pump()
+            while True:
+                with self._lock:
+                    if self._closed:
+                        return
+                    self._wake_pending = False
+                self.pool.pump()
+                with self._lock:
+                    if self._closed or not self._wake_pending:
+                        return
         finally:
             with self._lock:
                 self._thread = None
