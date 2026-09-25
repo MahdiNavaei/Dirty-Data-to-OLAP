@@ -1,8 +1,8 @@
 schema_version: "product-completion-state-v1"
 state_scope: "Prompt01 original-product audit; separate from MASTER_EXECUTION_STATE"
 repository: "MahdiNavaei/Dirty-Data-to-OLAP"
-audited_head: "32b5a0d6e613044d17e4381f1b7e50f8683b52fa"
-branch: "main"
+audited_head: "2762d1eed7add2e06e583a31bf4a2347b2203aef"
+branch: "codex/prompt03-generic-product"
 workflow:
   last_completed_specialist_step: 41
   terminal_specialist_state: "G0-G15_PASS"
@@ -40,24 +40,28 @@ product_acceptance:
   original_v1_status: "PENDING"
   overall_status: "AUDIT_COMPLETE_ACCEPTANCE_PENDING"
   multi_source_status: "NOT_ACCEPTED_SINGLE_SOURCE_PRODUCT_PATH"
-  generic_product_status: "NOT_ACCEPTED_ORDER_SPECIFIC_POLICY"
+  generic_product_status: "PASS_LOCAL_TELEMETRY_BOUNDED"
   human_review_status: "PARTIAL_FOUR_CHECKPOINT_ACCEPT_ONLY"
   output_export_status: "PARTIAL_NO_COMPLETE_PRODUCT_EXPORT"
   g6_status: "PASS_BOUNDED_STEP29_SINGLE_SOURCE_ORDER_PATH"
   g7_status: "PASS_BOUNDED_STEP29_LOCAL_PRODUCT_PATH"
   independent_multi_source_acceptance_executed: true
-  independent_generic_acceptance_executed: false
+  independent_generic_acceptance_executed: true
+  prompt03_final_run: "run_c99d8fea7e44ab363b37a952c5d3eea9"
+  prompt03_tested_code_commit: "2762d1eed7add2e06e583a31bf4a2347b2203aef"
+  prompt03_g6_status: "PASS_ELIGIBLE_LOCAL"
+  prompt03_wrapper_status: "DURABLE_RUN_PASS_REPLAY_WRAPPER_LIVENESS_LIMITED"
   complete_review_action_matrix_executed: false
   safe_export_acceptance_executed: false
   final_product_acceptance: "PENDING"
 next_product_completion_prompt:
-  number: 3
-  title: "Generic product composition and acceptance"
+  number: 4
+  title: "Review contract/API/UI completion"
   status: "NOT_STARTED"
-  specification: "04_GENERIC_PRODUCT_ACCEPTANCE_SPEC.md"
+  specification: "05_REVIEW_AND_EXPORT_ACCEPTANCE_SPEC.md"
   prompt02_handoff: "BLOCKED_LIVE_ACCEPTANCE_PENDING"
 future_prompts:
-  prompt03: "NOT_STARTED"
+  prompt03: "PASS_LOCAL_TELEMETRY_BOUNDED"
   prompt04: "NOT_STARTED"
   prompt05: "NOT_STARTED"
   prompt06: "NOT_STARTED"
@@ -66,7 +70,10 @@ evidence_boundary:
   evidence_note: "Prompt02 CI executed against the disposable estate but failed before product execution; no PASS receipt exists"
   audit_time_local_step29_test: "1 failed, 2 passed"
   audit_time_local_step29_failure: "Worker heartbeat lease fence conflict after provider-enabled rerun; not repaired in Prompt01"
-  oracle_separate_from_runtime: "REQUIRED_NOT_YET_EXECUTED"
+  oracle_separate_from_runtime: "PASS_LOCAL_PROMPT03"
+  prompt03_run: "run_c99d8fea7e44ab363b37a952c5d3eea9"
+  prompt03_replay: "PASS_LOCAL_DUCKDB_TRUTH_ACCOUNTING_REPLAY"
+  prompt03_ci: "NOT_RUN_BY_SCOPE"
   production_readiness: "NOT_CLAIMED"
   oracle_support: "NOT_CLAIMED"
   calibrated_probability_support: "NOT_CLAIMED"
