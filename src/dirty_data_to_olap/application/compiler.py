@@ -65,6 +65,7 @@ class CompilationArtifactPublisher:
         compiled_plan: CompiledPlan,
         generated_sql: GeneratedSQL,
         target_config: TargetConfig,
+        policy_provenance_refs: tuple[str, ...] = (),
     ) -> CompilationOutputRefs:
         if compiled_plan.generated_sql_id != generated_sql.generated_sql_id or compiled_plan.generated_sql_hash != generated_sql.sql_hash:
             raise AnalyticalCompilationError("compiler outputs are not bound to the same GeneratedSQL")
@@ -86,7 +87,7 @@ class CompilationArtifactPublisher:
                 media_type="application/json",
                 producer="application.compiler",
                 logical_key=f"runs/{run_id}/artifacts/{artifact_id}.json",
-                provenance_refs=tuple(str(item) for item in provenance),
+                provenance_refs=tuple(dict.fromkeys(str(item) for item in (*policy_provenance_refs, *provenance))),
             )
             ref = self.artifact_store.publish(manifest, value.model_dump_json().encode("utf-8"))
             refs.append(self.control_store.register_artifact(ref))

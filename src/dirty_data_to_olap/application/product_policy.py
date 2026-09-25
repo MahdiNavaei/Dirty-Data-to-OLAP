@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import date
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -48,6 +49,7 @@ from dirty_data_to_olap.domain.contracts.quality import (
     Repairability,
 )
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSnapshotResult, stable_id
+from dirty_data_to_olap.domain.contracts.product import ProductPolicyBinding
 
 
 class OrderProductPolicy:
@@ -58,6 +60,12 @@ class OrderProductPolicy:
             raise ValueError("product policy is not the order product policy")
         self.version = str(self.data["version"])
         self.provenance = f"config:{self.path.as_posix()}"
+        self.product_id = str(self.data["product_id"])
+        self.content_fingerprint = hashlib.sha256(self.path.read_bytes()).hexdigest()
+
+    @property
+    def binding(self) -> ProductPolicyBinding:
+        return ProductPolicyBinding(product_id=self.product_id, version=self.version, content_fingerprint=self.content_fingerprint, provenance_ref=self.provenance)
 
     @classmethod
     def load(cls, root: Path) -> "OrderProductPolicy":
@@ -71,6 +79,54 @@ class OrderProductPolicy:
         if len(catalog.tables) == 1:
             return catalog.tables[0]
         raise ValueError("the product policy source table is not present in the discovered catalog")
+
+    @classmethod
+    def source_role(cls, catalog: SourceCatalog) -> str:
+        source_id = catalog.source_id.casefold()
+        if any(token in source_id for token in ("crm", "erp", "customer", "account")):
+            return "registry"
+        if any(token in source_id for token in ("sales", "legacy", "csv", "event")):
+            return "event"
+        return "event" if any(cls.column(catalog, table.table_id, ("order_id", "ticket_id", "sale_key")) is not None and cls.column(catalog, table.table_id, ("order_date", "booked_on", "sale_day")) is not None for table in catalog.tables) else "registry"
+
+    @classmethod
+    def role_table(cls, catalog: SourceCatalog):
+        role = cls.source_role(catalog)
+        for table in catalog.tables:
+            names = {item.physical_name.casefold() for item in catalog.columns if item.table_id == table.table_id}
+            if role == "registry" and {"customer_id", "customer_name"}.issubset(names):
+                return table
+            if role == "event" and (names & {"order_id", "ticket_id", "sale_key"}):
+                return table
+        return cls.source_table(catalog)
+
+    @classmethod
+    def logical_value(cls, catalog: SourceCatalog, table_id: str, values: Mapping[str, Any], logical_name: str) -> Any:
+        aliases = {
+            "customer_id": ("customer_id", "crm_customer_id", "account_no", "account_id", "customer_code", "buyer_ref", "client_code", "customer_ref"),
+            "customer_id_ref": ("customer_id_ref", "customer_id", "crm_customer_id", "account_no", "account_id", "customer_code", "buyer_ref", "client_code", "customer_ref"),
+            "customer_name": ("customer_name", "full_name", "buyer_name", "client_name", "account_name", "name"),
+            "customer_email": ("email", "email_addr", "buyer_email", "customer_email", "client_email"),
+            "customer_phone": ("phone", "phone_e164", "buyer_phone", "client_phone"),
+            "order_id": ("order_id", "ticket_id", "sale_key"),
+            "order_date": ("order_date", "booked_on", "sale_day"),
+            "quantity": ("quantity", "units", "qty"),
+            "unit_price": ("unit_price", "price_each"),
+        }
+        column = cls.column(catalog, table_id, aliases[logical_name])
+        return None if column is None else values.get(column.physical_name)
+
+    def build_dataset_and_request(self, *, run_id: str, catalog: SourceCatalog, snapshot: SourceSnapshotResult, canonical, project_root: Path, table_name: str, column_types: Mapping[str, str]):
+        from dirty_data_to_olap.application.product_input import build_order_dataset
+        dataset, binding = build_order_dataset(run_id=run_id, catalog=catalog, snapshot=snapshot, canonical=canonical, project_root=project_root, table_name=table_name, column_types=column_types)
+        return dataset, binding
+
+    def build_truth_and_accounting(self, **kwargs):
+        if "source_records" in kwargs:
+            from dirty_data_to_olap.application.product_truth import build_multi_source_truth_and_accounting
+            return build_multi_source_truth_and_accounting(policy=self, **kwargs)
+        from dirty_data_to_olap.application.product_truth import build_order_truth_and_accounting
+        return build_order_truth_and_accounting(policy=self, **kwargs)
 
     @staticmethod
     def column(catalog: SourceCatalog, table_id: str, names: str | Sequence[str]):
@@ -295,3 +351,34 @@ class OrderProductPolicy:
             deferred_concepts=dict(self.data["analytical"]["deferred_concepts"]),
             provenance_refs=(self.provenance, materialization_id),
         )
+
+
+class ProductPolicyRegistry:
+    """Bounded resolver for explicitly selected, repository-owned policies."""
+
+    POLICY_FILES = {
+        "order": "order_v1.json",
+        "telemetry": "telemetry_v1.json",
+    }
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root).resolve()
+
+    def resolve(self, *, product_id: str, version: str, fingerprint: str | None = None):
+        if product_id not in self.POLICY_FILES:
+            raise ValueError(f"unknown product policy: {product_id}")
+        path = self.root / "config" / "product" / self.POLICY_FILES[product_id]
+        if not path.is_file():
+            raise ValueError(f"registered product policy is unavailable: {product_id}")
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if fingerprint is not None and fingerprint != actual:
+            raise ValueError(f"product policy fingerprint is incompatible with {product_id}:{version}")
+        policy = OrderProductPolicy(path) if product_id == "order" else __import__("dirty_data_to_olap.application.telemetry_policy", fromlist=["TelemetryProductPolicy"]).TelemetryProductPolicy(path)
+        if policy.version != version:
+            raise ValueError(f"product policy version is not registered: {product_id}:{version}")
+        if policy.content_fingerprint != actual:
+            raise ValueError("product policy fingerprint could not be reproduced")
+        return policy
+
+
+__all__ = ["OrderProductPolicy", "ProductPolicyRegistry"]

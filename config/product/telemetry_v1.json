@@ -1,0 +1,34 @@
+{
+  "product_id": "telemetry",
+  "version": "telemetry-product-v1",
+  "source_roles": {
+    "device_registry": {"required": ["device_id", "device_name"]},
+    "location_registry": {"required": ["location_id", "location_name"]},
+    "reading_event": {"required": ["reading_id", "device_ref", "location_ref", "observed_on", "temperature"]}
+  },
+  "entity": {
+    "device": {"canonical_entity_type_id": "entity_device", "identity_attributes": ["device_id"], "identity_basis": "SOURCE_LOCAL_EVENT_IDENTITY"},
+    "location": {"canonical_entity_type_id": "entity_location", "identity_attributes": ["location_id"], "identity_basis": "SOURCE_LOCAL_EVENT_IDENTITY"},
+    "reading": {"canonical_entity_type_id": "entity_reading", "identity_attributes": ["reading_id"], "identity_basis": "SOURCE_LOCAL_EVENT_IDENTITY"}
+  },
+  "measure": {
+    "field_name": "temperature",
+    "measure_id": "measure_temperature",
+    "semantic_name": "Observed temperature",
+    "aggregation_class": "SEMI_ADDITIVE",
+    "aggregation_rule": "MAX(temperature) within a reviewed observation slice; no cross-time total",
+    "unit_semantics": "degrees Celsius",
+    "currency_semantics": "not applicable",
+    "logical_type": "DECIMAL"
+  },
+  "deferred_concepts": {
+    "energy_consumption": "No energy counter is present in the reviewed readings source set"
+  },
+  "validation": {
+    "policy_version": "telemetry-validation-v1",
+    "required_check_ids": ["artifact_binding", "source_snapshot_universe", "source_record_accounting", "canonical_membership", "canonical_entity_counts", "dedup_explainability", "canonical_event_relationships", "canonical_to_analytical_accounting", "analytical_input_binding", "relationship_allocation", "target_table_set", "fact_count", "fact_grain", "fact_duplicates", "fact_business_values", "foreign_key_integrity", "key_uniqueness", "date_coverage", "quantity_global", "quantity_slices", "lineage_source_to_target", "lineage_target_to_source", "semantic_downstream_cross_check", "no_blocking_discrepancy"],
+    "orphan_policy": {"missing_device_or_location": "QUARANTINE_FACT", "unknown_member": "NO_SILENT_ALLOCATION"},
+    "monetary_status": "NOT_APPLICABLE",
+    "monetary_reason": "telemetry temperature is not monetary"
+  }
+}

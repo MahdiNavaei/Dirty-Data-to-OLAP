@@ -28,10 +28,8 @@ from dirty_data_to_olap.application.jobs import BoundedWorkerPool, DurableExecut
 from dirty_data_to_olap.application.materializer import MaterializationService
 from dirty_data_to_olap.application.platform import GateEvidenceService, ControlStorePort
 from dirty_data_to_olap.application.product_dependency import bind_source_local_identity_candidate
-from dirty_data_to_olap.application.product_input import build_order_dataset
-from dirty_data_to_olap.application.product_policy import OrderProductPolicy
+from dirty_data_to_olap.application.product_policy import ProductPolicyRegistry
 from dirty_data_to_olap.application.product_sources import ProductSourceService
-from dirty_data_to_olap.application.product_truth import build_order_truth_and_accounting
 from dirty_data_to_olap.application.profiling import ProfilingService
 from dirty_data_to_olap.application.privacy_policy import PrivacyPolicyService
 from dirty_data_to_olap.application.quality import QualityAnalysisService
@@ -63,7 +61,7 @@ def _json(value: Any) -> bytes:
 class LocalProductStageHandlers:
     """Thin stage adapters; domain decisions belong to the accepted services."""
 
-    def __init__(self, *, project_root: Path, platform, registry: DurableSourceRegistry, policy_root: Path | None = None, telemetry: TelemetryClient | None = None) -> None:
+    def __init__(self, *, project_root: Path, platform, registry: DurableSourceRegistry, policy_root: Path | None = None, product_policy=None, telemetry: TelemetryClient | None = None) -> None:
         self.project_root = Path(project_root).resolve()
         self.graph_root = Path(policy_root or self.project_root).resolve()
         self.platform = platform
@@ -74,7 +72,7 @@ class LocalProductStageHandlers:
         self.discovery = SourceDiscoveryService(registry, adapters)
         self.snapshot_service = SourceSnapshotService(registry, adapters)
         self.review_policy = ReviewPolicyService()
-        self.product_policy = OrderProductPolicy.load(self.graph_root)
+        self.product_policy = product_policy or ProductPolicyRegistry(self.graph_root).resolve(product_id="order", version="order-product-v1")
         self.privacy_policy = PrivacyPolicyService(project_root=self.project_root)
         self.profiling = ProfilingService(DataProfilerAdapter(), project_root=self.project_root)
         self.quality = QualityAnalysisService(ParquetQualityStagedReader(), project_root=self.project_root)
@@ -103,6 +101,7 @@ class LocalProductStageHandlers:
         started = monotonic()
         with self.telemetry.adapter_operation(self._adapter_kind(request.stage_id), request.stage_id, correlation, attributes={"stage_kind": self.telemetry.stage_kind(request.stage_id)}):
             try:
+                self._assert_policy_binding(request)
                 result = self._execute(request)
             except Exception as exc:
                 result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__, "error_detail": safe_exception_detail(exc)})
@@ -110,6 +109,15 @@ class LocalProductStageHandlers:
         self.telemetry.observe_adapter_operation(self._adapter_kind(request.stage_id), duration, result.status.value)
         self.telemetry.observe_stage_result(correlation=correlation, stage_id=request.stage_id, status=result.status.value, duration_seconds=duration, metadata=result.metadata, failure_code=result.failure_code, failure_classification=result.failure_classification.value if result.failure_classification else None)
         return result
+
+    def _assert_policy_binding(self, request: StageExecutionRequest) -> None:
+        policy = getattr(self, "product_policy", None)
+        if policy is None:
+            return
+        run = self.platform.control_store.get_run(request.run_id)
+        expected = None if run is None else run.metadata.get("product_policy_fingerprint")
+        if expected is not None and expected != policy.content_fingerprint:
+            raise ValueError("runtime product policy is incompatible with the durable run binding")
 
     @staticmethod
     def _adapter_kind(stage_id: str) -> str:
@@ -164,7 +172,8 @@ class LocalProductStageHandlers:
     def _publish(self, request: StageExecutionRequest, kind: str, value: Any, *, artifact_id: str | None = None, provenance: tuple[str, ...] = (), producer: str = "application.product_runtime") -> ArtifactRef:
         identity = artifact_id or stable_id("product-artifact", {"run": request.run_id, "stage": request.stage_id, "attempt": request.attempt_id, "kind": kind, "payload": stable_digest(value)})
         storage_identity = stable_id("artifact-storage", {"artifact_id": identity})
-        manifest = ArtifactManifest(artifact_id=identity, run_id=request.run_id, stage_id=request.stage_id, attempt_id=request.attempt_id, artifact_kind=kind, media_type="application/json", producer=producer, logical_key=f"runs/{request.run_id}/artifacts/{storage_identity}.json", provenance_refs=provenance or (producer, request.stage_id))
+        bound_provenance = tuple(dict.fromkeys((*provenance, self.product_policy.provenance, self.product_policy.content_fingerprint)))
+        manifest = ArtifactManifest(artifact_id=identity, run_id=request.run_id, stage_id=request.stage_id, attempt_id=request.attempt_id, artifact_kind=kind, media_type="application/json", producer=producer, logical_key=f"runs/{request.run_id}/artifacts/{storage_identity}.json", provenance_refs=bound_provenance or (producer, request.stage_id))
         return self.platform.control_store.register_artifact(self.platform.artifact_store.publish(manifest, _json(value)))
 
     def _selection(self, request: StageExecutionRequest) -> SourceSelection:
@@ -305,7 +314,7 @@ class LocalProductStageHandlers:
         snapshot_ref, snapshot = self._snapshot(request)
         decision_ref, decision = self._typed_from_run(request.run_id, "RelationshipDecision", RelationshipDecision)
         table = self.product_policy.source_table(catalog)
-        dataset, binding = build_order_dataset(run_id=request.run_id, catalog=catalog, snapshot=snapshot, canonical=canonical, project_root=self.project_root, table_name=table.physical_name, column_types=self.product_policy.data["analytical"]["column_types"])
+        dataset, binding = self.product_policy.build_dataset_and_request(run_id=request.run_id, catalog=catalog, snapshot=snapshot, canonical=canonical, project_root=self.project_root, table_name=table.physical_name, column_types=self.product_policy.data["analytical"]["column_types"])
         dataset_ref = self._publish(request, "AnalyticalInputDataset", dataset, artifact_id=dataset.dataset_id, provenance=(snapshot_ref.artifact_id, canonical_ref.artifact_id), producer="application.product_input")
         binding_ref = self._publish(request, "AnalyticalInputBinding", binding, artifact_id=binding.binding_id, provenance=(dataset_ref.artifact_id, canonical_ref.artifact_id), producer="application.product_input")
         planning_request = self.product_policy.analytical_request(catalog=catalog, snapshot=snapshot, canonical=canonical, decision=decision)
@@ -336,7 +345,7 @@ class LocalProductStageHandlers:
         review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN)
         target = TargetConfig(relative_path="olap.duckdb")
         compiled, sql = self.compiler.compile(plan, dimensions, facts, grains, measures, binding, dataset, target, review)
-        outputs = CompilationArtifactPublisher(self.platform.artifact_store, self.platform.control_store).publish(run_id=request.run_id, attempt_id=request.attempt_id, compiled_plan=compiled, generated_sql=sql, target_config=target)
+        outputs = CompilationArtifactPublisher(self.platform.artifact_store, self.platform.control_store).publish(run_id=request.run_id, attempt_id=request.attempt_id, compiled_plan=compiled, generated_sql=sql, target_config=target, policy_provenance_refs=(self.product_policy.provenance, self.product_policy.content_fingerprint))
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(outputs.compiled_plan.artifact_id, outputs.generated_sql.artifact_id, outputs.target_config.artifact_id), metadata={"compiler_version": compiled.compiler_version, "generated_sql_id": sql.generated_sql_id, "target_config_fingerprint": target.config_fingerprint, "input_dataset_id": dataset_ref.artifact_id})
 
     def _materialization(self, request: StageExecutionRequest) -> StageExecutionResult:
@@ -382,7 +391,7 @@ class LocalProductStageHandlers:
         semantic_validation_ref, semantic_validation = self._typed_from_run(request.run_id, "SemanticValidationResult", SemanticValidationResult)
         _fact_ref, fact = self._typed_from_run(request.run_id, "FactSpec", FactSpec)
         _measure_ref, measure = self._typed_from_run(request.run_id, "MeasureSpec", MeasureSpec)
-        truth, accounting = build_order_truth_and_accounting(run_id=request.run_id, catalog=catalog, snapshot=snapshot, dataset=dataset, canonical=canonical, fact=fact, measure=measure, policy=self.product_policy)
+        truth, accounting = self.product_policy.build_truth_and_accounting(run_id=request.run_id, catalog=catalog, snapshot=snapshot, dataset=dataset, canonical=canonical, fact=fact, measure=measure)
         truth_ref = self._publish(request, "SourceTruthManifest", truth, artifact_id=truth.truth_id, provenance=(snapshot_ref.artifact_id, catalog_ref.artifact_id), producer="application.product_truth")
         accounting_ref = self._publish(request, "RecordAccountingArtifact", accounting, artifact_id=accounting.accounting_id, provenance=(truth_ref.artifact_id, canonical_ref.artifact_id), producer="application.product_truth")
         policy = self.product_policy.validation_policy(canonical_model_id=canonical.model_id, materialization_id=materialization.artifact_id)
@@ -464,12 +473,12 @@ class LocalProductExecutionSubmission(DurableExecutionSubmission):
 class LocalProductRuntime:
     """Composition root for the local browser product path."""
 
-    def __init__(self, project_root: Path, platform, *, execution_plan_service: ExecutionPlanService, policy_root: Path | None = None, telemetry: TelemetryClient | None = None) -> None:
+    def __init__(self, project_root: Path, platform, *, execution_plan_service: ExecutionPlanService, policy_root: Path | None = None, product_policy=None, telemetry: TelemetryClient | None = None) -> None:
         self.project_root = Path(project_root).resolve()
         self.platform = platform
         self.telemetry = telemetry or TelemetryClient()
         self.registry = DurableSourceRegistry(self.project_root / "workspace" / "platform" / "product" / "source_registry.json")
-        self.handlers = LocalProductStageHandlers(project_root=self.project_root, platform=platform, registry=self.registry, policy_root=policy_root, telemetry=self.telemetry)
+        self.handlers = LocalProductStageHandlers(project_root=self.project_root, platform=platform, registry=self.registry, policy_root=policy_root, product_policy=product_policy, telemetry=self.telemetry)
         worker = JobWorker(control_store=platform.control_store, artifact_store=platform.artifact_store, executor=self.handlers.handlers(), worker_id="step29-local-worker", plan_advancer=execution_plan_service, telemetry=self.telemetry)
         self.pool = BoundedWorkerPool((worker,), max_workers=1, max_jobs_per_pump=250, max_active_per_run=1, max_active_per_source=1)
         self.execution = LocalProductExecutionSubmission(platform.control_store, self.pool)
@@ -510,7 +519,7 @@ class MultiSourceProductRuntime:
         self.platform.close()
 
 
-def build_local_product(project_root: Path, *, graph_root: Path | None = None, telemetry: TelemetryClient | None = None):
+def build_local_product(project_root: Path, *, graph_root: Path | None = None, policy_id: str = "order", policy_version: str | None = None, policy_fingerprint: str | None = None, telemetry: TelemetryClient | None = None):
     from dirty_data_to_olap.platform import LocalPlatform
 
     root = Path(project_root).resolve()
@@ -518,12 +527,13 @@ def build_local_product(project_root: Path, *, graph_root: Path | None = None, t
     graph = Path(graph_root or root).resolve()
     plan_service = ExecutionPlanService(root, platform.control_store, platform.artifact_store, graph_root=graph)
     shared_telemetry = telemetry or TelemetryClient()
-    runtime = LocalProductRuntime(root, platform, execution_plan_service=plan_service, policy_root=graph, telemetry=shared_telemetry)
+    policy = ProductPolicyRegistry(graph).resolve(product_id=policy_id, version=policy_version or ("order-product-v1" if policy_id == "order" else "telemetry-product-v1"), fingerprint=policy_fingerprint)
+    runtime = LocalProductRuntime(root, platform, execution_plan_service=plan_service, policy_root=graph, product_policy=policy, telemetry=shared_telemetry)
     backend = BackendService(control_store=platform.control_store, artifact_store=platform.artifact_store, execution=runtime.execution, configuration_fingerprint=platform.config.configuration_fingerprint, execution_plan_service=plan_service, source_service=runtime.source_service, telemetry=shared_telemetry)
     return platform, backend, runtime
 
 
-def build_multi_source_product(project_root: Path, *, adapters, graph_root: Path | None = None):
+def build_multi_source_product(project_root: Path, *, adapters, graph_root: Path | None = None, policy_id: str = "order", policy_version: str | None = None, policy_fingerprint: str | None = None):
     """Build the accepted durable Prompt02 source-set runtime.
 
     This has the same composition shape as ``build_local_product``.  The
@@ -541,7 +551,8 @@ def build_multi_source_product(project_root: Path, *, adapters, graph_root: Path
     plan_service = ExecutionPlanService(root, platform.control_store, platform.artifact_store, graph_root=graph)
     shared_telemetry = TelemetryClient()
     registry = DurableSourceRegistry(root / "workspace" / "platform" / "product" / "source_registry.json")
-    handlers = MultiSourceStageHandlers(project_root=root, platform=platform, registry=registry, adapters=adapters, policy_root=graph, telemetry=shared_telemetry)
+    policy = ProductPolicyRegistry(graph).resolve(product_id=policy_id, version=policy_version or ("order-product-v1" if policy_id == "order" else "telemetry-product-v1"), fingerprint=policy_fingerprint)
+    handlers = MultiSourceStageHandlers(project_root=root, platform=platform, registry=registry, adapters=adapters, policy_root=graph, product_policy=policy, telemetry=shared_telemetry)
     runtime = MultiSourceProductRuntime(root, platform, execution_plan_service=plan_service, handlers=handlers, telemetry=shared_telemetry)
     backend = BackendService(
         control_store=platform.control_store,

@@ -1,0 +1,15 @@
+oracle_id: prompt03-telemetry-independent-oracle
+oracle_version: telemetry-v1
+domain: telemetry_device_reading
+expected:
+  source_records: 9
+  canonical_devices: 3
+  canonical_locations: 2
+  canonical_readings: 4
+  fact_rows: 3
+  temperature_global_max: "11.0"
+  temperature_by_date:
+    "2026-02-01": "11.0"
+    "2026-02-02": "9.5"
+  quarantined_reading_ids: ["R-004"]
+  same_name_device_ids: ["D-001", "D-002"]

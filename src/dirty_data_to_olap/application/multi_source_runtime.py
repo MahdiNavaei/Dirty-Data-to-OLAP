@@ -15,7 +15,7 @@ from typing import Any, Mapping
 
 from dirty_data_to_olap.application.multi_source_product import MultiSourceProductService
 from dirty_data_to_olap.application.product_runtime import LocalProductStageHandlers
-from dirty_data_to_olap.application.product_truth import build_multi_source_truth_and_accounting
+from dirty_data_to_olap.application.product_dependency import bind_source_local_identity_candidate
 from dirty_data_to_olap.application.jobs import StageHandlerRegistry
 from dirty_data_to_olap.application.platform import GateEvidenceService
 from dirty_data_to_olap.adapters.validation import DuckDBValidationTargetReader
@@ -89,9 +89,9 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         "SEMANTIC_MODELING", "VALIDATION_RECONCILIATION",
     )
 
-    def __init__(self, *, project_root: Path, platform, registry, adapters: Mapping[str, object], policy_root: Path | None = None, telemetry=None) -> None:
-        super().__init__(project_root=project_root, platform=platform, registry=registry, policy_root=policy_root, telemetry=telemetry)
-        self.multi_source = MultiSourceProductService(project_root=project_root, registry=registry, adapters=adapters, graph_root=policy_root or project_root)
+    def __init__(self, *, project_root: Path, platform, registry, adapters: Mapping[str, object], policy_root: Path | None = None, product_policy=None, telemetry=None) -> None:
+        super().__init__(project_root=project_root, platform=platform, registry=registry, policy_root=policy_root, product_policy=product_policy, telemetry=telemetry)
+        self.multi_source = MultiSourceProductService(project_root=project_root, registry=registry, adapters=adapters, graph_root=policy_root or project_root, product_policy=self.product_policy)
         self.discovery = self.multi_source.discovery
         self.snapshot_service = self.multi_source.snapshot
 
@@ -213,6 +213,8 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
             catalog, snapshot = catalogs[source_id], snapshots[source_id]
             dependency_request = self.multi_source.policy.dependency_request(catalog, snapshot, request.run_id)
             result = self.multi_source.dependency.discover(dependency_request, catalog, snapshot, profiles=profiles[source_id], artifact_root=self._run_root(request.run_id) / "dependencies" / source_id)
+            if self.product_policy.product_id == "telemetry":
+                result = bind_source_local_identity_candidate(result, catalog=catalog, table_name=self.multi_source.role_table(catalog).physical_name, column_name=self.product_policy.identity_column(catalog))
             ref = self._publish(request, "DependencyResult", result, artifact_id=stable_id("dependency-result", {"run": request.run_id, "request": dependency_request.request_id}), provenance=(dependency_request.request_id, catalog.source.schema_fingerprint), producer="application.dependency_discovery")
             outputs.append(ref.artifact_id)
             if getattr(result.status, "value", result.status) != "COMPLETE":
@@ -262,6 +264,8 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"candidate_count": str(len(result.candidates)), "providers": ",".join(f"{item.engine}:{item.engine_version}" for item in result.capabilities)})
 
     def _relationship_candidates(self, catalogs: Mapping[str, SourceCatalog]) -> tuple[dict[str, Any], ...]:
+        if self.product_policy.product_id != "order":
+            return tuple(self.product_policy.relationship_candidates(catalogs))
         registries = [catalog for catalog in catalogs.values() if self.multi_source.source_role(catalog) == "registry"]
         events = [catalog for catalog in catalogs.values() if self.multi_source.source_role(catalog) == "event"]
         if not registries or not events:
@@ -298,7 +302,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         candidates = self._relationship_candidates(catalogs)
         source_ids = tuple(sorted(catalogs))
         snapshot_ids = _ordered_snapshot_ids(source_ids, snapshots)
-        assertions = tuple(DomainAssertion(assertion_id=f"prompt02:{item['candidate_id']}", subject_id="rel:" + item["from_table"] + ":" + ",".join(item["from_columns"]) + "->" + item["to_table"] + ":" + ",".join(item["to_columns"]), statement="the source-role relationship is declared for review by Prompt02 policy", status="ACTIVE", source_ids=source_ids, snapshot_ids=snapshot_ids, scope_id=stable_id("prompt02-domain-scope", item["candidate_id"]), asserted_by="prompt02-role-policy", evidence_refs=(item["candidate_id"],)) for item in candidates)
+        assertions = self.product_policy.domain_assertions(candidates, catalogs, snapshots) if self.product_policy.product_id != "order" else tuple(DomainAssertion(assertion_id=f"prompt02:{item['candidate_id']}", subject_id="rel:" + item["from_table"] + ":" + ",".join(item["from_columns"]) + "->" + item["to_table"] + ":" + ",".join(item["to_columns"]), statement="the source-role relationship is declared for review by Prompt02 policy", status="ACTIVE", source_ids=source_ids, snapshot_ids=snapshot_ids, scope_id=stable_id("prompt02-domain-scope", item["candidate_id"]), asserted_by="prompt02-role-policy", evidence_refs=(item["candidate_id"],)) for item in candidates)
         from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
         fusion_request = EvidenceFusionRequest(request_id=stable_id("relationship-fusion-request", {"run": request.run_id, "schema": schema_ref.content_hash}), execution_context_id=next(iter(snapshots.values())).snapshot.execution_context_id, relationship_candidate_ids=tuple(item["candidate_id"] for item in candidates), subject_kind=FusionSubjectKind.RELATIONSHIP, policy=EvidenceFusionService.load_policy("relationship", policy_root=self.graph_root / "policies" / "evidence-fusion"))
         # Relationship and schema-mapping subjects are intentionally fused in
@@ -317,7 +321,13 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         mapping_result = None
         if schema.candidates:
             mapping_request = EvidenceFusionRequest(request_id=stable_id("mapping-fusion-request", {"run": request.run_id, "schema": schema_ref.content_hash}), execution_context_id=next(iter(snapshots.values())).snapshot.execution_context_id, cross_source_mapping_scope=True, mapping_candidate_ids=tuple(item.candidate_id for item in schema.candidates), subject_kind=FusionSubjectKind.MAPPING, policy=EvidenceFusionService.load_policy("mapping", policy_root=self.graph_root / "policies" / "evidence-fusion"))
-            mapping_result = self.multi_source.fusion.fuse(mapping_request, inputs=EvidenceFusionInputs(source_catalogs=tuple(catalogs.values()), profile_results=profiles, quality_results=qualities, dependency_results=dependencies, schema_match_results=(schema,)))
+            # Dependency results carry relationship candidates for the
+            # relationship request.  The fusion service also expands those
+            # candidates when dependency results are supplied, so retain the
+            # dependency evidence for mapping quality while removing only the
+            # unrelated relationship candidate container.
+            mapping_dependencies = tuple(item.model_copy(update={"relationship_candidates": ()}) for item in dependencies)
+            mapping_result = self.multi_source.fusion.fuse(mapping_request, inputs=EvidenceFusionInputs(source_catalogs=tuple(catalogs.values()), profile_results=profiles, quality_results=qualities, dependency_results=mapping_dependencies, schema_match_results=(schema,)))
             mapping_ref = self._publish(request, "EvidenceFusionResult", mapping_result, artifact_id=stable_id("mapping-evidence-fusion", {"run": request.run_id, "request": mapping_request.request_id}), provenance=(schema_ref.artifact_id,), producer="application.evidence_fusion")
             output_refs.append(mapping_ref.artifact_id)
             for item in mapping_result.mappings:
@@ -327,6 +337,8 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=tuple(output_refs), metadata={"relationship_decisions": str(len(result.relationships)), "mapping_decisions": str(0 if mapping_result is None else len(mapping_result.mappings))})
 
     def _hypothesis(self, request):
+        if self.product_policy.product_id != "order":
+            return self._policy_hypothesis(request)
         catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
         snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
         relationship_artifacts = tuple(self._all(request, "RelationshipDecision", RelationshipDecision).values())
@@ -354,6 +366,30 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         hypothesis = self.hypotheses.build(run_id=request.run_id, execution_context_id=next(iter(snapshots.values())).snapshot.execution_context_id, model_version=MultiSourceProductService.VERSION, evidence_reviews=reviews, relationship_decisions=relationships, semantic_mapping_decisions=mappings, evidence_domain_assertion_refs={item.decision_id: tuple(assertion_refs_by_subject.get(item.subject_id, ())) for item in relationships}, entity_types=entity_types, source_ids=tuple(sorted(catalogs)), domain_assertion_refs=domain_refs, entity_resolution_requirements={"customer": EntityResolutionRequirement.ER_REQUIRED, "order_event": EntityResolutionRequirement.ER_NOT_REQUIRED, "source_system": EntityResolutionRequirement.ER_NOT_REQUIRED}, relationships=canonical_relationships, entity_resolution_specs=(er_spec,), snapshot_fingerprints={key: value.snapshot.source_fingerprint or value.snapshot.schema_fingerprint for key, value in snapshots.items()}, source_schema_fingerprints={key: value.source.schema_fingerprint for key, value in catalogs.items()}, source_authority_policy_refs=(self.multi_source.policy.provenance,), evidence_refs=tuple(ref.artifact_id for ref, _value in relationship_artifacts), provenance_refs=(request.run_id, self.multi_source.policy.provenance))
         ref = self._publish(request, "CanonicalModelHypothesis", hypothesis, artifact_id=hypothesis.artifact_id, provenance=hypothesis.provenance_refs, producer="application.canonical_hypothesis")
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"entity_resolution_required": "customer", "relationship_count": str(len(canonical_relationships))})
+
+    def _policy_hypothesis(self, request):
+        catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
+        snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
+        relationship_artifacts = tuple(self._all(request, "RelationshipDecision", RelationshipDecision).values())
+        relationships = tuple(value for _ref, value in relationship_artifacts)
+        reviews = tuple(item.decision for item in self.platform.control_store.list_review_history(run_id=request.run_id, limit=10000) if item.decision.review_checkpoint_id is ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS and item.decision.decision.value == "ACCEPTED" and not item.decision.superseded)
+        if not reviews or not relationships:
+            raise ValueError("durable evidence review and relationship decisions are required before policy hypothesis")
+        domain_refs = tuple(sorted({ref for item in reviews for ref in item.domain_assertion_refs}))
+        entity_types = self.product_policy.entity_types(catalogs, snapshots, relationships, domain_refs)
+        review_by_decision = {}
+        for artifact_ref, decision in relationship_artifacts:
+            review = next((item for item in reviews if item.subject_artifact_id == artifact_ref.artifact_id), None)
+            if review is not None:
+                review_by_decision[decision.decision_id] = review.review_decision_id
+        canonical_relationships = self.product_policy.canonical_relationships(relationships, review_by_decision)
+        assertion_refs_by_subject: dict[str, list[str]] = {}
+        for _ref, assertion in self._all(request, "DomainAssertion", DomainAssertion).values():
+            assertion_refs_by_subject.setdefault(assertion.subject_id, []).append(assertion.assertion_id)
+        requirements = {item.entity_resolution_family or item.semantic_id: EntityResolutionRequirement.ER_NOT_REQUIRED for item in entity_types}
+        hypothesis = self.hypotheses.build(run_id=request.run_id, execution_context_id=next(iter(snapshots.values())).snapshot.execution_context_id, model_version=self.product_policy.version, evidence_reviews=reviews, relationship_decisions=relationships, evidence_domain_assertion_refs={item.decision_id: tuple(sorted(assertion_refs_by_subject.get(item.subject_id, ()))) for item in relationships}, entity_types=entity_types, source_ids=tuple(sorted(catalogs)), domain_assertion_refs=domain_refs, entity_resolution_requirements=requirements, relationships=canonical_relationships, snapshot_fingerprints={key: value.snapshot.source_fingerprint or value.snapshot.schema_fingerprint for key, value in snapshots.items()}, source_schema_fingerprints={key: value.source.schema_fingerprint for key, value in catalogs.items()}, source_authority_policy_refs=(self.product_policy.provenance,), evidence_refs=tuple(ref.artifact_id for ref, _value in relationship_artifacts), provenance_refs=(request.run_id, self.product_policy.provenance))
+        ref = self._publish(request, "CanonicalModelHypothesis", hypothesis, artifact_id=hypothesis.artifact_id, provenance=hypothesis.provenance_refs, producer="application.canonical_hypothesis")
+        return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"entity_resolution_required": "none", "relationship_count": str(len(canonical_relationships))})
 
     def _entity_resolution(self, request):
         catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
@@ -395,6 +431,14 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"provider": result.engine.engine + ":" + result.engine.engine_version, "clusters": str(len(result.clusters)), "edges": str(len(result.edges))})
 
     def _identity_proposal(self, request):
+        if self.product_policy.product_id != "order":
+            hypothesis_ref, hypothesis = self._typed_from_run(request.run_id, "CanonicalModelHypothesis", CanonicalModelHypothesis)
+            catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
+            snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
+            memberships = self.product_policy.identity_memberships(hypothesis=hypothesis, snapshots=snapshots, catalogs=catalogs, policy_ref=self.product_policy.provenance)
+            proposal = self.multi_source.identity_proposals.build(hypothesis=hypothesis, memberships=memberships, source_schema_fingerprints=hypothesis.source_schema_fingerprints, policy_refs=(self.product_policy.provenance,), provenance_refs=(request.run_id, hypothesis_ref.artifact_id))
+            ref = self._publish(request, "CanonicalIdentityProposal", proposal, artifact_id=proposal.proposal_id, provenance=proposal.provenance_refs, producer="application.canonical_identity")
+            return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"membership_count": str(len(memberships)), "entity_resolution": "NOT_REQUIRED_BY_POLICY"})
         hypothesis_ref, hypothesis = self._typed_from_run(request.run_id, "CanonicalModelHypothesis", CanonicalModelHypothesis)
         er_ref, er_result = self._typed_from_run(request.run_id, "EntityResolutionResult", EntityResolutionResult)
         catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
@@ -427,6 +471,18 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"membership_count": str(len(memberships)), "customer_clusters": str(len(er_result.clusters))})
 
     def _canonical(self, request):
+        if self.product_policy.product_id != "order":
+            hypothesis_ref, hypothesis = self._typed_from_run(request.run_id, "CanonicalModelHypothesis", CanonicalModelHypothesis)
+            proposal_ref, proposal = self._typed_from_run(request.run_id, "CanonicalIdentityProposal", CanonicalIdentityProposal)
+            review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY)
+            metadata = {}
+            for source_id, (_catalog_ref, catalog) in self._catalogs(request).items():
+                table = self.multi_source.role_table(catalog)
+                for item in self._snapshots(request)[source_id][1].record_references:
+                    metadata[item.record_ref] = {"source_id": source_id, "snapshot_id": self._snapshots(request)[source_id][1].snapshot.snapshot_id, "table_id": table.table_id}
+            model = self.multi_source.finalization.finalize(hypothesis=hypothesis, identity_proposal=proposal, identity_review=review, er_results={}, source_record_metadata=metadata, lineage_refs=(hypothesis_ref.artifact_id, proposal_ref.artifact_id), record_accounting_refs=(stable_id("accounting", request.run_id),))
+            ref = self._publish(request, "CanonicalModel", model, artifact_id=model.model_id, provenance=model.provenance_refs, producer="application.canonical_finalization")
+            return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"instances": str(len(model.instances)), "source_record_maps": str(len(model.source_record_maps))})
         hypothesis_ref, hypothesis = self._typed_from_run(request.run_id, "CanonicalModelHypothesis", CanonicalModelHypothesis)
         proposal_ref, proposal = self._typed_from_run(request.run_id, "CanonicalIdentityProposal", CanonicalIdentityProposal)
         er_ref, er_result = self._typed_from_run(request.run_id, "EntityResolutionResult", EntityResolutionResult)
@@ -460,6 +516,10 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         return str(value) if logical_type == "STRING" else value
 
     def _build_dataset_and_request(self, request, canonical):
+        if self.product_policy.product_id != "order":
+            catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
+            snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
+            return self.product_policy.build_dataset_and_request(run_id=request.run_id, canonical=canonical, service=self.multi_source, catalogs=catalogs, snapshots=snapshots)
         catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
         snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
         maps = {item.record_ref: item for item in canonical.source_record_maps}
@@ -541,7 +601,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN)
         target = TargetConfig(relative_path="olap.duckdb")
         compiled, sql = self.compiler.compile(plan, dimensions, facts, grains, measures, binding, dataset, target, review)
-        outputs = CompilationArtifactPublisher(self.platform.artifact_store, self.platform.control_store).publish(run_id=request.run_id, attempt_id=request.attempt_id, compiled_plan=compiled, generated_sql=sql, target_config=target)
+        outputs = CompilationArtifactPublisher(self.platform.artifact_store, self.platform.control_store).publish(run_id=request.run_id, attempt_id=request.attempt_id, compiled_plan=compiled, generated_sql=sql, target_config=target, policy_provenance_refs=(self.product_policy.provenance, self.product_policy.content_fingerprint))
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(outputs.compiled_plan.artifact_id, outputs.generated_sql.artifact_id, outputs.target_config.artifact_id), metadata={"compiler_version": compiled.compiler_version, "input_dataset_id": dataset_ref.artifact_id, "plan_id": plan_ref.artifact_id})
 
     def _materialization(self, request):
@@ -561,6 +621,8 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,), metadata={"target_type": artifact.target_type, "table_count": str(len(artifact.table_names))})
 
     def _source_records(self, request, catalogs, snapshots):
+        if self.product_policy.product_id != "order":
+            return self.product_policy.source_records(service=self.multi_source, catalogs=catalogs, snapshots=snapshots)
         records = []
         for source_id, catalog in sorted(catalogs.items()):
             role = self.multi_source.source_role(catalog)
@@ -595,7 +657,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         measure = next(value for _ref, value in self._all(request, "MeasureSpec", MeasureSpec).values())
         catalogs = {key: value for key, (_ref, value) in self._catalogs(request).items()}
         snapshots = {key: value for key, (_ref, value) in self._snapshots(request).items()}
-        truth, accounting = build_multi_source_truth_and_accounting(
+        truth, accounting = self.product_policy.build_truth_and_accounting(
             run_id=request.run_id,
             source_records=self._source_records(request, catalogs, snapshots),
             snapshots=snapshots,
@@ -608,7 +670,7 @@ class MultiSourceStageHandlers(LocalProductStageHandlers):
         )
         truth_ref = self._publish(request, "SourceTruthManifest", truth, artifact_id=truth.truth_id, provenance=(canonical_ref.artifact_id, *truth.provenance_refs), producer="application.product_truth")
         accounting_ref = self._publish(request, "RecordAccountingArtifact", accounting, artifact_id=accounting.accounting_id, provenance=(truth_ref.artifact_id, canonical_ref.artifact_id), producer="application.product_truth")
-        policy = self.multi_source.policy.validation_policy(canonical_model_id=canonical.model_id, materialization_id=materialization.artifact_id)
+        policy = self.product_policy.validation_policy(canonical_model_id=canonical.model_id, materialization_id=materialization.artifact_id)
         bindings = ValidationArtifactBindings(
             source_snapshot_id=truth.source_snapshot_id,
             source_snapshot_hash=truth.source_snapshot_fingerprint,

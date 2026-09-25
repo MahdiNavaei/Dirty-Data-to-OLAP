@@ -15,6 +15,7 @@ from typing import Any, Mapping
 from pydantic import Field, field_validator, model_validator
 
 from .canonical import ReviewCheckpoint, ReviewCompatibilityContext
+from .product import ProductPolicyBinding
 from .source import _SourceModel, stable_digest, utc_now
 
 
@@ -110,6 +111,9 @@ class ExecutionPlanPhase(str, Enum):
 class ExecutionPlanIntent(_SourceModel):
     """Bounded caller intent; it contains no selection authority."""
 
+    product_policy_id: str = Field(default="order", pattern=r"^[a-z][a-z0-9_.:-]{0,63}$")
+    product_policy_version: str = Field(default="order-product-v1", min_length=1, max_length=128)
+    product_policy_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     cross_source_mapping_requested: bool | None = None
     entity_resolution_requested: bool | None = None
     optional_semantic_evidence_enabled: bool = False
@@ -249,6 +253,7 @@ class ExecutionPlan(_SourceModel):
     success_guard_required: bool = False
     planning_phase: ExecutionPlanPhase = ExecutionPlanPhase.COMPLETE
     planning_intent: ExecutionPlanIntent | None = None
+    product_policy: ProductPolicyBinding | None = None
     pending_stage_ids: tuple[str, ...] = ()
     revision: int = Field(default=0, ge=0)
     created_at: datetime = Field(default_factory=utc_now)
@@ -260,6 +265,11 @@ class ExecutionPlan(_SourceModel):
 
     @model_validator(mode="after")
     def validate_graph(self) -> "ExecutionPlan":
+        if self.product_policy is not None and self.planning_intent is not None:
+            if self.product_policy.product_id != self.planning_intent.product_policy_id or self.product_policy.version != self.planning_intent.product_policy_version:
+                raise ValueError("execution plan product policy does not match its planning intent")
+            if self.planning_intent.product_policy_fingerprint is not None and self.product_policy.content_fingerprint != self.planning_intent.product_policy_fingerprint:
+                raise ValueError("execution plan product policy fingerprint does not match its planning intent")
         ids = [stage.stage_id for stage in self.stages]
         if len(set(ids)) != len(ids):
             raise ValueError("execution plan stage identities must be unique")

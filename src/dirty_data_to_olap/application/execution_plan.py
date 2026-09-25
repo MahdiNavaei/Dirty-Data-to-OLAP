@@ -13,6 +13,7 @@ from dirty_data_to_olap.application.platform import (
     PlatformError,
 )
 from dirty_data_to_olap.application.planning_authority import ServerOwnedExecutionPlanSelectionResolver
+from dirty_data_to_olap.application.product_policy import ProductPolicyRegistry
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
     ExecutionPlanIntent,
@@ -21,6 +22,7 @@ from dirty_data_to_olap.domain.contracts.jobs import (
     PlanPreparationStatus,
 )
 from dirty_data_to_olap.domain.contracts.platform import RunRecord
+from dirty_data_to_olap.domain.contracts.product import ProductPolicyBinding
 from dirty_data_to_olap.domain.contracts.source import stable_id
 
 
@@ -47,13 +49,22 @@ class ExecutionPlanService:
         self.graph_root = Path(graph_root or project_root).resolve()
         self.control_store = control_store
         self.selection_resolver = ServerOwnedExecutionPlanSelectionResolver(control_store, artifact_store, self.graph_root)
+        self.policy_registry = ProductPolicyRegistry(self.graph_root)
 
     def prepare(self, *, run: RunRecord, intent: ExecutionPlanIntent) -> ExecutionPlanPreparation:
+        policy = self.policy_registry.resolve(product_id=intent.product_policy_id, version=intent.product_policy_version, fingerprint=intent.product_policy_fingerprint)
         existing = self.control_store.get_execution_plan(run.run_id)
         if existing is not None:
             if existing.planning_intent is not None and existing.planning_intent.content_hash != intent.content_hash:
                 return self._blocked(run.run_id, intent.content_hash, ("EXISTING_PLAN",), "run already has a durable plan bound to a different pre-execution intent")
+            if existing.product_policy is not None and existing.product_policy.content_fingerprint != policy.content_fingerprint:
+                return self._blocked(run.run_id, intent.content_hash, ("EXISTING_POLICY",), "run already has a durable plan bound to a different product policy")
             return self._preparation(existing, intent)
+
+        if run.metadata.get("product_policy_fingerprint") != policy.content_fingerprint:
+            metadata = dict(run.metadata)
+            metadata.update({"product_policy_id": policy.product_id, "product_policy_version": policy.version, "product_policy_fingerprint": policy.content_fingerprint})
+            run = self.control_store.update_run(run.model_copy(update={"metadata": metadata}), expected_revision=run.revision)
 
         full = self.selection_resolver.resolve(run=run, intent=intent)
         if full.selection is not None:
@@ -65,6 +76,7 @@ class ExecutionPlanService:
                 planning_phase=ExecutionPlanPhase.COMPLETE,
                 pending_stage_ids=(),
                 success_guard_required=True,
+                product_policy=policy.binding,
             )
             return self._register(plan, intent)
         if "PLAN_GRAPH" in full.unresolved_stage_ids:
@@ -85,6 +97,7 @@ class ExecutionPlanService:
                 planning_phase=ExecutionPlanPhase.SOURCE_RESOLVED,
                 pending_stage_ids=("ENTITY_RESOLUTION",),
                 success_guard_required=False,
+                product_policy=policy.binding,
             )
             return self._register(plan, intent)
 
@@ -96,6 +109,7 @@ class ExecutionPlanService:
             planning_phase=ExecutionPlanPhase.BOOTSTRAP,
             pending_stage_ids=("SCHEMA_MATCHING", "ENTITY_RESOLUTION"),
             success_guard_required=False,
+            product_policy=policy.binding,
         )
         return self._register(plan, intent)
 
@@ -127,6 +141,7 @@ class ExecutionPlanService:
                     planning_phase=ExecutionPlanPhase.SOURCE_RESOLVED,
                     pending_stage_ids=("ENTITY_RESOLUTION",),
                     success_guard_required=False,
+                    product_policy=current.product_policy,
                     plan_id=current.plan_id,
                     created_at=current.created_at,
                     revision=current.revision + 1,
@@ -146,6 +161,7 @@ class ExecutionPlanService:
                     planning_phase=ExecutionPlanPhase.COMPLETE,
                     pending_stage_ids=(),
                     success_guard_required=True,
+                    product_policy=current.product_policy,
                     plan_id=current.plan_id,
                     created_at=current.created_at,
                     revision=current.revision + 1,
@@ -167,6 +183,7 @@ class ExecutionPlanService:
         planning_phase: ExecutionPlanPhase,
         pending_stage_ids,
         success_guard_required: bool,
+        product_policy: ProductPolicyBinding,
         plan_id: str | None = None,
         created_at=None,
         revision: int = 0,
@@ -182,6 +199,7 @@ class ExecutionPlanService:
             pending_stage_ids=pending_stage_ids,
             revision=revision,
             success_guard_required=success_guard_required,
+            product_policy=product_policy,
         )
         return plan if created_at is None else plan.model_copy(update={"created_at": created_at})
 

@@ -51,6 +51,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
     StageStatus,
     GateEvidenceStatus,
 )
+from dirty_data_to_olap.domain.contracts.product import ProductPolicyBinding
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
 from dirty_data_to_olap.observability import TelemetryClient, classify_error, safe_exception_detail
@@ -921,6 +922,7 @@ def load_authoritative_execution_plan(
     pending_stage_ids: Sequence[str] = (),
     revision: int = 0,
     success_guard_required: bool = True,
+    product_policy: ProductPolicyBinding | None = None,
 ) -> ExecutionPlan:
     """Project the existing architecture DAG into a run-scoped durable plan.
 
@@ -983,9 +985,16 @@ def load_authoritative_execution_plan(
                 review_checkpoint=ReviewCheckpoint(str(checkpoint)) if checkpoint else None,
                 required_review_checkpoint=ReviewCheckpoint(str(raw["required_review_checkpoint"])) if raw.get("required_review_checkpoint") else None,
                 final_validation=stage_id == "VALIDATION_RECONCILIATION",
+                policy_config_fingerprint=product_policy.content_fingerprint if product_policy is not None else "step28-policy-v1",
                 source_scope=str(raw["source_scope"]) if raw.get("source_scope") else None,
                 metadata={
                     "graph_source": "stage_graph.yml",
+                    **({} if product_policy is None else {
+                        "product_policy_id": product_policy.product_id,
+                        "product_policy_version": product_policy.version,
+                        "product_policy_fingerprint": product_policy.content_fingerprint,
+                        "product_policy_provenance": product_policy.provenance_ref,
+                    }),
                     **({} if decision is None else {
                         "selection_policy_ref": decision.policy_ref,
                         "selection_scope": decision.scope,
@@ -1007,6 +1016,7 @@ def load_authoritative_execution_plan(
         success_guard_required=success_guard_required,
         planning_phase=planning_phase,
         planning_intent=planning_intent,
+        product_policy=product_policy,
         pending_stage_ids=tuple(pending_stage_ids),
         revision=revision,
     )

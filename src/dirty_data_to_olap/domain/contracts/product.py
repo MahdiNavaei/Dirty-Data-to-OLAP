@@ -14,6 +14,19 @@ from pydantic import Field
 from .canonical import ReviewCompatibilityContext, _SourceModel
 
 
+class ProductPolicyBinding(_SourceModel):
+    """Immutable identity of the domain policy selected for one run."""
+
+    product_id: str = Field(pattern=r"^[a-z][a-z0-9_.:-]{0,63}$")
+    version: str = Field(min_length=1, max_length=128)
+    content_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    provenance_ref: str = Field(min_length=1, max_length=512)
+
+    @property
+    def policy_key(self) -> str:
+        return f"{self.product_id}:{self.version}"
+
+
 class ProductConfiguration(_SourceModel):
     configuration_fingerprint: str
     authentication_mode: str = "local_test_reference_only"

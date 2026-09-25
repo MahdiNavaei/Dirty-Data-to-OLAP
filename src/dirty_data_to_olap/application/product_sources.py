@@ -54,7 +54,7 @@ class ProductSourceService:
         return (value or "Imported CSV")[:120]
 
     @staticmethod
-    def _validate_csv(payload: bytes) -> tuple[str, ...]:
+    def _validate_csv(payload: bytes, *, required_columns: set[str] | None = None) -> tuple[str, ...]:
         if not payload:
             raise ProductSourceError("CSV import is empty")
         try:
@@ -65,22 +65,22 @@ class ProductSourceService:
                 raise ProductSourceError("CSV header must contain unique non-empty column names")
             if not any(rows):
                 raise ProductSourceError("CSV import must contain at least one data row")
-            required = {"order_id", "customer_id", "customer_id_ref", "order_date", "quantity", "unit_price"}
+            required = required_columns or {"order_id", "customer_id", "customer_id_ref", "order_date", "quantity", "unit_price"}
             if not required.issubset({item.strip() for item in header}):
-                raise ProductSourceError("V1 CSV imports require order_id, customer_id, customer_id_ref, order_date, quantity and unit_price columns")
+                raise ProductSourceError("CSV import does not satisfy the selected product policy source contract")
             return header
         except ProductSourceError:
             raise
         except (UnicodeDecodeError, csv.Error) as exc:
             raise ProductSourceError("CSV content could not be parsed as UTF-8 CSV") from exc
 
-    def import_csv(self, *, registry_id: str, filename: str, payload: bytes, owner_subject: str) -> SourceRegistryRecord:
+    def import_csv(self, *, registry_id: str, filename: str, payload: bytes, owner_subject: str, required_columns: set[str] | None = None) -> SourceRegistryRecord:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", owner_subject):
             raise ProductSourceError("source owner is invalid")
         if len(payload) > self.MAX_UPLOAD_BYTES:
             raise ProductSourceError("CSV import exceeds the bounded 5 MB upload limit")
         clean_name = self._filename(filename)
-        self._validate_csv(payload)
+        self._validate_csv(payload, required_columns=required_columns)
         destination = (self.import_root / f"{registry_id}.csv").resolve()
         try:
             destination.relative_to(self.import_root.resolve())

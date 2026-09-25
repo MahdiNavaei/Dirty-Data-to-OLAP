@@ -79,7 +79,7 @@ class MultiSourceProductService:
         "unit_price": ("unit_price", "price_each"),
     }
 
-    def __init__(self, *, project_root: Path, registry, adapters: Mapping[str, Any], graph_root: Path | None = None) -> None:
+    def __init__(self, *, project_root: Path, registry, adapters: Mapping[str, Any], graph_root: Path | None = None, product_policy=None) -> None:
         self.project_root = Path(project_root).resolve()
         self.registry = registry
         self.adapters = dict(adapters)
@@ -87,7 +87,7 @@ class MultiSourceProductService:
         self.privacy = PrivacyPolicyService(project_root=self.project_root)
         self.discovery = SourceDiscoveryService(registry, self.adapters)
         self.snapshot = SourceSnapshotService(registry, self.adapters)
-        self.policy = OrderProductPolicy.load(self.graph_root)
+        self.policy = product_policy or OrderProductPolicy.load(self.graph_root)
         self.profiling = ProfilingService(DataProfilerAdapter(), project_root=self.project_root)
         self.quality = QualityAnalysisService(ParquetQualityStagedReader(), project_root=self.project_root)
         self.dependency = DependencyDiscoveryService(
@@ -106,53 +106,42 @@ class MultiSourceProductService:
         self.identity_proposals = CanonicalIdentityProposalService()
         self.finalization = CanonicalFinalizationService()
 
-    @classmethod
-    def order_table(cls, catalog: SourceCatalog):
-        if cls.source_role(catalog) == "registry":
+    def order_table(self, catalog: SourceCatalog):
+        if self.source_role(catalog) == "registry":
             raise MultiSourceProductBlocked("EVENT_TABLE_MISSING", f"source {catalog.source_id} is a customer registry, not an event source")
         for table in catalog.tables:
             names = {column.physical_name.casefold() for column in catalog.columns if column.table_id == table.table_id}
-            if names.intersection(cls.LOGICAL_COLUMN_ALIASES["order_id"]):
+            if names.intersection(self.LOGICAL_COLUMN_ALIASES["order_id"]):
                 return table
         raise MultiSourceProductBlocked("EVENT_TABLE_MISSING", f"source {catalog.source_id} has no event-key-bearing table")
 
-    @classmethod
-    def source_role(cls, catalog: SourceCatalog) -> str:
-        """Resolve the bounded Prompt02 role from the registered source identity."""
+    def source_role(self, catalog: SourceCatalog) -> str:
+        """Resolve the role through the explicitly bound domain policy."""
 
-        source_id = catalog.source_id.casefold()
-        if any(token in source_id for token in ("crm", "erp", "customer", "account")):
-            return "registry"
-        if any(token in source_id for token in ("sales", "legacy", "csv", "event")):
-            return "event"
-        has_event = any(
-            cls.column(catalog, table.table_id, cls.LOGICAL_COLUMN_ALIASES["order_id"]) is not None
-            and cls.column(catalog, table.table_id, cls.LOGICAL_COLUMN_ALIASES["order_date"]) is not None
-            for table in catalog.tables
-        )
-        return "event" if has_event else "registry"
+        return self.policy.source_role(catalog)
 
-    @classmethod
-    def identity_table(cls, catalog: SourceCatalog):
-        if cls.source_role(catalog) != "registry":
+    def identity_table(self, catalog: SourceCatalog):
+        if self.source_role(catalog) != "registry":
             raise MultiSourceProductBlocked("IDENTITY_TABLE_MISSING", f"source {catalog.source_id} is not a customer registry")
         for table in catalog.tables:
-            if cls.column(catalog, table.table_id, cls.LOGICAL_COLUMN_ALIASES["customer_id"]) is not None and cls.column(catalog, table.table_id, cls.LOGICAL_COLUMN_ALIASES["customer_name"]) is not None:
+            if self.column(catalog, table.table_id, self.LOGICAL_COLUMN_ALIASES["customer_id"]) is not None and self.column(catalog, table.table_id, self.LOGICAL_COLUMN_ALIASES["customer_name"]) is not None:
                 return table
         raise MultiSourceProductBlocked("IDENTITY_TABLE_MISSING", f"source {catalog.source_id} has no customer registry table")
 
-    @classmethod
-    def role_table(cls, catalog: SourceCatalog):
-        return cls.identity_table(catalog) if cls.source_role(catalog) == "registry" else cls.order_table(catalog)
+    def role_table(self, catalog: SourceCatalog):
+        if self.policy.product_id == "order":
+            return self.identity_table(catalog) if self.source_role(catalog) == "registry" else self.order_table(catalog)
+        return self.policy.role_table(catalog)
 
     @staticmethod
     def column(catalog: SourceCatalog, table_id: str, names: Sequence[str]):
         wanted = {name.casefold() for name in names}
         return next((item for item in catalog.columns if item.table_id == table_id and item.physical_name.casefold() in wanted), None)
 
-    @classmethod
-    def logical_value(cls, catalog: SourceCatalog, table_id: str, values: Mapping[str, Any], logical_name: str) -> Any:
-        column = cls.column(catalog, table_id, cls.LOGICAL_COLUMN_ALIASES[logical_name])
+    def logical_value(self, catalog: SourceCatalog, table_id: str, values: Mapping[str, Any], logical_name: str) -> Any:
+        if self.policy.product_id != "order":
+            return self.policy.logical_value(catalog, table_id, values, logical_name)
+        column = self.column(catalog, table_id, self.LOGICAL_COLUMN_ALIASES[logical_name])
         return values.get(column.physical_name) if column is not None else None
 
     def read_rows(self, catalog: SourceCatalog, snapshot: SourceSnapshotResult) -> tuple[Mapping[str, Any], ...]:
@@ -229,6 +218,9 @@ class MultiSourceProductService:
 
     def quality_request(self, catalog: SourceCatalog, snapshot: SourceSnapshotResult, profile: Any, run_id: str) -> QualityRequest:
         """Create a role-aware quality request without weakening the quality service."""
+
+        if self.policy.product_id != "order":
+            return self.policy.quality_request(catalog, snapshot, profile, run_id)
 
         table = self.role_table(catalog)
         role = self.source_role(catalog)
