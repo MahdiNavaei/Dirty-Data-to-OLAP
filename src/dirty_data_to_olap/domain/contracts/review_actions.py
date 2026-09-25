@@ -66,6 +66,8 @@ class ReviewActionApplicability(_SourceModel):
     required_fields: tuple[str, ...] = ()
     requires_confirmation: bool = False
     downstream_effect: str = Field(min_length=1)
+    supported_override_targets: tuple[ReviewOverrideTarget, ...] = ()
+    supported_override_replacements: tuple[ReviewOverrideValue, ...] = ()
 
 
 class ReviewOverridePayload(_SourceModel):
@@ -92,6 +94,32 @@ class ReviewOverridePayload(_SourceModel):
         }
         if self.replacement not in allowed[self.target]:
             raise ValueError("override replacement is not permitted for the selected target")
+        return self
+
+
+class ReviewOverrideProposal(_SourceModel):
+    """Immutable, review-required replacement proposal consumed by runtime."""
+
+    schema_version: str = "prompt04-review-override-v1"
+    original_subject_artifact_id: str = Field(min_length=1)
+    original_subject_content_hash: str = Field(min_length=1)
+    checkpoint: ReviewCheckpoint
+    subject_stage: str = Field(min_length=1)
+    target: ReviewOverrideTarget
+    replacement: ReviewOverrideValue
+    old_value_ref: str = Field(min_length=1, max_length=256)
+    evidence_ref: str | None = Field(default=None, max_length=256)
+    policy_version: str = Field(min_length=1)
+    state: str = Field(pattern=r"^REVIEW_REQUIRED$")
+
+    @model_validator(mode="after")
+    def bounded_runtime_target(self) -> "ReviewOverrideProposal":
+        if self.target is not ReviewOverrideTarget.RELATIONSHIP_DISPOSITION:
+            raise ValueError("only relationship disposition overrides are runtime-supported in Prompt04-R1")
+        if self.replacement not in {ReviewOverrideValue.RETAIN_CANDIDATE, ReviewOverrideValue.EXCLUDE_CANDIDATE}:
+            raise ValueError("only retain/exclude relationship dispositions are runtime-supported in Prompt04-R1")
+        if self.old_value_ref != self.original_subject_artifact_id:
+            raise ValueError("override old_value_ref must bind the original subject artifact")
         return self
 
 
@@ -209,6 +237,7 @@ __all__ = [
     "ReviewLabelValue",
     "ReviewLockPayload",
     "ReviewOverridePayload",
+    "ReviewOverrideProposal",
     "ReviewOverrideTarget",
     "ReviewOverrideValue",
     "action_payload_fingerprint",

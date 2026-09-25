@@ -106,7 +106,7 @@ def test_prompt04_all_six_actions_have_durable_server_effects(tmp_path: Path) ->
         assert deferred.json()["guard_satisfied"] is False
 
         override_ref = _subject(platform, run_id, "override")
-        override = _action(client, run_id, override_ref, "OVERRIDE", key="action-override", extra={"override": {"schema_version": "1.0", "target": "RELATIONSHIP_DISPOSITION", "replacement": "REQUIRE_REVISION", "old_value_ref": override_ref.artifact_id}})
+        override = _action(client, run_id, override_ref, "OVERRIDE", key="action-override", extra={"override": {"schema_version": "1.0", "target": "RELATIONSHIP_DISPOSITION", "replacement": "RETAIN_CANDIDATE", "old_value_ref": override_ref.artifact_id}})
         assert override.status_code == 200, override.text
         assert override.json()["resulting_subject_artifact_id"]
         assert override.json()["next_required_action"] == "REVIEW_REPLACEMENT_SUBJECT"

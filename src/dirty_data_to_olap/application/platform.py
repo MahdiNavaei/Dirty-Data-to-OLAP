@@ -223,6 +223,18 @@ class ControlStorePort(Protocol):
         """Atomically apply a review CAS mutation and its replay record."""
         ...
 
+    def record_review_with_action_state_with_idempotency(
+        self,
+        record: ReviewRecord,
+        state: ReviewActionState,
+        *,
+        expected_review_revision: int,
+        expected_action_revision: int,
+        idempotency: IdempotencyRecord,
+    ) -> tuple[ReviewRecord, ReviewActionState, bool]:
+        """Atomically persist a legacy review and synchronize its lifecycle state."""
+        ...
+
     def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
         ...
 
@@ -231,6 +243,37 @@ class ControlStorePort(Protocol):
 
     def record_review_action_with_idempotency(self, record: ReviewActionRecord, state: ReviewActionState, *, expected_revision: int, idempotency: IdempotencyRecord) -> tuple[ReviewActionRecord, ReviewActionState, bool]:
         """Atomically persist one consequential action and its replay record."""
+        ...
+
+    def record_review_and_action_with_idempotency(
+        self,
+        review: ReviewRecord | None,
+        action: ReviewActionRecord,
+        state: ReviewActionState,
+        *,
+        expected_review_revision: int,
+        expected_action_revision: int,
+        idempotency: IdempotencyRecord,
+        requeue_checkpoint: str | None = None,
+        requeue_review_contexts: tuple[ReviewCompatibilityContext, ...] | None = None,
+    ) -> tuple[ReviewRecord | None, ReviewActionRecord, ReviewActionState, bool]:
+        """Atomically persist a decision, action state/history and replay fence."""
+        ...
+
+    def record_review_invalidation_with_lifecycle(
+        self,
+        review: ReviewRecord,
+        state: ReviewActionState,
+        *,
+        expected_review_revision: int,
+        expected_action_revision: int,
+        idempotency: IdempotencyRecord,
+        requeue_checkpoint: str,
+    ) -> tuple[ReviewRecord, ReviewActionState, bool]:
+        """Atomically invalidate review, clear lock state and requeue descendants."""
+        ...
+
+    def list_review_subject_contexts(self, *, run_id: str, checkpoint: str | None = None) -> tuple[ReviewCompatibilityContext, ...]:
         ...
 
     def list_review_action_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewActionHistoryRecord, ...]:

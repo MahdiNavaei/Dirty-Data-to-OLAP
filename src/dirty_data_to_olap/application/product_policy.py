@@ -545,9 +545,14 @@ class OrderProductPolicy:
             provenance_refs=lineage,
         )
         time_relation = stable_id("time_role", {"fact": settings["fact"]["fact_id"], "column": "order_date"})
-        foreign_keys = (
-            FactForeignKeySpec(relationship_ref=decision.decision_id, relationship_scope=FactRelationshipScope.CANONICAL_ACCEPTED, dimension_id=order_dimension.dimension_id, fact_column="order_key", dimension_key_column="order_key", canonical_entity_type_id=order_dimension.canonical_entity_type_id, input_reference_column="canonical_entity_id"),
-            FactForeignKeySpec(relationship_ref=time_relation, relationship_scope=FactRelationshipScope.ANALYTICAL_TIME_ROLE, dimension_id=date_dimension.dimension_id, fact_column="order_date_key", dimension_key_column="date_key", canonical_entity_type_id=date_dimension.canonical_entity_type_id, input_reference_column="order_date"),
+        relationship_refs = tuple(item.relationship_id for item in canonical.relationships)
+        foreign_keys = tuple(
+            item
+            for item in (
+                FactForeignKeySpec(relationship_ref=decision.decision_id, relationship_scope=FactRelationshipScope.CANONICAL_ACCEPTED, dimension_id=order_dimension.dimension_id, fact_column="order_key", dimension_key_column="order_key", canonical_entity_type_id=order_dimension.canonical_entity_type_id, input_reference_column="canonical_entity_id"),
+                FactForeignKeySpec(relationship_ref=time_relation, relationship_scope=FactRelationshipScope.ANALYTICAL_TIME_ROLE, dimension_id=date_dimension.dimension_id, fact_column="order_date_key", dimension_key_column="date_key", canonical_entity_type_id=date_dimension.canonical_entity_type_id, input_reference_column="order_date"),
+            )
+            if item.relationship_ref == time_relation or decision.decision_id in relationship_refs
         )
         fact = FactSpec(
             fact_id=str(settings["fact"]["fact_id"]),
@@ -561,13 +566,13 @@ class OrderProductPolicy:
             degenerate_dimension_columns=("customer_id", "customer_id_ref"),
             measure_ids=(str(settings["measure"]["measure_id"]),),
             date_role_columns=("order_date",),
-            relationship_refs=(decision.decision_id, time_relation),
+            relationship_refs=(*relationship_refs, time_relation),
             provenance_refs=lineage,
         )
         grain = GrainSpec(grain_id=fact.grain_spec_id, fact_id=fact.fact_id, human_readable_grain="one row per source order_id", key_columns=("order_id",), null_policy=GrainNullPolicy.REJECT_NULLS, validated=False, observed_row_count=0, duplicate_key_count=0, evidence_refs=(snapshot.snapshot.snapshot_id,), provenance_refs=lineage)
         measure_config = settings["measure"]
         measure = MeasureSpec(measure_id=str(measure_config["measure_id"]), fact_id=fact.fact_id, field_name=str(measure_config["field_name"]), semantic_name=str(measure_config["semantic_name"]), aggregation_class=AggregationClass.ADDITIVE, aggregation_rule=str(measure_config["aggregation_rule"]), unit_semantics=str(measure_config["unit_semantics"]), currency_semantics=str(measure_config["currency_semantics"]), logical_type="DECIMAL", nullable=False, domain_assertion_refs=tuple(settings["domain_assertion_refs"]), provenance_refs=lineage)
-        return AnalyticalPlanningRequest(request_id=stable_id("analytical-request", {"snapshot": snapshot.snapshot.snapshot_id, "canonical": canonical.model_id, "decision": decision.decision_id, "policy": self.version}), dimensions=(order_dimension, date_dimension), facts=(fact,), grains=(grain,), measures=(measure,), accepted_relationship_refs=(decision.decision_id,), deferred_concept_refs=tuple(settings["deferred_concepts"]), deferred_concept_reasons=dict(settings["deferred_concepts"]), domain_assertion_refs=tuple(settings["domain_assertion_refs"]), provenance_refs=lineage)
+        return AnalyticalPlanningRequest(request_id=stable_id("analytical-request", {"snapshot": snapshot.snapshot.snapshot_id, "canonical": canonical.model_id, "decision": decision.decision_id, "policy": self.version}), dimensions=(order_dimension, date_dimension), facts=(fact,), grains=(grain,), measures=(measure,), accepted_relationship_refs=relationship_refs, deferred_concept_refs=tuple(settings["deferred_concepts"]), deferred_concept_reasons=dict(settings["deferred_concepts"]), domain_assertion_refs=tuple(settings["domain_assertion_refs"]), provenance_refs=lineage)
 
     def validation_policy(self, *, canonical_model_id: str, materialization_id: str):
         from dirty_data_to_olap.domain.contracts.validation import ValidationPolicy, ValidationStatus

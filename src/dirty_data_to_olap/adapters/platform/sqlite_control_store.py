@@ -62,6 +62,16 @@ from dirty_data_to_olap.domain.contracts.source import stable_id
 CURRENT_SCHEMA_VERSION = 6
 
 
+class _ClosingConnection(sqlite3.Connection):
+    """Close short-lived connections when their context manager exits."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 def _dump(value: object) -> str:
     return json.dumps(value.model_dump(mode="json") if hasattr(value, "model_dump") else value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -101,7 +111,7 @@ class SQLiteControlStore(ControlStorePort):
         return self._schema_version
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(self.path), timeout=30.0, isolation_level=None, check_same_thread=False)
+        connection = sqlite3.connect(str(self.path), timeout=30.0, isolation_level=None, check_same_thread=False, factory=_ClosingConnection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA busy_timeout = 30000")
@@ -688,6 +698,17 @@ class SQLiteControlStore(ControlStorePort):
             ).fetchone()
             return None if row is None else ReviewCompatibilityContext.model_validate(_load_json(str(row["context_json"]), {}))
 
+    def list_review_subject_contexts(self, *, run_id: str, checkpoint: str | None = None) -> tuple[ReviewCompatibilityContext, ...]:
+        sql = "SELECT context_json FROM review_subject_contexts WHERE run_id = ?"
+        parameters: list[object] = [run_id]
+        if checkpoint is not None:
+            sql += " AND checkpoint = ?"
+            parameters.append(checkpoint)
+        sql += " ORDER BY checkpoint, artifact_id"
+        with self._connect() as connection:
+            rows = connection.execute(sql, tuple(parameters)).fetchall()
+            return tuple(ReviewCompatibilityContext.model_validate(_load_json(str(row["context_json"]), {})) for row in rows)
+
     @staticmethod
     def _record_review_in_connection(connection: sqlite3.Connection, record: ReviewRecord, *, expected_revision: int) -> ReviewRecord:
         if expected_revision < 0 or record.revision != expected_revision + 1:
@@ -739,6 +760,49 @@ class SQLiteControlStore(ControlStorePort):
             stored = self._record_review_in_connection(connection, record, expected_revision=expected_revision)
             self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": {"review": stored.model_dump(mode="json")}, "resource_id": stored.decision.review_decision_id}))
             return stored, False
+
+    def record_review_with_action_state_with_idempotency(
+        self,
+        record: ReviewRecord,
+        state: ReviewActionState,
+        *,
+        expected_review_revision: int,
+        expected_action_revision: int,
+        idempotency: IdempotencyRecord,
+    ) -> tuple[ReviewRecord, ReviewActionState, bool]:
+        if idempotency.state != "COMPLETED":
+            raise ValueError("review lifecycle idempotency must be completed")
+        if record.revision != expected_review_revision + 1 or state.run_id != record.run_id or state.subject_key != record.subject_key:
+            raise ConcurrencyConflictError("legacy review lifecycle revisions are not valid")
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (idempotency.scope, idempotency.key)).fetchone()
+            if existing_row is not None:
+                existing = self._idempotency_from_connection(existing_row)
+                self._assert_idempotency_match(existing, idempotency)
+                body = existing.response_body
+                return ReviewRecord.model_validate(body["review"]), ReviewActionState.model_validate(body["state"]), True
+            stored = self._record_review_in_connection(connection, record, expected_revision=expected_review_revision)
+            current = connection.execute("SELECT revision FROM review_action_current WHERE run_id = ? AND subject_key = ?", (state.run_id, state.subject_key)).fetchone()
+            current_revision = 0 if current is None else int(current["revision"])
+            if current_revision != expected_action_revision:
+                raise ConcurrencyConflictError("review action revision changed before legacy review synchronization")
+            if current is None:
+                if expected_action_revision != 0:
+                    raise ConcurrencyConflictError("legacy review action baseline is stale")
+                connection.execute(
+                    "INSERT INTO review_action_current(run_id, subject_key, state_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                    (state.run_id, state.subject_key, _dump(state), state.action_revision, state.updated_at.isoformat()),
+                )
+            else:
+                cursor = connection.execute(
+                    "UPDATE review_action_current SET state_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
+                    (_dump(state), state.action_revision, state.updated_at.isoformat(), state.run_id, state.subject_key, expected_action_revision),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrencyConflictError("legacy review action baseline lost its compare-and-swap race")
+            self._audit(connection, "review_lifecycle_synchronized", run_id=record.run_id, artifact_id=record.decision.subject_artifact_id, status=record.decision.decision.value, content_hash=record.decision.subject_content_hash, detail=f"legacy review synchronized action revision {state.action_revision}")
+            self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": {"review": stored.model_dump(mode="json"), "state": state.model_dump(mode="json")}, "resource_id": stored.decision.review_decision_id}))
+            return stored, state, False
 
     def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
         if limit < 1 or offset < 0:
@@ -823,6 +887,168 @@ class SQLiteControlStore(ControlStorePort):
             self._audit(connection, "review_action_recorded", run_id=record.run_id, artifact_id=record.subject_artifact_id, status=record.action.value, content_hash=record.subject_content_hash, detail=f"review action revision {record.resulting_revision} recorded")
             self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": {"action": record.model_dump(mode="json"), "state": state.model_dump(mode="json")}, "resource_id": record.action_id}))
             return record, state, False
+
+    def _requeue_review_descendants_in_connection(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        checkpoint: str,
+        now: datetime,
+        review_contexts: tuple[ReviewCompatibilityContext, ...] | None = None,
+    ) -> None:
+        plan_row = connection.execute("SELECT * FROM execution_plans WHERE run_id = ?", (run_id,)).fetchone()
+        if plan_row is None:
+            return
+        plan = self._plan_from_row(plan_row)
+        stage_index = next((index for index, stage in enumerate(plan.stages) if stage.review_checkpoint is not None and stage.review_checkpoint.value == checkpoint), None)
+        if stage_index is None:
+            return
+        for offset, stage in enumerate(plan.stages[stage_index:]):
+            row = connection.execute("SELECT * FROM jobs WHERE run_id = ? AND stage_id = ?", (run_id, stage.stage_id)).fetchone()
+            if row is None:
+                continue
+            if row["status"] == JobStatus.RUNNING.value and row["lease_owner"]:
+                raise ConcurrencyConflictError("review lifecycle cannot requeue a leased downstream stage")
+            checkpoint_context_json = row["review_context_json"]
+            if offset == 0 and review_contexts is not None:
+                checkpoint_context_json = _dump({"contexts": [context.model_dump(mode="json") for context in review_contexts]})
+            elif offset == 0 and not checkpoint_context_json:
+                registered_context_rows = connection.execute(
+                    "SELECT context_json FROM review_subject_contexts WHERE run_id = ? AND checkpoint = ? ORDER BY artifact_id",
+                    (run_id, checkpoint),
+                ).fetchall()
+                if registered_context_rows:
+                    checkpoint_context_json = _dump({"contexts": [_load_json(str(item["context_json"]), {}) for item in registered_context_rows]})
+            status = JobStatus.NEEDS_REVIEW.value if offset == 0 else JobStatus.BLOCKED.value
+            failure_code = None if offset == 0 else "REVIEW_REQUEUE_WAITING"
+            failure_classification = None if offset == 0 else FailureClassification.BLOCKED_PREREQUISITE.value
+            failure_reason = None if offset == 0 else "downstream execution waits for the requeued review checkpoint"
+            connection.execute(
+                "UPDATE jobs SET status = ?, review_context_json = ?, attempt_id = NULL, available_at = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, cancellation_requested = 0, cancellation_requested_at = NULL, failure_code = ?, failure_classification = ?, failure_reason = ?, result_refs = ?, delivery_phase = ?, durable_result_json = NULL, revision = revision + 1 WHERE job_id = ?",
+                (status, checkpoint_context_json, now.isoformat(), failure_code, failure_classification, failure_reason, _dump(()), DeliveryPhase.ATTEMPT_CREATED.value, str(row["job_id"])),
+            )
+            self._audit(connection, "review_descendants_requeued", run_id=run_id, status=JobStatus.QUEUED.value, detail=f"checkpoint={checkpoint}; stage={stage.stage_id}; job={row['job_id']}")
+        run_row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        if run_row is not None and run_row["status"] not in {RunStatus.CANCELLED.value, RunStatus.SUCCEEDED.value}:
+            connection.execute(
+                "UPDATE runs SET status = ?, revision = revision + 1 WHERE run_id = ? AND revision = ?",
+                (RunStatus.NEEDS_REVIEW.value, run_id, int(run_row["revision"])),
+            )
+
+    def record_review_and_action_with_idempotency(
+        self,
+        review: ReviewRecord | None,
+        action: ReviewActionRecord,
+        state: ReviewActionState,
+        *,
+        expected_review_revision: int,
+        expected_action_revision: int,
+        idempotency: IdempotencyRecord,
+        requeue_checkpoint: str | None = None,
+        requeue_review_contexts: tuple[ReviewCompatibilityContext, ...] | None = None,
+    ) -> tuple[ReviewRecord | None, ReviewActionRecord, ReviewActionState, bool]:
+        if idempotency.state != "COMPLETED":
+            raise ValueError("review lifecycle idempotency must be completed")
+        if action.previous_revision != expected_action_revision or action.resulting_revision != expected_action_revision + 1:
+            raise ConcurrencyConflictError("review action revision does not match the expected compare-and-swap revision")
+        if state.run_id != action.run_id or state.subject_key != action.subject_key or state.action_revision != action.resulting_revision:
+            raise PlatformError("review action state must match the action revision")
+        if review is not None and (review.revision != expected_review_revision + 1 or review.run_id != action.run_id or review.subject_key != action.subject_key):
+            raise ConcurrencyConflictError("review decision revision does not match the expected compare-and-swap revision")
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (idempotency.scope, idempotency.key)).fetchone()
+            if existing_row is not None:
+                existing = self._idempotency_from_connection(existing_row)
+                self._assert_idempotency_match(existing, idempotency)
+                body = existing.response_body
+                action_body = body.get("action")
+                state_body = body.get("state")
+                if not isinstance(action_body, dict) or not isinstance(state_body, dict):
+                    raise PlatformError("review lifecycle idempotency record is not replayable")
+                review_body = body.get("review")
+                return (None if not isinstance(review_body, dict) else ReviewRecord.model_validate(review_body), ReviewActionRecord.model_validate(action_body), ReviewActionState.model_validate(state_body), True)
+            if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (action.run_id,)).fetchone() is None:
+                raise PlatformError("review lifecycle requires an existing run")
+            stored_review = None if review is None else self._record_review_in_connection(connection, review, expected_revision=expected_review_revision)
+            current = connection.execute("SELECT revision FROM review_action_current WHERE run_id = ? AND subject_key = ?", (action.run_id, action.subject_key)).fetchone()
+            current_revision = 0 if current is None else int(current["revision"])
+            if current_revision != expected_action_revision:
+                raise ConcurrencyConflictError("review action revision changed before compare-and-swap update")
+            history_id = f"review-action-{action.action_id}-{action.resulting_revision}"
+            connection.execute(
+                "INSERT INTO review_action_history(history_id, run_id, subject_key, action_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (history_id, action.run_id, action.subject_key, _dump(action), action.resulting_revision, action.recorded_at.isoformat()),
+            )
+            if current is None:
+                connection.execute(
+                    "INSERT INTO review_action_current(run_id, subject_key, state_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                    (state.run_id, state.subject_key, _dump(state), state.action_revision, state.updated_at.isoformat()),
+                )
+            else:
+                cursor = connection.execute(
+                    "UPDATE review_action_current SET state_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
+                    (_dump(state), state.action_revision, state.updated_at.isoformat(), state.run_id, state.subject_key, expected_action_revision),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrencyConflictError("review action revision changed before compare-and-swap update")
+            if requeue_checkpoint is not None:
+                self._requeue_review_descendants_in_connection(
+                    connection,
+                    run_id=action.run_id,
+                    checkpoint=requeue_checkpoint,
+                    now=action.recorded_at,
+                    review_contexts=requeue_review_contexts,
+                )
+            self._audit(connection, "review_action_recorded", run_id=action.run_id, artifact_id=action.subject_artifact_id, status=action.action.value, content_hash=action.subject_content_hash, detail=f"review action revision {action.resulting_revision} recorded")
+            response_body = {"action": action.model_dump(mode="json"), "state": state.model_dump(mode="json")}
+            if stored_review is not None:
+                response_body["review"] = stored_review.model_dump(mode="json")
+            self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": response_body, "resource_id": action.action_id}))
+            return stored_review, action, state, False
+
+    def record_review_invalidation_with_lifecycle(
+        self,
+        review: ReviewRecord,
+        state: ReviewActionState,
+        *,
+        expected_review_revision: int,
+        expected_action_revision: int,
+        idempotency: IdempotencyRecord,
+        requeue_checkpoint: str,
+    ) -> tuple[ReviewRecord, ReviewActionState, bool]:
+        if idempotency.state != "COMPLETED":
+            raise ValueError("review invalidation idempotency must be completed")
+        if review.revision != expected_review_revision + 1 or state.action_revision != expected_action_revision + 1:
+            raise ConcurrencyConflictError("review invalidation revisions are not a valid compare-and-swap transition")
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (idempotency.scope, idempotency.key)).fetchone()
+            if existing_row is not None:
+                existing = self._idempotency_from_connection(existing_row)
+                self._assert_idempotency_match(existing, idempotency)
+                body = existing.response_body
+                return ReviewRecord.model_validate(body["review"]), ReviewActionState.model_validate(body["state"]), True
+            self._record_review_in_connection(connection, review, expected_revision=expected_review_revision)
+            current = connection.execute("SELECT revision FROM review_action_current WHERE run_id = ? AND subject_key = ?", (state.run_id, state.subject_key)).fetchone()
+            current_revision = 0 if current is None else int(current["revision"])
+            if current_revision != expected_action_revision:
+                raise ConcurrencyConflictError("review action revision changed before invalidation")
+            if current is None:
+                connection.execute(
+                    "INSERT INTO review_action_current(run_id, subject_key, state_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                    (state.run_id, state.subject_key, _dump(state), state.action_revision, state.updated_at.isoformat()),
+                )
+            else:
+                cursor = connection.execute(
+                    "UPDATE review_action_current SET state_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
+                    (_dump(state), state.action_revision, state.updated_at.isoformat(), state.run_id, state.subject_key, expected_action_revision),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrencyConflictError("review action revision changed before invalidation")
+            self._requeue_review_descendants_in_connection(connection, run_id=review.run_id, checkpoint=requeue_checkpoint, now=review.recorded_at)
+            self._audit(connection, "review_invalidated", run_id=review.run_id, artifact_id=review.decision.subject_artifact_id, status=review.decision.decision.value, content_hash=review.decision.subject_content_hash, detail=review.decision.invalidation_reason or "review invalidated")
+            self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": {"review": review.model_dump(mode="json"), "state": state.model_dump(mode="json")}, "resource_id": review.decision.review_decision_id}))
+            return review, state, False
 
     def list_review_action_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewActionHistoryRecord, ...]:
         if limit < 1 or offset < 0:

@@ -50,7 +50,7 @@ product_acceptance:
   overall_status: "AUDIT_COMPLETE_ACCEPTANCE_PENDING"
   multi_source_status: "PASS_HISTORICAL_PROMPT02_CURRENT_BRANCH_RERUN_NOT_EXECUTED"
   generic_product_status: "PASS_LOCAL_TELEMETRY_BOUNDED"
-  human_review_status: "PASS_LOCAL_PROMPT04_REVIEW_ACTION_MATRIX_AND_BROWSER_CONTRACT"
+  human_review_status: "PASS_LOCAL_PROMPT04_R1_DOWNSTREAM_REVIEW_CLOSURE"
   output_export_status: "PARTIAL_NO_COMPLETE_PRODUCT_EXPORT"
   g6_status: "PASS_BOUNDED_STEP29_SINGLE_SOURCE_ORDER_PATH"
   g7_status: "PASS_BOUNDED_STEP29_LOCAL_PRODUCT_PATH"
@@ -66,10 +66,14 @@ product_acceptance:
   prompt03_wrapper_status: "PASS_LOCAL_EXACT_COMMIT_WRAPPER"
   prompt03_liveness_status: "PASS_LOCAL_PENDING_WAKE_REPAIRED"
   complete_review_action_matrix_executed: true
-  prompt04_review_negative_controls: "PASS_NC-R01_NC-R20"
+  prompt04_review_negative_controls: "PASS_NC-R01_NC-R32"
   prompt04_review_order_telemetry: "PASS_LOCAL_DURABLE_ORDER_AND_BOUNDED_TELEMETRY"
   prompt04_browser_acceptance: "PASS_LOCAL_CHROME_DURABLE_SYNTHETIC_REVIEW_FIXTURE"
-  prompt04_real_provider_review_path: "NOT_CLAIMED_OPTIONAL_DESBORDANTE_UNAVAILABLE"
+  prompt04_real_provider_review_path: "PASS_LOCAL_REAL_PROVIDER_OVERRIDE_DOWNSTREAM_G6_REJECTED_INCOMPATIBLE_RESULT"
+  prompt04_r1_status: "PASS_LOCAL_PROMPT04_R1_DOWNSTREAM_REVIEW_CLOSURE"
+  prompt04_r1_real_run: "run_23e07b110bf774b8377c738b644ef6de"
+  prompt04_r1_evidence: "PROMPT04_R1_DOWNSTREAM_CLOSURE.md"
+  prompt04_r1_g6_guard: "PASS_MATERIALIZATION_REACHED_G6_REJECTED_EXCLUDE_OVERRIDE_AGAINST_UNCHANGED_ORACLE"
   safe_export_acceptance_executed: false
   final_product_acceptance: "PENDING"
 next_product_completion_prompt:
@@ -80,7 +84,7 @@ next_product_completion_prompt:
   prompt02_handoff: "PASS_HISTORICAL_CURRENT_BRANCH_RERUN_NOT_EXECUTED"
 future_prompts:
   prompt03: "PASS_LOCAL_TELEMETRY_BOUNDED"
-  prompt04: "PASS_LOCAL_REVIEW_CONTRACT_AND_UI"
+  prompt04: "PASS_LOCAL_PROMPT04_R1_DOWNSTREAM_REVIEW_CLOSURE"
   prompt05: "NOT_STARTED"
   prompt06: "NOT_STARTED"
 evidence_boundary:
@@ -99,6 +103,10 @@ evidence_boundary:
   prompt03_run: "run_b8738ac0388d163aaeaaceca77cd74be"
   prompt03_replay: "PASS_LOCAL_EXACT_COMMIT_DUCKDB_TRUTH_ACCOUNTING_REPLAY"
   prompt03_ci: "NOT_RUN_BY_SCOPE"
+  prompt04_r1_local_provider_image: "dirty-data-to-olap-desbordante-step37:local"
+  prompt04_r1_real_run: "run_23e07b110bf774b8377c738b644ef6de"
+  prompt04_r1_evidence: "PROMPT04_R1_DOWNSTREAM_CLOSURE.md"
+  prompt04_r1_ci: "NOT_RUN_BY_SCOPE"
   production_readiness: "NOT_CLAIMED"
   oracle_support: "NOT_CLAIMED"
   calibrated_probability_support: "NOT_CLAIMED"

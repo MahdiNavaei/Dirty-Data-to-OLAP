@@ -39,9 +39,10 @@ from dirty_data_to_olap.application.snapshot import SourceSnapshotService
 from dirty_data_to_olap.application.source_registry import DurableSourceRegistry
 from dirty_data_to_olap.application.validation import ValidationInputs, ValidationService
 from dirty_data_to_olap.domain.contracts.analytical import AnalyticalInputBinding, AnalyticalInputDataset, AnalyticalPlan, CompiledPlan, DimensionSpec, FactSpec, GeneratedSQL, GrainSpec, MaterializationArtifact, MeasureSpec, TargetConfig
-from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityMembership, CanonicalIdentityProposal, CanonicalModel, CanonicalModelHypothesis, EntityResolutionRequirement, IdentityDerivationBasis, ReviewCheckpoint
+from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityMembership, CanonicalIdentityProposal, CanonicalModel, CanonicalModelHypothesis, EntityResolutionRequirement, IdentityDerivationBasis, ReviewCheckpoint, ReviewDecisionStatus, ReviewCompatibilityContext, review_subject_key
 from dirty_data_to_olap.domain.contracts.dependency import DependencyResult
 from dirty_data_to_olap.domain.contracts.evidence_fusion import EvidenceFusionInputs, EvidenceFusionRequest, FusionSubjectKind, RelationshipDecision
+from dirty_data_to_olap.domain.contracts.review_actions import ReviewOverrideProposal, ReviewOverrideValue
 from dirty_data_to_olap.domain.contracts.jobs import FailureClassification, StageExecutionRequest, StageExecutionResult, StageResultStatus
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, ArtifactRef
 from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, ProfileResult
@@ -161,7 +162,15 @@ class LocalProductStageHandlers:
         return ref, payload
 
     def _typed_from_run(self, run_id: str, kind: str, model):
-        for ref in reversed(self.platform.control_store.list_artifacts(run_id=run_id, artifact_kind=kind, limit=10000)):
+        artifacts = self.platform.control_store.list_artifacts(run_id=run_id, artifact_kind=kind, limit=10000)
+        current_refs = {
+            artifact_id
+            for job in self.platform.control_store.list_jobs(run_id=run_id, limit=10000)
+            if job.stage_id and job.status.value == "SUCCEEDED"
+            for artifact_id in job.result_refs
+        }
+        prioritized = tuple(ref for ref in artifacts if ref.artifact_id in current_refs) or artifacts
+        for ref in reversed(prioritized):
             try:
                 actual_ref, payload = self._read(run_id, ref.artifact_id, kind)
                 return actual_ref, model.model_validate(payload)
@@ -279,20 +288,78 @@ class LocalProductStageHandlers:
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=output_refs, metadata={"fusion_status": result.completeness.value, "producer_profile": profile_ref.artifact_id, "producer_quality": quality_ref.artifact_id, "producer_dependency": dependency_ref.artifact_id})
 
     def _accepted_review(self, run_id: str, checkpoint: ReviewCheckpoint):
-        decisions = [item.decision for item in self.platform.control_store.list_review_history(run_id=run_id, limit=10000) if item.decision.review_checkpoint_id is checkpoint and item.decision.decision.value == "ACCEPTED" and not item.decision.superseded]
+        seen: set[str] = set()
+        decisions = []
+        for item in self.platform.control_store.list_review_history(run_id=run_id, limit=10000):
+            if item.decision.review_checkpoint_id is not checkpoint or item.subject_key in seen:
+                continue
+            seen.add(item.subject_key)
+            current = self.platform.control_store.get_current_review(run_id=run_id, subject_key=item.subject_key)
+            if current is not None and current.decision.decision is ReviewDecisionStatus.ACCEPTED and not current.decision.superseded:
+                decisions.append(current.decision)
         if not decisions:
             raise ValueError(f"accepted review is required for {checkpoint.value}")
         return decisions[-1]
 
+    def _accepted_review_for_context(self, run_id: str, context: ReviewCompatibilityContext):
+        current = self.platform.control_store.get_current_review(run_id=run_id, subject_key=review_subject_key(context))
+        if current is None or current.decision.decision is not ReviewDecisionStatus.ACCEPTED or current.decision.superseded:
+            raise ValueError(f"accepted review is required for {context.review_checkpoint_id.value} subject {context.subject_artifact_id}")
+        self.review_policy.require_compatible(current.decision, context)
+        return current.decision
+
+    def _resolved_relationship(self, run_id: str):
+        decision_ref, decision = self._typed_from_run(run_id, "RelationshipDecision", RelationshipDecision)
+        original_review = None
+        original_context = self.platform.control_store.get_review_subject_context(
+            run_id=run_id,
+            checkpoint=ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value,
+            artifact_id=decision_ref.artifact_id,
+        )
+        for history in self.platform.control_store.list_review_history(run_id=run_id, limit=10000):
+            if history.decision.review_checkpoint_id is not ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS or history.decision.subject_artifact_id != decision_ref.artifact_id:
+                continue
+            current = self.platform.control_store.get_current_review(run_id=run_id, subject_key=history.subject_key)
+            if current is not None and current.decision.decision is ReviewDecisionStatus.ACCEPTED and original_context is not None and current.decision.is_compatible(original_context):
+                original_review = current.decision
+        selected = None
+        for proposal_ref in self.platform.control_store.list_artifacts(run_id=run_id, artifact_kind="ReviewOverrideProposal", limit=10000):
+            try:
+                actual_ref, payload = self._read(run_id, proposal_ref.artifact_id, "ReviewOverrideProposal")
+                proposal = ReviewOverrideProposal.model_validate(payload)
+            except (KeyError, OSError, ValueError, json.JSONDecodeError):
+                continue
+            if proposal.original_subject_artifact_id != decision_ref.artifact_id or proposal.target.value != "RELATIONSHIP_DISPOSITION":
+                continue
+            context = self.platform.control_store.get_review_subject_context(run_id=run_id, checkpoint=proposal.checkpoint.value, artifact_id=actual_ref.artifact_id)
+            if context is None:
+                continue
+            current = self.platform.control_store.get_current_review(run_id=run_id, subject_key=review_subject_key(context))
+            if current is None or current.decision.decision is not ReviewDecisionStatus.ACCEPTED or not current.decision.is_compatible(context):
+                continue
+            selected = (proposal_ref, proposal, current.decision)
+        if selected is not None:
+            return decision_ref, decision, selected[2], selected[0].artifact_id, selected[1].replacement is ReviewOverrideValue.EXCLUDE_CANDIDATE
+        if original_review is None:
+            raise ValueError("accepted original or replacement relationship review is required")
+        return decision_ref, decision, original_review, None, False
+
     def _hypothesis(self, request: StageExecutionRequest) -> StageExecutionResult:
         catalog_ref, catalog = self._catalog(request)
         snapshot_ref, snapshot = self._snapshot(request)
-        decision_ref, decision = self._typed_from_run(request.run_id, "RelationshipDecision", RelationshipDecision)
-        evidence_reviews = tuple(item.decision for item in self.platform.control_store.list_review_history(run_id=request.run_id, limit=10000) if item.decision.review_checkpoint_id is ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS and item.decision.decision.value == "ACCEPTED" and not item.decision.superseded)
-        domain_assertion_refs = tuple(sorted(set(ref for item in evidence_reviews for ref in item.domain_assertion_refs)))
+        decision_ref, decision, evidence_review, override_ref, exclude_relationship = self._resolved_relationship(request.run_id)
+        evidence_reviews = (evidence_review,)
+        domain_assertion_refs = tuple(sorted(set(evidence_review.domain_assertion_refs)))
         entity_type = self.product_policy.entity_type(catalog, snapshot, decision.decision_id, domain_assertion_refs=domain_assertion_refs)
-        relationship = self.product_policy.relationship(decision, entity_type.canonical_entity_type_id, evidence_reviews[-1].review_decision_id)
-        hypothesis = self.hypotheses.build(run_id=request.run_id, execution_context_id=snapshot.snapshot.execution_context_id, model_version=self.product_policy.version, evidence_reviews=evidence_reviews, relationship_decisions=(decision,), evidence_domain_assertion_refs={decision.decision_id: entity_type.domain_assertion_refs}, entity_types=(entity_type,), source_ids=(catalog.source_id,), domain_assertion_refs=entity_type.domain_assertion_refs, entity_resolution_requirements={entity_type.entity_resolution_family or entity_type.semantic_id: EntityResolutionRequirement.ER_NOT_REQUIRED}, relationships=(relationship,), snapshot_fingerprints={catalog.source_id: snapshot.snapshot.source_fingerprint or snapshot.snapshot.schema_fingerprint}, source_schema_fingerprints={catalog.source_id: catalog.source.schema_fingerprint}, source_authority_policy_refs=(self.product_policy.provenance,), evidence_refs=(decision_ref.artifact_id,), provenance_refs=(catalog_ref.artifact_id, snapshot_ref.artifact_id, decision_ref.artifact_id, self.product_policy.provenance))
+        if exclude_relationship:
+            entity_type = entity_type.model_copy(update={"relationship_refs": ()})
+            relationships = ()
+        else:
+            relationship = self.product_policy.relationship(decision, entity_type.canonical_entity_type_id, evidence_review.review_decision_id)
+            if override_ref is not None:
+                relationship = relationship.model_copy(update={"provenance_refs": tuple(sorted(set((*relationship.provenance_refs, override_ref))))})
+            relationships = (relationship,)
+        hypothesis = self.hypotheses.build(run_id=request.run_id, execution_context_id=snapshot.snapshot.execution_context_id, model_version=self.product_policy.version, evidence_reviews=evidence_reviews, relationship_decisions=(decision,), evidence_domain_assertion_refs={decision.decision_id: entity_type.domain_assertion_refs}, entity_types=(entity_type,), source_ids=(catalog.source_id,), domain_assertion_refs=entity_type.domain_assertion_refs, entity_resolution_requirements={entity_type.entity_resolution_family or entity_type.semantic_id: EntityResolutionRequirement.ER_NOT_REQUIRED}, relationships=relationships, snapshot_fingerprints={catalog.source_id: snapshot.snapshot.source_fingerprint or snapshot.snapshot.schema_fingerprint}, source_schema_fingerprints={catalog.source_id: catalog.source.schema_fingerprint}, source_authority_policy_refs=(self.product_policy.provenance,), evidence_refs=(decision_ref.artifact_id,), provenance_refs=tuple(item for item in (catalog_ref.artifact_id, snapshot_ref.artifact_id, decision_ref.artifact_id, override_ref, self.product_policy.provenance) if item))
         ref = self._publish(request, "CanonicalModelHypothesis", hypothesis, artifact_id=hypothesis.artifact_id, provenance=hypothesis.provenance_refs, producer="application.canonical_hypothesis")
         return StageExecutionResult(status=StageResultStatus.SUCCEEDED, output_artifact_refs=(ref.artifact_id,))
 
@@ -309,7 +376,8 @@ class LocalProductStageHandlers:
         hypothesis_ref, hypothesis = self._typed_from_run(request.run_id, "CanonicalModelHypothesis", CanonicalModelHypothesis)
         proposal_ref, proposal = self._typed_from_run(request.run_id, "CanonicalIdentityProposal", CanonicalIdentityProposal)
         _snapshot_ref, snapshot = self._snapshot(request)
-        review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY)
+        identity_context = self.canonical_finalization.identity_context(hypothesis, proposal, subject_content_hash=proposal_ref.content_hash).model_copy(update={"subject_artifact_id": proposal_ref.artifact_id})
+        review = self._accepted_review_for_context(request.run_id, identity_context)
         metadata = {item.record_ref: {"source_id": item.source_id, "snapshot_id": item.snapshot_id, "table_id": item.table_id} for item in snapshot.record_references}
         accounting_id = stable_id("accounting", {"run": request.run_id, "snapshot": snapshot.snapshot.snapshot_id})
         model = self.canonical_finalization.finalize(hypothesis=hypothesis, identity_proposal=proposal, identity_review=review, source_record_metadata=metadata, lineage_refs=(hypothesis_ref.artifact_id, proposal_ref.artifact_id), record_accounting_refs=(accounting_id,))
@@ -334,7 +402,15 @@ class LocalProductStageHandlers:
 
     def _all_typed(self, run_id: str, kind: str, model) -> tuple:
         values = []
-        for ref in self.platform.control_store.list_artifacts(run_id=run_id, artifact_kind=kind, limit=10000):
+        artifacts = self.platform.control_store.list_artifacts(run_id=run_id, artifact_kind=kind, limit=10000)
+        current_refs = {
+            artifact_id
+            for job in self.platform.control_store.list_jobs(run_id=run_id, limit=10000)
+            if job.stage_id and job.status.value == "SUCCEEDED"
+            for artifact_id in job.result_refs
+        }
+        prioritized = tuple(ref for ref in artifacts if ref.artifact_id in current_refs) or artifacts
+        for ref in prioritized:
             try:
                 actual_ref, value = self._read(run_id, ref.artifact_id, kind)
                 values.append((actual_ref, model.model_validate(value)))
@@ -350,7 +426,8 @@ class LocalProductStageHandlers:
         facts = tuple(value for _ref, value in self._all_typed(request.run_id, "FactSpec", FactSpec))
         grains = tuple(value for _ref, value in self._all_typed(request.run_id, "GrainSpec", GrainSpec))
         measures = tuple(value for _ref, value in self._all_typed(request.run_id, "MeasureSpec", MeasureSpec))
-        review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN)
+        review_context = self.review_policy.analytical_plan_context(plan, subject_content_hash=_plan_ref.content_hash).model_copy(update={"subject_artifact_id": _plan_ref.artifact_id})
+        review = self._accepted_review_for_context(request.run_id, review_context)
         target = TargetConfig(relative_path="olap.duckdb")
         compiled, sql = self.compiler.compile(plan, dimensions, facts, grains, measures, binding, dataset, target, review)
         outputs = CompilationArtifactPublisher(self.platform.artifact_store, self.platform.control_store).publish(run_id=request.run_id, attempt_id=request.attempt_id, compiled_plan=compiled, generated_sql=sql, target_config=target, policy_provenance_refs=(self.product_policy.provenance, self.product_policy.content_fingerprint))
@@ -362,7 +439,8 @@ class LocalProductStageHandlers:
         _target_ref, target = self._typed_from_run(request.run_id, "TargetConfig", TargetConfig)
         _dataset_ref, dataset = self._typed_from_run(request.run_id, "AnalyticalInputDataset", AnalyticalInputDataset)
         _binding_ref, binding = self._typed_from_run(request.run_id, "AnalyticalInputBinding", AnalyticalInputBinding)
-        review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_MATERIALIZATION_PLAN)
+        review_context = self.review_policy.materialization_context(compiled, sql, target, subject_content_hash=compiled_ref.content_hash).model_copy(update={"subject_artifact_id": compiled_ref.artifact_id})
+        review = self._accepted_review_for_context(request.run_id, review_context)
         artifact = MaterializationService(DuckDBMaterializer(self._run_root(request.run_id) / "olap", repository_root=self.project_root)).materialize(compiled, sql, review, binding, dataset, target, run_id=request.run_id)
         ref = self._publish(request, "MaterializationArtifact", artifact, artifact_id=artifact.artifact_id, provenance=(compiled_ref.artifact_id, sql_ref.artifact_id, target.config_fingerprint), producer="adapter.duckdb")
         if not artifact.usable:
@@ -378,7 +456,8 @@ class LocalProductStageHandlers:
         facts = tuple(value for _ref, value in self._all_typed(request.run_id, "FactSpec", FactSpec))
         grains = tuple(value for _ref, value in self._all_typed(request.run_id, "GrainSpec", GrainSpec))
         measures = tuple(value for _ref, value in self._all_typed(request.run_id, "MeasureSpec", MeasureSpec))
-        analytical_review = self._accepted_review(request.run_id, ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN)
+        analytical_context = self.review_policy.analytical_plan_context(plan, subject_content_hash=_plan_ref.content_hash).model_copy(update={"subject_artifact_id": _plan_ref.artifact_id})
+        analytical_review = self._accepted_review_for_context(request.run_id, analytical_context)
         model = self.semantic.build_model(plan, dimensions, facts, grains, measures, compiled, materialization, canonical, analytical_review=analytical_review, additional_provenance_refs=("application.semantic_layer",))
         semantic_validation = self.semantic.validation_result(model, (("materialization_binding", True, "semantic model is bound to the reviewed materialization artifact"), ("analytical_spec_binding", True, "semantic fields are derived from the reviewed analytical specifications")))
         model_ref = self._publish(request, "SemanticModel", model, artifact_id=model.semantic_model_id, provenance=model.provenance_refs, producer="application.semantic_layer")

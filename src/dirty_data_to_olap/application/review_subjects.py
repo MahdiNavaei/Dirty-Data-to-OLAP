@@ -19,6 +19,7 @@ from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, Revi
 from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityProposal, CanonicalModelHypothesis
 from dirty_data_to_olap.domain.contracts.entity_resolution import EntityResolutionResult
 from dirty_data_to_olap.domain.contracts.evidence_fusion import DomainAssertion, EvidenceFusionResult, RelationshipDecision, SemanticMappingDecision
+from dirty_data_to_olap.domain.contracts.review_actions import ReviewOverrideProposal
 from dirty_data_to_olap.domain.contracts.platform import ArtifactIntegrityState, ArtifactPublicationState, ArtifactRef
 from dirty_data_to_olap.domain.contracts.source import stable_digest
 
@@ -70,7 +71,7 @@ class ReviewCheckpointSubjectResolver:
             verified.append((artifact, payload))
 
         if checkpoint is ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS:
-            return self._evidence_contexts(verified, unresolved)
+            return self._evidence_contexts(run_id, verified, unresolved)
         if checkpoint is ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY:
             return self._identity_contexts(run_id, verified, unresolved)
         if checkpoint is ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN:
@@ -86,6 +87,7 @@ class ReviewCheckpointSubjectResolver:
 
     def _evidence_contexts(
         self,
+        run_id: str,
         verified: list[tuple[ArtifactRef, object]],
         unresolved: list[str],
     ) -> ReviewSubjectDerivation:
@@ -98,8 +100,23 @@ class ReviewCheckpointSubjectResolver:
             if artifact.artifact_kind == "DomainAssertion" and isinstance(payload, DomainAssertion):
                 domain_refs_by_subject.setdefault(payload.subject_id, []).append(payload.assertion_id)
         contexts: list[ReviewCompatibilityContext] = []
+        overridden_originals: set[str] = set()
+        for proposal_artifact in self.control_store.list_artifacts(run_id=run_id, artifact_kind="ReviewOverrideProposal", limit=10000):
+            try:
+                _proposal_ref, proposal_payload = self._read_verified(run_id, proposal_artifact)
+                proposal = proposal_payload if isinstance(proposal_payload, ReviewOverrideProposal) else ReviewOverrideProposal.model_validate(proposal_payload)
+            except (KeyError, OSError, PlatformError, ValueError):
+                continue
+            if proposal.checkpoint is not ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS:
+                continue
+            replacement_context = self.control_store.get_review_subject_context(run_id=run_id, checkpoint=proposal.checkpoint.value, artifact_id=proposal_artifact.artifact_id)
+            if replacement_context is not None:
+                overridden_originals.add(proposal.original_subject_artifact_id)
+                contexts.append(replacement_context)
         for artifact, payload in verified:
             if artifact.artifact_kind == "RelationshipDecision" and isinstance(payload, RelationshipDecision):
+                if artifact.artifact_id in overridden_originals:
+                    continue
                 context = self.review_policy.evidence_context(payload, tuple(sorted(domain_refs_by_subject.get(payload.subject_id, ()))), subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "SemanticMappingDecision" and isinstance(payload, SemanticMappingDecision):
@@ -292,6 +309,7 @@ class ReviewCheckpointSubjectResolver:
             "CanonicalModelHypothesis": CanonicalModelHypothesis,
             "CanonicalIdentityProposal": CanonicalIdentityProposal,
             "EntityResolutionResult": EntityResolutionResult,
+            "ReviewOverrideProposal": ReviewOverrideProposal,
             "AnalyticalPlan": AnalyticalPlan,
             "CompiledPlan": CompiledPlan,
             "GeneratedSQL": GeneratedSQL,

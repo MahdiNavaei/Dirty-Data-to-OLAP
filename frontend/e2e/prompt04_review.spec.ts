@@ -44,8 +44,7 @@ test("Prompt04 browser review actions are durable and server-owned", async ({ pa
   await expect(reloadedReview).toContainText(checkpointText);
   await expect(page.getByTestId("review-history")).toContainText("LABEL");
   await reloadedReview.getByRole("button", { name: "Accept and resume when eligible", exact: true }).click();
-  await expect(page.locator(".notice.success")).toContainText("Action saved: ACCEPT. RESUME_IF_SERVER_ELIGIBLE.");
-  await expect(page.getByText("Run resumed by the durable execution boundary.")).toHaveCount(0);
+  await expect(page.getByText("Run resumed by the durable execution boundary.")).toBeVisible();
   await expect(reloadedReview).toContainText(checkpointText);
   expect(consoleErrors).toEqual([]);
 });

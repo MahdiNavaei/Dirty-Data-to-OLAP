@@ -8,7 +8,7 @@ Prompt03 baseline: `a735f157945df890ef809f1990ed00417f44a4bd`
 
 `PASS_LOCAL_REVIEW_CONTRACT_AND_UI`
 
-This result closes the Prompt04 review action contract, server-owned applicability projection, durable history, API boundary, and browser review workspace locally. It does not close the overall V1 product acceptance, Prompt05 export, Prompt06 release work, or external-provider heterogeneous-source acceptance.
+This result closes the Prompt04 review action contract, server-owned applicability projection, durable history, API boundary, and browser review workspace locally. The Prompt04-R1 downstream closure is recorded separately in `PROMPT04_R1_DOWNSTREAM_CLOSURE.md`; it extends this contract evidence with a real local provider execution. It does not close the overall V1 product acceptance, Prompt05 export, Prompt06 release work, or external-provider heterogeneous-source acceptance.
 
 ## Implemented contract
 
@@ -37,7 +37,12 @@ The repository-owned Playwright browser test passed locally: `1 passed`.
 
 The test used a real local API, SQLite control store, registered immutable artifact, persisted review context, and a durable `NEEDS_REVIEW` job fixture. It exercised all six action controls, evidence/provenance rendering, `LABEL`, reload, durable history, and `ACCEPT`. Because the fixture had no execution plan, the server returned `execution_eligible=false`; the browser correctly did not call resume and kept the review subject visible.
 
-The full source-upload product path was also attempted locally. It reached the real worker and ended at `DEPENDENCY_DISCOVERY` because the optional Desbordante provider is unavailable on this host. That is not upgraded to Prompt04 or G7 PASS evidence.
+The full source-upload product path was also attempted locally during the earlier
+Prompt04 baseline. That earlier attempt ended at `DEPENDENCY_DISCOVERY` because
+the optional Desbordante provider was unavailable at that time. The later
+Prompt04-R1 local provider run and its bounded G6 rejection are documented in
+the R1 evidence file and supersede this limitation for the downstream review
+path only.
 
 Playwright CLI was unavailable in this Windows environment (`npm ECOMPROMISED`), and the cached Playwright browser revision did not match the installed package. The repository runner therefore used the installed system Chrome through the explicit local-only `PLAYWRIGHT_EXECUTABLE_PATH` test-runner option. No CI workflow or browser download was used successfully.
 
@@ -51,5 +56,5 @@ Playwright CLI was unavailable in this Windows environment (`npm ECOMPROMISED`),
 ## Limitations
 
 - This is local Prompt04 contract/UI acceptance, not a fresh four-source Prompt02 rerun.
-- Optional Desbordante is unavailable locally, so no real heterogeneous-provider review path is claimed here.
+- The earlier baseline run was provider-blocked; the later local provider override path is covered by the Prompt04-R1 evidence file. No fresh four-source heterogeneous-source acceptance is claimed.
 - Overall V1 remains `PENDING`; Prompt05 and Prompt06 remain `NOT_STARTED`; Step42 remains `NOT_STARTED`.

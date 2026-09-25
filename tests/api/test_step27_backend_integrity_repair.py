@@ -134,7 +134,7 @@ def test_review_atomic_mutation_replays_after_post_commit_failure_and_reopen(tmp
     ref = _publish(platform, run_id, "atomic-subject")
     context = _context(ref)
     platform.control_store.register_review_subject_context(run_id=run_id, context=context)
-    original = platform.control_store.record_review_with_idempotency
+    original = platform.control_store.record_review_with_action_state_with_idempotency
     failed = False
 
     def fail_after_commit(*args, **kwargs):
@@ -145,7 +145,7 @@ def test_review_atomic_mutation_replays_after_post_commit_failure_and_reopen(tmp
             raise RuntimeError("injected post-commit process failure")
         return result
 
-    monkeypatch.setattr(platform.control_store, "record_review_with_idempotency", fail_after_commit)
+    monkeypatch.setattr(platform.control_store, "record_review_with_action_state_with_idempotency", fail_after_commit)
     path = f"/api/v1/runs/{run_id}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}"
     body = _review_body(ref, context=context)
     first = client.post(path, headers={**AUTH, "Idempotency-Key": "atomic-review"}, json=body)

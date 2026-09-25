@@ -22,6 +22,7 @@ from dirty_data_to_olap.application.platform import (
     PlatformError,
 )
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
+from dirty_data_to_olap.application.review_readiness import evaluate_review_readiness
 from dirty_data_to_olap.application.review_subjects import ReviewSubjectDerivationPort, ReviewCheckpointSubjectResolver
 from dirty_data_to_olap.domain.contracts.api import ExecutionCommand, ExecutionAction, SubmissionResult
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewDecisionStatus, review_subject_key
@@ -301,49 +302,9 @@ class JobWorker:
             if candidate.job_kind is not JobKind.STAGE:
                 continue
             if candidate.status is JobStatus.NEEDS_REVIEW:
-                contexts = candidate.review_contexts or ((candidate.review_context,) if candidate.review_context is not None else ())
-                if not contexts:
-                    blocked_reason = "review context is unavailable"
-                    continue
-                all_compatible = True
-                for context in contexts:
-                    authoritative = self.control_store.get_review_subject_context(
-                        run_id=run.run_id,
-                        checkpoint=context.review_checkpoint_id.value,
-                        artifact_id=context.subject_artifact_id,
-                    )
-                    if authoritative is None:
-                        blocked_reason = "authoritative review context is unavailable"
-                        all_compatible = False
-                        break
-                    subject_artifact = self.control_store.get_artifact(context.subject_artifact_id)
-                    if subject_artifact is None or subject_artifact.run_id != run.run_id:
-                        blocked_reason = "review subject artifact changed or is unavailable"
-                        all_compatible = False
-                        break
-                    try:
-                        integrity = self.artifact_store.verify(subject_artifact)
-                        stored_artifact = self.artifact_store.stat(subject_artifact)
-                    except (KeyError, OSError, PlatformError):
-                        blocked_reason = "review subject artifact changed or is unavailable"
-                        all_compatible = False
-                        break
-                    if stored_artifact != subject_artifact or integrity.state is not ArtifactIntegrityState.VERIFIED:
-                        blocked_reason = "review subject artifact changed or is unavailable"
-                        all_compatible = False
-                        break
-                    current = self.control_store.get_current_review(run_id=run.run_id, subject_key=review_subject_key(authoritative))
-                    if current is None or current.decision.decision not in {ReviewDecisionStatus.ACCEPTED, ReviewDecisionStatus.SKIPPED}:
-                        blocked_reason = "compatible accepted review is required before resume"
-                        all_compatible = False
-                        break
-                    try:
-                        self.review_policy.require_compatible(current.decision, authoritative)
-                    except ReviewCompatibilityError:
-                        blocked_reason = "current review is stale or incompatible"
-                        all_compatible = False
-                        break
-                if not all_compatible:
+                readiness = evaluate_review_readiness(self.control_store, self.artifact_store, run_id=run.run_id, candidate_job_id=candidate.job_id)
+                if not readiness.eligible:
+                    blocked_reason = readiness.reason
                     continue
                 self.control_store.resume_job(job_id=candidate.job_id, now=now)
                 resumed += 1
@@ -690,6 +651,9 @@ class JobWorker:
                 existing = self.control_store.get_stage_job(run_id=plan.run_id, stage_id=stage.stage_id)
                 if existing is None:
                     self.control_store.enqueue_stage_job(run_id=plan.run_id, plan_id=plan.plan_id, stage_id=stage.stage_id, parent_job_id=parent_job_id, available_at=_safe_now(self.clock))
+                    count += 1
+                elif existing.status is JobStatus.BLOCKED and existing.failure_code == "REVIEW_REQUEUE_WAITING":
+                    self.control_store.resume_job(job_id=existing.job_id, now=_safe_now(self.clock))
                     count += 1
         return count
 

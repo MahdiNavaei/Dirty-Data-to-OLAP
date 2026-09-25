@@ -1323,6 +1323,16 @@ export interface components {
              * @default 1.0
              */
             schema_version: string;
+            /**
+             * Supported Override Replacements
+             * @default []
+             */
+            supported_override_replacements: components["schemas"]["ReviewOverrideValue"][];
+            /**
+             * Supported Override Targets
+             * @default []
+             */
+            supported_override_targets: components["schemas"]["ReviewOverrideTarget"][];
         };
         /**
          * ReviewActionDecision

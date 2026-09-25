@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError, api, type PendingReview, type ReviewActionHistory, type ReviewActionMutation, type Summary } from "./api/client";
 
@@ -8,14 +8,7 @@ type LabelPayload = NonNullable<ReviewActionMutation["label"]>;
 type LockPayload = NonNullable<ReviewActionMutation["lock"]>;
 type ActionDraft = Pick<ReviewActionMutation, "action" | "rationale"> & Partial<Pick<ReviewActionMutation, "override" | "label" | "lock">>;
 
-const overrideTargets = ["RELATIONSHIP_DISPOSITION", "IDENTITY_MEMBERSHIP", "ANALYTICAL_MEASURE_SEMANTICS", "MATERIALIZATION_TARGET"] as const;
 const labelNamespaces = ["EVIDENCE", "IDENTITY", "ANALYTICAL", "MATERIALIZATION"] as const;
-const overrideValuesByTarget: Record<OverridePayload["target"], readonly OverridePayload["replacement"][]> = {
-  RELATIONSHIP_DISPOSITION: ["REQUIRE_REVISION", "RETAIN_CANDIDATE", "EXCLUDE_CANDIDATE"],
-  IDENTITY_MEMBERSHIP: ["KEEP_SEPARATE", "MERGE_REVIEW_REQUIRED", "REQUIRE_LINKAGE_EVIDENCE"],
-  ANALYTICAL_MEASURE_SEMANTICS: ["NON_ADDITIVE", "REQUIRE_REVISION"],
-  MATERIALIZATION_TARGET: ["DUCKDB_LOCAL", "REQUIRE_REVISION"],
-};
 const labelValuesByNamespace: Record<LabelPayload["namespace"], readonly LabelPayload["value"][]> = {
   EVIDENCE: ["NEEDS_EVIDENCE", "DOMAIN_REVIEWED", "QUARANTINED"],
   IDENTITY: ["DO_NOT_MERGE", "DOMAIN_REVIEWED", "QUARANTINED"],
@@ -70,10 +63,14 @@ function ReviewActionCard({ review, busy, onSubmit }: { review: PendingReview; b
   const [lockScope, setLockScope] = useState(`checkpoint-${review.checkpoint.toLowerCase()}`);
   const [confirmLock, setConfirmLock] = useState(false);
   const selected = review.actions.find((item) => item.action === action);
-  const replacementOptions = overrideValuesByTarget[target];
+  const overrideTargets = useMemo(() => (review.actions.find((item) => item.action === "OVERRIDE")?.supported_override_targets ?? []) as OverridePayload["target"][], [review.actions]);
+  const replacementOptions = useMemo(() => (review.actions.find((item) => item.action === "OVERRIDE")?.supported_override_replacements ?? []) as OverridePayload["replacement"][], [review.actions]);
+  useEffect(() => {
+    if (overrideTargets.length > 0 && !overrideTargets.includes(target)) setTarget(overrideTargets[0]);
+  }, [overrideTargets, target]);
   const labelOptions = labelValuesByNamespace[labelNamespace];
   useEffect(() => {
-    if (!replacementOptions.includes(replacement)) setReplacement(replacementOptions[0]);
+    if (replacementOptions.length > 0 && !replacementOptions.includes(replacement)) setReplacement(replacementOptions[0]);
   }, [replacement, replacementOptions]);
   useEffect(() => {
     if (!labelOptions.includes(labelValue)) setLabelValue(labelOptions[0]);
@@ -93,7 +90,7 @@ function ReviewActionCard({ review, busy, onSubmit }: { review: PendingReview; b
     <div className="action-help" role="status">{selected?.available ? selected.downstream_effect : selected?.reason_if_unavailable ?? "Select a server-permitted action."}</div>
     <label htmlFor={`rationale-${review.subject_artifact_id}`}>Rationale <span className="required">required</span></label>
     <textarea id={`rationale-${review.subject_artifact_id}`} value={rationale} onChange={(event) => setRationale(event.target.value)} required />
-    {action === "OVERRIDE" && <div className="typed-action-fields"><label htmlFor={`override-target-${review.subject_artifact_id}`}>Override target</label><select id={`override-target-${review.subject_artifact_id}`} value={target} onChange={(event) => setTarget(event.target.value as OverridePayload["target"])}>{overrideTargets.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select><label htmlFor={`override-value-${review.subject_artifact_id}`}>Typed replacement</label><select id={`override-value-${review.subject_artifact_id}`} value={replacement} onChange={(event) => setReplacement(event.target.value as OverridePayload["replacement"])}>{replacementOptions.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select><small>Original subject remains immutable. A replacement needs a fresh compatible review.</small></div>}
+    {action === "OVERRIDE" && <div className="typed-action-fields">{overrideTargets.length > 0 ? <><label htmlFor={`override-target-${review.subject_artifact_id}`}>Supported override target</label><select id={`override-target-${review.subject_artifact_id}`} value={target} onChange={(event) => setTarget(event.target.value as OverridePayload["target"])}>{overrideTargets.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select><label htmlFor={`override-value-${review.subject_artifact_id}`}>Typed replacement</label><select id={`override-value-${review.subject_artifact_id}`} value={replacement} onChange={(event) => setReplacement(event.target.value as OverridePayload["replacement"])}>{replacementOptions.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select><small>Original subject remains immutable. A replacement needs a fresh compatible review and downstream recomputation.</small></> : <small>The server has no executable override target for this subject.</small>}</div>}
     {action === "LABEL" && <div className="typed-action-fields"><label htmlFor={`label-namespace-${review.subject_artifact_id}`}>Label namespace</label><select id={`label-namespace-${review.subject_artifact_id}`} value={labelNamespace} onChange={(event) => setLabelNamespace(event.target.value as LabelPayload["namespace"])}>{labelNamespaces.map((value) => <option key={value} value={value}>{value}</option>)}</select><label htmlFor={`label-value-${review.subject_artifact_id}`}>Supported label</label><select id={`label-value-${review.subject_artifact_id}`} value={labelValue} onChange={(event) => setLabelValue(event.target.value as LabelPayload["value"])}>{labelOptions.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select><small>Labels are audit evidence and never mean ACCEPT, MERGE or auto-approval.</small></div>}
     {action === "LOCK" && <div className="typed-action-fields"><label htmlFor={`lock-scope-${review.subject_artifact_id}`}>Lock scope</label><input id={`lock-scope-${review.subject_artifact_id}`} value={lockScope} onChange={(event) => setLockScope(event.target.value)} /><label className="checkbox-label"><input type="checkbox" checked={confirmLock} onChange={(event) => setConfirmLock(event.target.checked)} /> I understand this freezes the compatible decision.</label></div>}
     <button className="button primary" type="submit" disabled={busy || !selected?.available || !rationale.trim() || (action === "LOCK" && !confirmLock)}>{busy ? "Saving action…" : action === "ACCEPT" ? "Accept and resume when eligible" : `Save ${action}`}</button>

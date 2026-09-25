@@ -1756,6 +1756,22 @@
             "default": "1.0",
             "title": "Schema Version",
             "type": "string"
+          },
+          "supported_override_replacements": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReviewOverrideValue"
+            },
+            "title": "Supported Override Replacements",
+            "type": "array"
+          },
+          "supported_override_targets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReviewOverrideTarget"
+            },
+            "title": "Supported Override Targets",
+            "type": "array"
           }
         },
         "required": [
