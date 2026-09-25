@@ -362,6 +362,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/reviews/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Review Actions */
+        get: operations["list_review_actions_api_v1_runs__run_id__reviews_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/reviews/{checkpoint}": {
         parameters: {
             query?: never;
@@ -373,6 +390,23 @@ export interface paths {
         put?: never;
         /** Record Review */
         post: operations["record_review_api_v1_runs__run_id__reviews__checkpoint__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/reviews/{checkpoint}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Review Action */
+        post: operations["record_review_action_api_v1_runs__run_id__reviews__checkpoint__actions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -570,6 +604,18 @@ export interface components {
              * @default false
              */
             optional_semantic_evidence_enabled: boolean;
+            /** Product Policy Fingerprint */
+            product_policy_fingerprint?: string | null;
+            /**
+             * Product Policy Id
+             * @default order
+             */
+            product_policy_id: string;
+            /**
+             * Product Policy Version
+             * @default order-product-v1
+             */
+            product_policy_version: string;
             /**
              * Schema Version
              * @default 1.0
@@ -984,11 +1030,61 @@ export interface components {
         };
         /** ProductReviewView */
         ProductReviewView: {
+            /**
+             * Action Revision
+             * @default 0
+             */
+            action_revision: number;
+            /**
+             * Actions
+             * @default []
+             */
+            actions: components["schemas"]["ReviewActionApplicability"][];
             /** Checkpoint */
             checkpoint: string;
+            /**
+             * Confidence Semantics
+             * @default Evidence is not a probability.
+             */
+            confidence_semantics: string;
+            /**
+             * Conflicts
+             * @default []
+             */
+            conflicts: string[];
             context: components["schemas"]["ReviewCompatibilityContext"];
             /** Decision */
             decision?: string | null;
+            /**
+             * Downstream Consequence
+             * @default The guarded stage remains paused until the server records a satisfying decision.
+             */
+            downstream_consequence: string;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Missing Evidence
+             * @default []
+             */
+            missing_evidence: string[];
+            /**
+             * Next Required Action
+             * @default REVIEW
+             */
+            next_required_action: string;
+            /**
+             * Provenance Summary
+             * @default []
+             */
+            provenance_summary: string[];
             /**
              * Revision
              * @default 0
@@ -999,14 +1095,34 @@ export interface components {
              * @default 1.0
              */
             schema_version: string;
+            /**
+             * Source Scope
+             * @default []
+             */
+            source_scope: string[];
             /** State */
             state: string;
             /** Subject Artifact Id */
             subject_artifact_id: string;
             /** Subject Content Hash */
             subject_content_hash: string;
+            /**
+             * Subject Description
+             * @default Server-owned review subject
+             */
+            subject_description: string;
             /** Subject Semantic Id */
             subject_semantic_id: string;
+            /**
+             * Subject Type
+             * @default ReviewSubject
+             */
+            subject_type: string;
+            /**
+             * Supporting Evidence
+             * @default []
+             */
+            supporting_evidence: string[];
         };
         /** ProductSourceBinding */
         ProductSourceBinding: {
@@ -1179,11 +1295,156 @@ export interface components {
          */
         ReplaySafety: "REPLAY_SAFE" | "RECONCILIATION_REQUIRED_ON_UNKNOWN";
         /**
+         * ReviewAction
+         * @enum {string}
+         */
+        ReviewAction: "ACCEPT" | "REJECT" | "OVERRIDE" | "LABEL" | "LOCK" | "DEFER";
+        /** ReviewActionApplicability */
+        ReviewActionApplicability: {
+            action: components["schemas"]["ReviewAction"];
+            /** Available */
+            available: boolean;
+            /** Downstream Effect */
+            downstream_effect: string;
+            /** Reason If Unavailable */
+            reason_if_unavailable?: string | null;
+            /**
+             * Required Fields
+             * @default []
+             */
+            required_fields: string[];
+            /**
+             * Requires Confirmation
+             * @default false
+             */
+            requires_confirmation: boolean;
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+        };
+        /**
          * ReviewActionDecision
          * @description Step27 actions; SKIPPED is not exposed without server authorization.
          * @enum {string}
          */
         ReviewActionDecision: "ACCEPTED" | "REJECTED" | "DEFERRED";
+        /** ReviewActionHistoryPage */
+        ReviewActionHistoryPage: {
+            /** Items */
+            items: components["schemas"]["ReviewActionHistoryRecord"][];
+            /** Next Offset */
+            next_offset: number | null;
+            /** Offset */
+            offset: number;
+            /** Order By */
+            order_by: string;
+            /** Page Size */
+            page_size: number;
+        };
+        /** ReviewActionHistoryRecord */
+        ReviewActionHistoryRecord: {
+            action: components["schemas"]["ReviewActionRecord"];
+            /** History Id */
+            history_id: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at?: string;
+            /** Revision */
+            revision: number;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            /** Subject Key */
+            subject_key: string;
+        };
+        /**
+         * ReviewActionMutationRequest
+         * @description Bounded reviewer operation; applicability remains server-owned.
+         */
+        ReviewActionMutationRequest: {
+            action: components["schemas"]["ReviewAction"];
+            context?: components["schemas"]["ReviewCompatibilityContext"] | null;
+            /**
+             * Expected Revision
+             * @default 0
+             */
+            expected_revision: number;
+            label?: components["schemas"]["ReviewLabelPayload"] | null;
+            lock?: components["schemas"]["ReviewLockPayload"] | null;
+            override?: components["schemas"]["ReviewOverridePayload"] | null;
+            /** Rationale */
+            rationale: string;
+            /** Subject Artifact Id */
+            subject_artifact_id?: string | null;
+            /** Subject Content Hash */
+            subject_content_hash?: string | null;
+        };
+        /** ReviewActionRecord */
+        ReviewActionRecord: {
+            action: components["schemas"]["ReviewAction"];
+            /** Action Id */
+            action_id: string;
+            /** Action Payload Fingerprint */
+            action_payload_fingerprint: string;
+            /** Applicability Fingerprint */
+            applicability_fingerprint: string;
+            checkpoint: components["schemas"]["ReviewCheckpoint"];
+            /** Downstream Effect */
+            downstream_effect: string;
+            /**
+             * Execution Eligible
+             * @default false
+             */
+            execution_eligible: boolean;
+            label_namespace?: components["schemas"]["ReviewLabelNamespace"] | null;
+            label_value?: components["schemas"]["ReviewLabelValue"] | null;
+            /** Lock Scope */
+            lock_scope?: string | null;
+            /** Next Required Action */
+            next_required_action: string;
+            original_decision?: components["schemas"]["ReviewDecisionStatus"] | null;
+            override_replacement?: components["schemas"]["ReviewOverrideValue"] | null;
+            override_target?: components["schemas"]["ReviewOverrideTarget"] | null;
+            /** Previous Revision */
+            previous_revision: number;
+            /** Principal */
+            principal: string;
+            /** Project Id */
+            project_id: string;
+            /** Rationale */
+            rationale: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at?: string;
+            resulting_decision?: components["schemas"]["ReviewDecisionStatus"] | null;
+            /** Resulting Revision */
+            resulting_revision: number;
+            /** Resulting Subject Artifact Id */
+            resulting_subject_artifact_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            /** Subject Artifact Id */
+            subject_artifact_id: string;
+            /** Subject Content Hash */
+            subject_content_hash: string;
+            /** Subject Key */
+            subject_key: string;
+        };
         /** ReviewActionRequest */
         ReviewActionRequest: {
             context?: components["schemas"]["ReviewCompatibilityContext"] | null;
@@ -1199,6 +1460,57 @@ export interface components {
             subject_artifact_id?: string | null;
             /** Subject Content Hash */
             subject_content_hash?: string | null;
+        };
+        /** ReviewActionResult */
+        ReviewActionResult: {
+            action: components["schemas"]["ReviewAction"];
+            /** Action Id */
+            action_id: string;
+            checkpoint: components["schemas"]["ReviewCheckpoint"];
+            /** Downstream Effect */
+            downstream_effect: string;
+            /**
+             * Execution Eligible
+             * @default false
+             */
+            execution_eligible: boolean;
+            /**
+             * Guard Satisfied
+             * @default false
+             */
+            guard_satisfied: boolean;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Lock Scope */
+            lock_scope?: string | null;
+            /** Next Required Action */
+            next_required_action: string;
+            /** Previous Revision */
+            previous_revision: number;
+            /**
+             * Replayed
+             * @default false
+             */
+            replayed: boolean;
+            resulting_decision?: components["schemas"]["ReviewDecisionStatus"] | null;
+            /** Resulting Revision */
+            resulting_revision: number;
+            /** Resulting Subject Artifact Id */
+            resulting_subject_artifact_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            /** Subject Artifact Id */
+            subject_artifact_id: string;
+            /** Subject State */
+            subject_state: string;
         };
         /**
          * ReviewCheckpoint
@@ -1240,6 +1552,70 @@ export interface components {
             /** Subject Stage */
             subject_stage: string;
         };
+        /**
+         * ReviewDecisionStatus
+         * @enum {string}
+         */
+        ReviewDecisionStatus: "ACCEPTED" | "REJECTED" | "DEFERRED" | "SKIPPED" | "INVALIDATED";
+        /**
+         * ReviewLabelNamespace
+         * @enum {string}
+         */
+        ReviewLabelNamespace: "EVIDENCE" | "IDENTITY" | "ANALYTICAL" | "MATERIALIZATION";
+        /** ReviewLabelPayload */
+        ReviewLabelPayload: {
+            namespace: components["schemas"]["ReviewLabelNamespace"];
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            value: components["schemas"]["ReviewLabelValue"];
+        };
+        /**
+         * ReviewLabelValue
+         * @enum {string}
+         */
+        ReviewLabelValue: "NEEDS_EVIDENCE" | "DO_NOT_MERGE" | "DOMAIN_REVIEWED" | "QUARANTINED" | "NON_ADDITIVE" | "CONTROLLED_TARGET";
+        /** ReviewLockPayload */
+        ReviewLockPayload: {
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            /** Scope */
+            scope: string;
+        };
+        /** ReviewOverridePayload */
+        ReviewOverridePayload: {
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Old Value Ref */
+            old_value_ref: string;
+            replacement: components["schemas"]["ReviewOverrideValue"];
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            target: components["schemas"]["ReviewOverrideTarget"];
+        };
+        /**
+         * ReviewOverrideTarget
+         * @enum {string}
+         */
+        ReviewOverrideTarget: "RELATIONSHIP_DISPOSITION" | "IDENTITY_MEMBERSHIP" | "ANALYTICAL_MEASURE_SEMANTICS" | "MATERIALIZATION_TARGET";
+        /**
+         * ReviewOverrideValue
+         * @enum {string}
+         */
+        ReviewOverrideValue: "RETAIN_CANDIDATE" | "REQUIRE_REVISION" | "EXCLUDE_CANDIDATE" | "KEEP_SEPARATE" | "MERGE_REVIEW_REQUIRED" | "REQUIRE_LINKAGE_EVIDENCE" | "NON_ADDITIVE" | "DUCKDB_LOCAL";
         /** ReviewSkipAuthorization */
         ReviewSkipAuthorization: {
             /** Applicability Fingerprint */
@@ -2111,6 +2487,41 @@ export interface operations {
             };
         };
     };
+    list_review_actions_api_v1_runs__run_id__reviews_actions_get: {
+        parameters: {
+            query?: {
+                subject_key?: string | null;
+                page_size?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewActionHistoryPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     record_review_api_v1_runs__run_id__reviews__checkpoint__post: {
         parameters: {
             query?: never;
@@ -2136,6 +2547,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_review_action_api_v1_runs__run_id__reviews__checkpoint__actions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                checkpoint: components["schemas"]["ReviewCheckpoint"];
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewActionMutationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewActionResult"];
                 };
             };
             /** @description Validation Error */

@@ -44,6 +44,7 @@ from dirty_data_to_olap.domain.contracts.api import (
     ReviewRecord,
 )
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision, review_subject_key
+from dirty_data_to_olap.domain.contracts.review_actions import ReviewActionHistoryRecord, ReviewActionRecord, ReviewActionState
 from dirty_data_to_olap.domain.contracts.jobs import (
     DeliveryPhase,
     ExecutionPlan,
@@ -233,6 +234,9 @@ class SQLiteControlStore(ControlStorePort):
             "CREATE TABLE IF NOT EXISTS review_history (history_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, decision_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, UNIQUE(run_id, subject_key, revision))",
             "CREATE INDEX IF NOT EXISTS idx_review_history_subject ON review_history(run_id, subject_key, revision)",
             "CREATE TABLE IF NOT EXISTS review_subject_contexts (run_id TEXT NOT NULL REFERENCES runs(run_id), checkpoint TEXT NOT NULL, artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id), context_json TEXT NOT NULL, recorded_at TEXT NOT NULL, PRIMARY KEY(run_id, checkpoint, artifact_id))",
+            "CREATE TABLE IF NOT EXISTS review_action_current (run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, state_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, PRIMARY KEY(run_id, subject_key))",
+            "CREATE TABLE IF NOT EXISTS review_action_history (history_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), subject_key TEXT NOT NULL, action_json TEXT NOT NULL, revision INTEGER NOT NULL, recorded_at TEXT NOT NULL, UNIQUE(run_id, subject_key, revision))",
+            "CREATE INDEX IF NOT EXISTS idx_review_action_history_subject ON review_action_history(run_id, subject_key, revision)",
         )
         for statement in statements:
             connection.execute(statement)
@@ -749,6 +753,90 @@ class SQLiteControlStore(ControlStorePort):
         with self._connect() as connection:
             rows = connection.execute(sql, tuple(parameters)).fetchall()
             return tuple(self._review_history_from_row(row) for row in rows)
+
+    @staticmethod
+    def _review_action_state_from_row(row: sqlite3.Row) -> ReviewActionState:
+        state = ReviewActionState.model_validate(_load_json(str(row["state_json"]), {}))
+        if state.run_id != str(row["run_id"]) or state.subject_key != str(row["subject_key"]) or state.action_revision != int(row["revision"]):
+            raise PlatformError("stored review action state does not match its durable key")
+        return state
+
+    @staticmethod
+    def _review_action_history_from_row(row: sqlite3.Row) -> ReviewActionHistoryRecord:
+        action = ReviewActionRecord.model_validate(_load_json(str(row["action_json"]), {}))
+        if action.run_id != str(row["run_id"]) or action.subject_key != str(row["subject_key"]) or action.resulting_revision != int(row["revision"]):
+            raise PlatformError("stored review action history does not match its durable key")
+        return ReviewActionHistoryRecord(
+            history_id=str(row["history_id"]),
+            run_id=str(row["run_id"]),
+            subject_key=str(row["subject_key"]),
+            action=action,
+            revision=int(row["revision"]),
+            recorded_at=_parse_datetime(str(row["recorded_at"])),
+        )
+
+    def get_review_action_state(self, *, run_id: str, subject_key: str) -> ReviewActionState | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM review_action_current WHERE run_id = ? AND subject_key = ?", (run_id, subject_key)).fetchone()
+            return None if row is None else self._review_action_state_from_row(row)
+
+    def record_review_action_with_idempotency(self, record: ReviewActionRecord, state: ReviewActionState, *, expected_revision: int, idempotency: IdempotencyRecord) -> tuple[ReviewActionRecord, ReviewActionState, bool]:
+        if idempotency.state != "COMPLETED":
+            raise ValueError("review action idempotency must be completed")
+        if record.previous_revision != expected_revision or record.resulting_revision != expected_revision + 1:
+            raise ConcurrencyConflictError("review action revision does not match the expected compare-and-swap revision")
+        if state.run_id != record.run_id or state.subject_key != record.subject_key or state.action_revision != record.resulting_revision:
+            raise PlatformError("review action state must match the action revision")
+        with self._transaction() as connection:
+            existing_row = connection.execute("SELECT * FROM api_idempotency WHERE scope = ? AND idem_key = ?", (idempotency.scope, idempotency.key)).fetchone()
+            if existing_row is not None:
+                existing = self._idempotency_from_connection(existing_row)
+                self._assert_idempotency_match(existing, idempotency)
+                action_body = existing.response_body.get("action")
+                state_body = existing.response_body.get("state")
+                if not isinstance(action_body, dict) or not isinstance(state_body, dict):
+                    raise PlatformError("review action idempotency record is not replayable")
+                return ReviewActionRecord.model_validate(action_body), ReviewActionState.model_validate(state_body), True
+            if connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (record.run_id,)).fetchone() is None:
+                raise PlatformError("review action requires an existing run")
+            current = connection.execute("SELECT revision FROM review_action_current WHERE run_id = ? AND subject_key = ?", (record.run_id, record.subject_key)).fetchone()
+            current_revision = 0 if current is None else int(current["revision"])
+            if current_revision != expected_revision:
+                raise ConcurrencyConflictError("review action revision changed before compare-and-swap update")
+            history_id = f"review-action-{record.action_id}-{record.resulting_revision}"
+            connection.execute(
+                "INSERT INTO review_action_history(history_id, run_id, subject_key, action_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (history_id, record.run_id, record.subject_key, _dump(record), record.resulting_revision, record.recorded_at.isoformat()),
+            )
+            if current is None:
+                connection.execute(
+                    "INSERT INTO review_action_current(run_id, subject_key, state_json, revision, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                    (state.run_id, state.subject_key, _dump(state), state.action_revision, state.updated_at.isoformat()),
+                )
+            else:
+                cursor = connection.execute(
+                    "UPDATE review_action_current SET state_json = ?, revision = ?, recorded_at = ? WHERE run_id = ? AND subject_key = ? AND revision = ?",
+                    (_dump(state), state.action_revision, state.updated_at.isoformat(), state.run_id, state.subject_key, expected_revision),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrencyConflictError("review action revision changed before compare-and-swap update")
+            self._audit(connection, "review_action_recorded", run_id=record.run_id, artifact_id=record.subject_artifact_id, status=record.action.value, content_hash=record.subject_content_hash, detail=f"review action revision {record.resulting_revision} recorded")
+            self._insert_idempotency(connection, idempotency.model_copy(update={"response_body": {"action": record.model_dump(mode="json"), "state": state.model_dump(mode="json")}, "resource_id": record.action_id}))
+            return record, state, False
+
+    def list_review_action_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewActionHistoryRecord, ...]:
+        if limit < 1 or offset < 0:
+            raise ValueError("review action history limit must be positive and offset non-negative")
+        sql = "SELECT * FROM review_action_history WHERE run_id = ?"
+        parameters: list[object] = [run_id]
+        if subject_key is not None:
+            sql += " AND subject_key = ?"
+            parameters.append(subject_key)
+        sql += " ORDER BY subject_key, revision LIMIT ? OFFSET ?"
+        parameters.extend((limit, offset))
+        with self._connect() as connection:
+            rows = connection.execute(sql, tuple(parameters)).fetchall()
+            return tuple(self._review_action_history_from_row(row) for row in rows)
 
     @staticmethod
     def _idempotency_from_row(row: sqlite3.Row) -> IdempotencyRecord:

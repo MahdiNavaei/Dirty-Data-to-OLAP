@@ -20,6 +20,10 @@ type ProductSummary = components["schemas"]["ProductSummary"];
 type ProductOutput = Omit<ProductSummary["output"], "row_counts"> & { row_counts: Record<string, number> };
 export type Summary = Omit<ProductSummary, "output"> & { output: ProductOutput };
 export type Source = components["schemas"]["ProductSourceView"];
+export type PendingReview = Summary["pending_reviews"][number];
+export type ReviewActionMutation = components["schemas"]["ReviewActionMutationRequest"];
+export type ReviewActionResult = components["schemas"]["ReviewActionResult"];
+export type ReviewActionHistory = components["schemas"]["ReviewActionHistoryRecord"];
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://127.0.0.1:8765";
 const principal = "step29-browser-reviewer";
@@ -96,6 +100,15 @@ export class ApiClient {
     return request<Summary>(`/api/v1/runs/${encodeURIComponent(runId)}/product-summary`);
   }
 
+  async reviewActions(runId: string, review: PendingReview, payload: Omit<ReviewActionMutation, "subject_artifact_id" | "subject_content_hash" | "context" | "expected_revision"> & { expected_revision?: number }, key = mutationKey("review-action")): Promise<ReviewActionResult> {
+    return request<ReviewActionResult>(`/api/v1/runs/${encodeURIComponent(runId)}/reviews/${encodeURIComponent(review.checkpoint)}/actions`, { method: "POST", body: JSON.stringify({ ...payload, subject_artifact_id: review.subject_artifact_id, subject_content_hash: review.subject_content_hash, expected_revision: payload.expected_revision ?? review.action_revision }) }, { mutation: true, key });
+  }
+
+  async reviewHistory(runId: string): Promise<ReviewActionHistory[]> {
+    const page = await request<{ items: ReviewActionHistory[] }>(`/api/v1/runs/${encodeURIComponent(runId)}/reviews/actions?page_size=100`);
+    return page.items;
+  }
+
   async review(runId: string, review: PendingReview, rationale: string, key = mutationKey("review")): Promise<Record<string, unknown>> {
     return request<Record<string, unknown>>(`/api/v1/runs/${encodeURIComponent(runId)}/reviews/${encodeURIComponent(review.checkpoint)}`, { method: "POST", body: JSON.stringify({ subject_artifact_id: review.subject_artifact_id, subject_content_hash: review.subject_content_hash, decision: "ACCEPTED", rationale, expected_revision: review.revision }) }, { mutation: true, key });
   }
@@ -105,7 +118,5 @@ type RunView = components["schemas"]["RunView"];
 type Binding = { run_id: string; registry_id: string; source_id?: string | null; source_display_name: string; selection_artifact_id: string; extraction_max_rows?: number | null; extraction_chunk_size: number };
 type Preparation = { status: string; plan_id?: string | null; planning_phase: string; detail: string };
 type Submission = { status: string; detail: string; submission_id?: string | null };
-type PendingReview = Summary["pending_reviews"][number];
-
 export const api = new ApiClient();
 export { baseUrl, mutationKey };

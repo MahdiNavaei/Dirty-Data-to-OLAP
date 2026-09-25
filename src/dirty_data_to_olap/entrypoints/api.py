@@ -28,6 +28,14 @@ from dirty_data_to_olap.domain.contracts.jobs import JobRecord
 from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import ArtifactRef, RunRecord, StageAttemptRecord
 from dirty_data_to_olap.domain.contracts.product import ProductConfiguration, ProductSourceBinding, ProductSourceView, ProductSummary
+from dirty_data_to_olap.domain.contracts.review_actions import (
+    ReviewAction,
+    ReviewActionHistoryRecord,
+    ReviewLabelPayload,
+    ReviewLockPayload,
+    ReviewOverridePayload,
+    ReviewActionResult,
+)
 from dirty_data_to_olap.domain.contracts.source import ExtractionPolicy, SelectionScope
 
 
@@ -119,8 +127,61 @@ class ReviewActionRequest(ApiModel):
         return value
 
 
+class ReviewActionMutationRequest(ApiModel):
+    """Bounded reviewer operation; applicability remains server-owned."""
+
+    action: ReviewAction
+    subject_artifact_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+    subject_content_hash: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[a-fA-F0-9]{64}$")
+    context: ReviewCompatibilityContext | None = None
+    rationale: str = Field(min_length=1, max_length=2000)
+    expected_revision: int = Field(default=0, ge=0)
+    override: ReviewOverridePayload | None = None
+    label: ReviewLabelPayload | None = None
+    lock: ReviewLockPayload | None = None
+
+    @model_validator(mode="after")
+    def payload_matches_action(self) -> "ReviewActionMutationRequest":
+        required = {
+            ReviewAction.OVERRIDE: self.override,
+            ReviewAction.LABEL: self.label,
+            ReviewAction.LOCK: self.lock,
+        }
+        for action, payload in required.items():
+            if self.action is action and payload is None:
+                raise ValueError(f"{action.value} requires its typed payload")
+            if self.action is not action and payload is not None:
+                raise ValueError(f"{action.value} payload is only valid for its matching action")
+        if self.action is ReviewAction.LOCK and self.lock is not None and not self.lock.confirm:
+            raise ValueError("LOCK requires explicit confirmation")
+        if self.context is None and (self.subject_artifact_id is None or self.subject_content_hash is None):
+            raise ValueError("subject_artifact_id and subject_content_hash are required when context is omitted")
+        if (self.subject_artifact_id is None) != (self.subject_content_hash is None):
+            raise ValueError("subject artifact identity and content hash must be supplied together")
+        if self.context is not None and self.subject_artifact_id is not None and self.context.subject_artifact_id != self.subject_artifact_id:
+            raise ValueError("subject_artifact_id must match the context assertion")
+        if self.context is not None and self.subject_content_hash is not None and self.context.subject_content_hash != self.subject_content_hash:
+            raise ValueError("subject_content_hash must match the context assertion")
+        return self
+
+    @field_validator("rationale")
+    @classmethod
+    def rationale_is_safe(cls, value: str) -> str:
+        if re.search(r"(?i)(?:password|passwd|secret|token|api[_-]?key|credential)\s*[:=]", value):
+            raise ValueError("rationale contains a restricted secret-shaped field")
+        return value
+
+
 class PageResponse(ApiModel):
     items: list[Any]
+    page_size: int
+    offset: int
+    next_offset: int | None
+    order_by: str
+
+
+class ReviewActionHistoryPage(ApiModel):
+    items: list[ReviewActionHistoryRecord]
     page_size: int
     offset: int
     next_offset: int | None
@@ -514,12 +575,39 @@ def create_app(
         caller = read_principal(request, "reviews:read")
         return _model_page(backend.list_reviews(run_id=run_id, subject_key=subject_key, page_size=page_size, offset=offset, principal=caller))
 
+    @app.get("/api/v1/runs/{run_id}/reviews/actions", response_model=ReviewActionHistoryPage, tags=["reviews"])
+    async def list_review_actions(request: Request, run_id: str = Path(min_length=1, max_length=128), subject_key: str | None = Query(default=None, max_length=512), page_size: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
+        caller = read_principal(request, "reviews:read")
+        return _model_page(backend.list_review_actions(run_id=run_id, subject_key=subject_key, page_size=page_size, offset=offset, principal=caller))
+
     @app.post("/api/v1/runs/{run_id}/reviews/{checkpoint}", tags=["reviews"])
     async def record_review(payload: ReviewActionRequest, request: Request, checkpoint: ReviewCheckpoint = Path(...), run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
         record, replayed = backend.review(run_id=run_id, checkpoint=checkpoint, context=payload.context, subject_artifact_id=payload.subject_artifact_id, subject_content_hash=payload.subject_content_hash, decision=payload.decision.value, rationale=payload.rationale, expected_revision=payload.expected_revision, principal=principal(request), idempotency_key=key(idempotency_key))
         response = JSONResponse(status_code=200, content=record.model_dump(mode="json"))
         response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
         response.headers["ETag"] = f'"{record.revision}"'
+        return response
+
+    @app.post("/api/v1/runs/{run_id}/reviews/{checkpoint}/actions", response_model=ReviewActionResult, tags=["reviews"])
+    async def record_review_action(payload: ReviewActionMutationRequest, request: Request, checkpoint: ReviewCheckpoint = Path(...), run_id: str = Path(min_length=1, max_length=128), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
+        result = backend.review_action(
+            run_id=run_id,
+            checkpoint=checkpoint,
+            action=payload.action,
+            context=payload.context,
+            subject_artifact_id=payload.subject_artifact_id,
+            subject_content_hash=payload.subject_content_hash,
+            rationale=payload.rationale,
+            expected_revision=payload.expected_revision,
+            override=payload.override,
+            label=payload.label,
+            lock=payload.lock,
+            principal=principal(request),
+            idempotency_key=key(idempotency_key),
+        )
+        response = JSONResponse(status_code=200, content=result.model_dump(mode="json"))
+        response.headers["Idempotency-Replayed"] = "true" if result.replayed else "false"
+        response.headers["ETag"] = f'"{result.resulting_revision}"'
         return response
 
     @app.post("/api/v1/runs/{run_id}/reviews/{checkpoint}/invalidate", tags=["reviews"])
@@ -599,5 +687,6 @@ __all__ = [
     "ReviewActionDecision",
     "RunView",
     "ReviewActionRequest",
+    "ReviewActionMutationRequest",
     "create_app",
 ]

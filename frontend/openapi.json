@@ -224,6 +224,31 @@
             "title": "Optional Semantic Evidence Enabled",
             "type": "boolean"
           },
+          "product_policy_fingerprint": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Policy Fingerprint"
+          },
+          "product_policy_id": {
+            "default": "order",
+            "pattern": "^[a-z][a-z0-9_.:-]{0,63}$",
+            "title": "Product Policy Id",
+            "type": "string"
+          },
+          "product_policy_version": {
+            "default": "order-product-v1",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Product Policy Version",
+            "type": "string"
+          },
           "schema_version": {
             "default": "1.0",
             "title": "Schema Version",
@@ -1154,9 +1179,35 @@
       "ProductReviewView": {
         "additionalProperties": false,
         "properties": {
+          "action_revision": {
+            "default": 0,
+            "title": "Action Revision",
+            "type": "integer"
+          },
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReviewActionApplicability"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
           "checkpoint": {
             "title": "Checkpoint",
             "type": "string"
+          },
+          "confidence_semantics": {
+            "default": "Evidence is not a probability.",
+            "title": "Confidence Semantics",
+            "type": "string"
+          },
+          "conflicts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicts",
+            "type": "array"
           },
           "context": {
             "$ref": "#/components/schemas/ReviewCompatibilityContext"
@@ -1172,6 +1223,45 @@
             ],
             "title": "Decision"
           },
+          "downstream_consequence": {
+            "default": "The guarded stage remains paused until the server records a satisfying decision.",
+            "title": "Downstream Consequence",
+            "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "missing_evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Evidence",
+            "type": "array"
+          },
+          "next_required_action": {
+            "default": "REVIEW",
+            "title": "Next Required Action",
+            "type": "string"
+          },
+          "provenance_summary": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Provenance Summary",
+            "type": "array"
+          },
           "revision": {
             "default": 0,
             "title": "Revision",
@@ -1181,6 +1271,14 @@
             "default": "1.0",
             "title": "Schema Version",
             "type": "string"
+          },
+          "source_scope": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Scope",
+            "type": "array"
           },
           "state": {
             "title": "State",
@@ -1194,9 +1292,27 @@
             "title": "Subject Content Hash",
             "type": "string"
           },
+          "subject_description": {
+            "default": "Server-owned review subject",
+            "title": "Subject Description",
+            "type": "string"
+          },
           "subject_semantic_id": {
             "title": "Subject Semantic Id",
             "type": "string"
+          },
+          "subject_type": {
+            "default": "ReviewSubject",
+            "title": "Subject Type",
+            "type": "string"
+          },
+          "supporting_evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Evidence",
+            "type": "array"
           }
         },
         "required": [
@@ -1585,6 +1701,71 @@
         "title": "ReplaySafety",
         "type": "string"
       },
+      "ReviewAction": {
+        "enum": [
+          "ACCEPT",
+          "REJECT",
+          "OVERRIDE",
+          "LABEL",
+          "LOCK",
+          "DEFER"
+        ],
+        "title": "ReviewAction",
+        "type": "string"
+      },
+      "ReviewActionApplicability": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewAction"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "downstream_effect": {
+            "minLength": 1,
+            "title": "Downstream Effect",
+            "type": "string"
+          },
+          "reason_if_unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason If Unavailable"
+          },
+          "required_fields": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Fields",
+            "type": "array"
+          },
+          "requires_confirmation": {
+            "default": false,
+            "title": "Requires Confirmation",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "available",
+          "downstream_effect"
+        ],
+        "title": "ReviewActionApplicability",
+        "type": "object"
+      },
       "ReviewActionDecision": {
         "description": "Step27 actions; SKIPPED is not exposed without server authorization.",
         "enum": [
@@ -1594,6 +1775,391 @@
         ],
         "title": "ReviewActionDecision",
         "type": "string"
+      },
+      "ReviewActionHistoryPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewActionHistoryRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "order_by": {
+            "title": "Order By",
+            "type": "string"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page_size",
+          "offset",
+          "next_offset",
+          "order_by"
+        ],
+        "title": "ReviewActionHistoryPage",
+        "type": "object"
+      },
+      "ReviewActionHistoryRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewActionRecord"
+          },
+          "history_id": {
+            "minLength": 1,
+            "title": "History Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_key": {
+            "minLength": 1,
+            "title": "Subject Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_id",
+          "run_id",
+          "subject_key",
+          "action",
+          "revision"
+        ],
+        "title": "ReviewActionHistoryRecord",
+        "type": "object"
+      },
+      "ReviewActionMutationRequest": {
+        "additionalProperties": false,
+        "description": "Bounded reviewer operation; applicability remains server-owned.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewAction"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewCompatibilityContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewLabelPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewLockPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOverridePayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "subject_artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Artifact Id"
+          },
+          "subject_content_hash": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-fA-F0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Content Hash"
+          }
+        },
+        "required": [
+          "action",
+          "rationale"
+        ],
+        "title": "ReviewActionMutationRequest",
+        "type": "object"
+      },
+      "ReviewActionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewAction"
+          },
+          "action_id": {
+            "minLength": 1,
+            "title": "Action Id",
+            "type": "string"
+          },
+          "action_payload_fingerprint": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Action Payload Fingerprint",
+            "type": "string"
+          },
+          "applicability_fingerprint": {
+            "minLength": 1,
+            "title": "Applicability Fingerprint",
+            "type": "string"
+          },
+          "checkpoint": {
+            "$ref": "#/components/schemas/ReviewCheckpoint"
+          },
+          "downstream_effect": {
+            "minLength": 1,
+            "title": "Downstream Effect",
+            "type": "string"
+          },
+          "execution_eligible": {
+            "default": false,
+            "title": "Execution Eligible",
+            "type": "boolean"
+          },
+          "label_namespace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewLabelNamespace"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewLabelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lock_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Scope"
+          },
+          "next_required_action": {
+            "minLength": 1,
+            "title": "Next Required Action",
+            "type": "string"
+          },
+          "original_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewDecisionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "override_replacement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOverrideValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "override_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOverrideTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previous_revision": {
+            "minimum": 0.0,
+            "title": "Previous Revision",
+            "type": "integer"
+          },
+          "principal": {
+            "minLength": 1,
+            "title": "Principal",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "resulting_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewDecisionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resulting_revision": {
+            "minimum": 1.0,
+            "title": "Resulting Revision",
+            "type": "integer"
+          },
+          "resulting_subject_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resulting Subject Artifact Id"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_artifact_id": {
+            "minLength": 1,
+            "title": "Subject Artifact Id",
+            "type": "string"
+          },
+          "subject_content_hash": {
+            "minLength": 1,
+            "title": "Subject Content Hash",
+            "type": "string"
+          },
+          "subject_key": {
+            "minLength": 1,
+            "title": "Subject Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "run_id",
+          "project_id",
+          "subject_key",
+          "checkpoint",
+          "subject_artifact_id",
+          "subject_content_hash",
+          "applicability_fingerprint",
+          "action",
+          "action_payload_fingerprint",
+          "previous_revision",
+          "resulting_revision",
+          "principal",
+          "rationale",
+          "downstream_effect",
+          "next_required_action"
+        ],
+        "title": "ReviewActionRecord",
+        "type": "object"
       },
       "ReviewActionRequest": {
         "additionalProperties": false,
@@ -1657,6 +2223,131 @@
           "rationale"
         ],
         "title": "ReviewActionRequest",
+        "type": "object"
+      },
+      "ReviewActionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewAction"
+          },
+          "action_id": {
+            "minLength": 1,
+            "title": "Action Id",
+            "type": "string"
+          },
+          "checkpoint": {
+            "$ref": "#/components/schemas/ReviewCheckpoint"
+          },
+          "downstream_effect": {
+            "minLength": 1,
+            "title": "Downstream Effect",
+            "type": "string"
+          },
+          "execution_eligible": {
+            "default": false,
+            "title": "Execution Eligible",
+            "type": "boolean"
+          },
+          "guard_satisfied": {
+            "default": false,
+            "title": "Guard Satisfied",
+            "type": "boolean"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "lock_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Scope"
+          },
+          "next_required_action": {
+            "minLength": 1,
+            "title": "Next Required Action",
+            "type": "string"
+          },
+          "previous_revision": {
+            "minimum": 0.0,
+            "title": "Previous Revision",
+            "type": "integer"
+          },
+          "replayed": {
+            "default": false,
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "resulting_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewDecisionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resulting_revision": {
+            "minimum": 1.0,
+            "title": "Resulting Revision",
+            "type": "integer"
+          },
+          "resulting_subject_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resulting Subject Artifact Id"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_artifact_id": {
+            "minLength": 1,
+            "title": "Subject Artifact Id",
+            "type": "string"
+          },
+          "subject_state": {
+            "minLength": 1,
+            "title": "Subject State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "run_id",
+          "checkpoint",
+          "subject_artifact_id",
+          "action",
+          "previous_revision",
+          "resulting_revision",
+          "subject_state",
+          "downstream_effect",
+          "next_required_action"
+        ],
+        "title": "ReviewActionResult",
         "type": "object"
       },
       "ReviewCheckpoint": {
@@ -1759,6 +2450,153 @@
         ],
         "title": "ReviewCompatibilityContext",
         "type": "object"
+      },
+      "ReviewDecisionStatus": {
+        "enum": [
+          "ACCEPTED",
+          "REJECTED",
+          "DEFERRED",
+          "SKIPPED",
+          "INVALIDATED"
+        ],
+        "title": "ReviewDecisionStatus",
+        "type": "string"
+      },
+      "ReviewLabelNamespace": {
+        "enum": [
+          "EVIDENCE",
+          "IDENTITY",
+          "ANALYTICAL",
+          "MATERIALIZATION"
+        ],
+        "title": "ReviewLabelNamespace",
+        "type": "string"
+      },
+      "ReviewLabelPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "namespace": {
+            "$ref": "#/components/schemas/ReviewLabelNamespace"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ReviewLabelValue"
+          }
+        },
+        "required": [
+          "namespace",
+          "value"
+        ],
+        "title": "ReviewLabelPayload",
+        "type": "object"
+      },
+      "ReviewLabelValue": {
+        "enum": [
+          "NEEDS_EVIDENCE",
+          "DO_NOT_MERGE",
+          "DOMAIN_REVIEWED",
+          "QUARANTINED",
+          "NON_ADDITIVE",
+          "CONTROLLED_TARGET"
+        ],
+        "title": "ReviewLabelValue",
+        "type": "string"
+      },
+      "ReviewLockPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "scope": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "title": "ReviewLockPayload",
+        "type": "object"
+      },
+      "ReviewOverridePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_ref": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Ref"
+          },
+          "old_value_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Old Value Ref",
+            "type": "string"
+          },
+          "replacement": {
+            "$ref": "#/components/schemas/ReviewOverrideValue"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ReviewOverrideTarget"
+          }
+        },
+        "required": [
+          "target",
+          "replacement",
+          "old_value_ref"
+        ],
+        "title": "ReviewOverridePayload",
+        "type": "object"
+      },
+      "ReviewOverrideTarget": {
+        "enum": [
+          "RELATIONSHIP_DISPOSITION",
+          "IDENTITY_MEMBERSHIP",
+          "ANALYTICAL_MEASURE_SEMANTICS",
+          "MATERIALIZATION_TARGET"
+        ],
+        "title": "ReviewOverrideTarget",
+        "type": "string"
+      },
+      "ReviewOverrideValue": {
+        "enum": [
+          "RETAIN_CANDIDATE",
+          "REQUIRE_REVISION",
+          "EXCLUDE_CANDIDATE",
+          "KEEP_SEPARATE",
+          "MERGE_REVIEW_REQUIRED",
+          "REQUIRE_LINKAGE_EVIDENCE",
+          "NON_ADDITIVE",
+          "DUCKDB_LOCAL"
+        ],
+        "title": "ReviewOverrideValue",
+        "type": "string"
       },
       "ReviewSkipAuthorization": {
         "additionalProperties": false,
@@ -3490,6 +4328,90 @@
         ]
       }
     },
+    "/api/v1/runs/{run_id}/reviews/actions": {
+      "get": {
+        "operationId": "list_review_actions_api_v1_runs__run_id__reviews_actions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewActionHistoryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Review Actions",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
     "/api/v1/runs/{run_id}/reviews/{checkpoint}": {
       "post": {
         "operationId": "record_review_api_v1_runs__run_id__reviews__checkpoint__post",
@@ -3561,6 +4483,84 @@
           }
         },
         "summary": "Record Review",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/reviews/{checkpoint}/actions": {
+      "post": {
+        "operationId": "record_review_action_api_v1_runs__run_id__reviews__checkpoint__actions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "checkpoint",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ReviewCheckpoint"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewActionMutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Review Action",
         "tags": [
           "reviews"
         ]

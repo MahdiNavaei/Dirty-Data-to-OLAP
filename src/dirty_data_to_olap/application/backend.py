@@ -42,6 +42,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
 from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlanIntent, ExecutionPlanPreparation, JobRecord, JobStatus, PlanPreparationStatus
 from dirty_data_to_olap.domain.contracts.platform import (
     ArtifactIntegrityState,
+    ArtifactManifest,
     ArtifactPublicationState,
     ArtifactRef,
     RunRecord,
@@ -78,6 +79,17 @@ from dirty_data_to_olap.domain.contracts.product import (
 from dirty_data_to_olap.domain.contracts.analytical import AnalyticalPlan, MaterializationArtifact
 from dirty_data_to_olap.domain.contracts.canonical import CanonicalIdentityProposal, CanonicalModel, CanonicalModelHypothesis
 from dirty_data_to_olap.domain.contracts.evidence_fusion import RelationshipDecision
+from dirty_data_to_olap.domain.contracts.review_actions import (
+    ReviewAction,
+    ReviewActionApplicability,
+    ReviewActionRecord,
+    ReviewActionResult,
+    ReviewActionState,
+    ReviewLabelPayload,
+    ReviewLockPayload,
+    ReviewOverridePayload,
+    action_payload_fingerprint,
+)
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSnapshotResult
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
@@ -658,6 +670,100 @@ class BackendService:
         except PlatformError as exc:
             raise BackendError("SOURCE_BINDING_REJECTED", "source-set binding could not be durably persisted", status=409) from exc
 
+    @staticmethod
+    def _review_subject_projection(*, subject: ArtifactRef, context: ReviewCompatibilityContext, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Build a bounded, raw-data-free projection for the review UI."""
+
+        payload = payload or {}
+        kind = subject.artifact_kind
+        subject_description = f"{kind} subject for {context.subject_stage}"
+        source_scope = tuple(sorted(str(key) for key in context.source_schema_fingerprints))
+        supporting: list[str] = []
+        missing: list[str] = []
+        conflicts: list[str] = []
+        confidence = "Evidence is not a probability."
+        if kind == "RelationshipDecision":
+            source = f"{payload.get('from_table', 'source')} -> {payload.get('to_table', 'target')}"
+            subject_description = f"Relationship candidate: {source}"
+            supporting.append(f"supporting evidence signals: {len(payload.get('supporting_signal_refs', ()))}")
+            missing.append(f"missing evidence signals: {len(payload.get('missing_evidence_refs', ()))}")
+            conflicts.append(f"conflicts: {len(payload.get('conflict_refs', ()))}")
+            confidence = str(payload.get("score", {}).get("score_semantics", "Matcher score is evidence, not a probability.")) if isinstance(payload.get("score"), dict) else "Matcher score is evidence, not a probability."
+        elif kind == "SemanticMappingDecision":
+            subject_description = "Schema mapping candidate between registered source columns"
+            supporting.append(f"supporting evidence signals: {len(payload.get('supporting_signal_refs', ()))}")
+            missing.append(f"missing evidence signals: {len(payload.get('missing_evidence_refs', ()))}")
+            conflicts.append(f"conflicts: {len(payload.get('conflict_refs', ()))}")
+            confidence = "Schema matcher score is evidence, not a probability."
+        elif kind == "CanonicalIdentityProposal":
+            subject_description = "Canonical identity proposal with source membership provenance"
+            supporting.append(f"membership proposals: {len(payload.get('memberships', ()))}")
+            confidence = "Linkage evidence is not canonical truth without a compatible review."
+        elif kind == "EntityResolutionResult":
+            subject_description = "Entity-resolution linkage result requiring canonical review"
+            supporting.append(f"entity-resolution artifacts: {len(payload.get('artifacts', ()))}")
+            confidence = "Entity-resolution scores are evidence, not calibrated identity probability."
+        elif kind == "AnalyticalPlan":
+            subject_description = "Analytical fact, dimension, grain and measure plan"
+            supporting.append(f"fact specs: {len(payload.get('materialized_fact_ids', ()))}")
+            missing.append(f"measure specs: {len(payload.get('measure_spec_ids', ()))}")
+            confidence = "Measure semantics and grain are explicit policy fields, not inferred from numbers."
+        elif kind in {"CompiledPlan", "ReviewOverrideProposal"}:
+            subject_description = "Controlled materialization or reviewed revision proposal"
+            confidence = "A compiled plan is not executable truth until the compatible materialization review is accepted."
+        return {
+            "subject_type": kind,
+            "subject_description": subject_description,
+            "source_scope": source_scope,
+            "confidence_semantics": confidence,
+            "supporting_evidence": tuple(supporting),
+            "missing_evidence": tuple(missing),
+            "conflicts": tuple(conflicts),
+            "provenance_summary": ("registered published artifact", f"policy: {context.policy_version}", f"checkpoint: {context.review_checkpoint_id.value}"),
+        }
+
+    def _review_action_applicability(self, *, run: RunRecord, subject: ArtifactRef, context: ReviewCompatibilityContext, current: ReviewRecord | None, state: ReviewActionState | None, principal: Principal) -> tuple[ReviewActionApplicability, ...]:
+        can_write = "reviews:write" in principal.scopes
+        terminal = run.status.value in {"SUCCEEDED", "FAILED", "CANCELLED"}
+        locked = bool(state and state.locked)
+        current_decision = None if current is None else current.decision.decision
+        result: list[ReviewActionApplicability] = []
+        specs = (
+            (ReviewAction.ACCEPT, ("rationale",), False, "Only this action can satisfy the compatible review guard."),
+            (ReviewAction.REJECT, ("rationale",), False, "Records rejection and leaves the guarded stage blocked or revision-required."),
+            (ReviewAction.OVERRIDE, ("rationale", "override.target", "override.replacement", "override.old_value_ref"), False, "Creates a new typed revision subject; the original artifact remains immutable."),
+            (ReviewAction.LABEL, ("rationale", "label.namespace", "label.value"), False, "Persists a bounded label without approving or releasing the subject."),
+            (ReviewAction.LOCK, ("rationale", "lock.scope", "lock.confirm"), True, "Freezes the compatible accepted decision until explicit invalidation."),
+            (ReviewAction.DEFER, ("rationale",), False, "Persists unresolved review and leaves execution blocked."),
+        )
+        for action, fields, confirmation, effect in specs:
+            reason: str | None = None
+            available = True
+            if not can_write:
+                available, reason = False, "caller lacks reviews:write authorization"
+            elif terminal:
+                available, reason = False, "terminal runs cannot be changed"
+            elif locked:
+                available, reason = False, "subject is locked; incompatible mutation requires authorized invalidation"
+            elif action is ReviewAction.LOCK and current_decision is not ReviewDecisionStatus.ACCEPTED:
+                available, reason = False, "LOCK requires an already compatible ACCEPTED decision"
+            elif action is ReviewAction.OVERRIDE and current_decision is ReviewDecisionStatus.ACCEPTED:
+                available, reason = False, "accepted subjects require explicit invalidation before override"
+            elif action is ReviewAction.OVERRIDE and subject.artifact_kind == "ReviewOverrideProposal":
+                available, reason = False, "a revision proposal must be accepted or rejected; it cannot override itself"
+            result.append(ReviewActionApplicability(action=action, available=available, reason_if_unavailable=reason, required_fields=fields, requires_confirmation=confirmation, downstream_effect=effect))
+        return tuple(result)
+
+    @staticmethod
+    def _review_next_action(decision: ReviewDecisionStatus | None, *, revised: bool = False) -> str:
+        if revised:
+            return "REVIEW_REPLACEMENT_SUBJECT"
+        if decision is ReviewDecisionStatus.ACCEPTED:
+            return "RESUME_IF_SERVER_ELIGIBLE"
+        if decision in {ReviewDecisionStatus.REJECTED, ReviewDecisionStatus.DEFERRED, ReviewDecisionStatus.INVALIDATED}:
+            return "REVISE_OR_REVIEW"
+        return "REVIEW"
+
     def product_summary(self, *, run_id: str, principal: Principal) -> ProductSummary:
         self._require_scope(principal, "runs:read")
         run = self._get_authorized_run(run_id, principal)
@@ -736,6 +842,10 @@ class BackendService:
                     continue
                 current = self.control_store.get_current_review(run_id=run_id, subject_key=review_subject_key(context))
                 decision = None if current is None else current.decision.decision.value
+                action_state = self.control_store.get_review_action_state(run_id=run_id, subject_key=review_subject_key(context))
+                subject_payload = next((payload for artifact, payload in verified if artifact.artifact_id == subject.artifact_id), None)
+                projection = self._review_subject_projection(subject=subject, context=context, payload=subject_payload)
+                current_decision = None if current is None else current.decision.decision
                 pending_reviews.append(ProductReviewView(
                     checkpoint=context.review_checkpoint_id.value,
                     subject_artifact_id=context.subject_artifact_id,
@@ -745,6 +855,20 @@ class BackendService:
                     decision=decision,
                     revision=0 if current is None else current.revision,
                     context=context,
+                    action_revision=0 if action_state is None else action_state.action_revision,
+                    subject_type=projection["subject_type"],
+                    subject_description=projection["subject_description"],
+                    source_scope=projection["source_scope"],
+                    confidence_semantics=projection["confidence_semantics"],
+                    supporting_evidence=projection["supporting_evidence"],
+                    missing_evidence=projection["missing_evidence"],
+                    conflicts=projection["conflicts"],
+                    provenance_summary=projection["provenance_summary"],
+                    downstream_consequence="This checkpoint guards the next execution boundary; no browser action changes that guard locally.",
+                    next_required_action=self._review_next_action(current_decision),
+                    locked=False if action_state is None else action_state.locked,
+                    labels=() if action_state is None else action_state.labels,
+                    actions=self._review_action_applicability(run=run, subject=subject, context=context, current=current, state=action_state, principal=principal),
                 ))
 
         relationship_views: list[ProductRelationshipView] = []
@@ -922,6 +1046,311 @@ class BackendService:
         except (ValueError, PlatformError) as exc:
             raise BackendError("REVIEW_REJECTED", "review action could not be recorded", status=422) from exc
 
+    @staticmethod
+    def _review_action_result(record: ReviewActionRecord, state: ReviewActionState, *, replayed: bool) -> ReviewActionResult:
+        if record.action is ReviewAction.LOCK:
+            subject_state = "LOCKED"
+        elif record.action is ReviewAction.OVERRIDE:
+            subject_state = "REVIEW_REQUIRED"
+        elif record.action is ReviewAction.LABEL:
+            subject_state = "LABELLED" if record.resulting_decision is None else record.resulting_decision.value
+        else:
+            subject_state = "REVIEW_REQUIRED" if record.resulting_decision is None else record.resulting_decision.value
+        guard_satisfied = record.action is ReviewAction.ACCEPT and record.resulting_decision is ReviewDecisionStatus.ACCEPTED
+        return ReviewActionResult(
+            action_id=record.action_id,
+            run_id=record.run_id,
+            checkpoint=record.checkpoint,
+            subject_artifact_id=record.subject_artifact_id,
+            action=record.action,
+            replayed=replayed,
+            previous_revision=record.previous_revision,
+            resulting_revision=record.resulting_revision,
+            resulting_decision=record.resulting_decision,
+            resulting_subject_artifact_id=record.resulting_subject_artifact_id,
+            subject_state=subject_state,
+            guard_satisfied=guard_satisfied,
+            execution_eligible=record.execution_eligible,
+            downstream_effect=record.downstream_effect,
+            next_required_action=record.next_required_action,
+            lock_scope=state.lock_scope,
+            labels=state.labels,
+        )
+
+    def review_action(
+        self,
+        *,
+        run_id: str,
+        checkpoint: ReviewCheckpoint,
+        action: ReviewAction,
+        context: ReviewCompatibilityContext | None = None,
+        subject_artifact_id: str | None = None,
+        subject_content_hash: str | None = None,
+        rationale: str,
+        expected_revision: int,
+        override: ReviewOverridePayload | None = None,
+        label: ReviewLabelPayload | None = None,
+        lock: ReviewLockPayload | None = None,
+        principal: Principal,
+        idempotency_key: str,
+    ) -> ReviewActionResult:
+        """Apply one server-authorized reviewer action.
+
+        Decision states are written through the existing review boundary.  The
+        separate action record makes labels, locks and overrides durable while
+        keeping the execution guard deliberately narrow.
+        """
+
+        self._require_scope(principal, "reviews:write")
+        run = self._get_authorized_run(run_id, principal, mutation=True)
+        if expected_revision < 0:
+            raise BackendError("INVALID_REVIEW_REVISION", "expected_revision must be non-negative", status=422)
+        if run.status.value in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+            raise BackendError("REVIEW_RUN_TERMINAL", "terminal runs cannot accept review actions", status=409)
+        _subject, authoritative, subject_key = self._resolve_review_subject(
+            run_id=run_id,
+            checkpoint=checkpoint,
+            subject_artifact_id=subject_artifact_id,
+            subject_content_hash=subject_content_hash,
+            context_assertion=context,
+        )
+        if checkpoint is ReviewCheckpoint.REVIEW_MATERIALIZATION_PLAN:
+            for validation_ref in self.control_store.list_artifacts(run_id=run_id, artifact_kind="ValidationReport", limit=10000):
+                try:
+                    _validation_artifact, validation_payload = self._read_verified_json(run_id=run_id, artifact_id=validation_ref.artifact_id)
+                except BackendError:
+                    continue
+                if str(validation_payload.get("g6_status", "")) == "FAIL":
+                    raise BackendError("G6_FAILED_REVIEW_BLOCK", "materialization review cannot bypass a failed G6 validation", status=409)
+        current = self.control_store.get_current_review(run_id=run_id, subject_key=subject_key)
+        state = self.control_store.get_review_action_state(run_id=run_id, subject_key=subject_key)
+        actual_revision = state.action_revision if state is not None else (0 if current is None else current.revision)
+        request_payload = {
+            "run_id": run_id,
+            "checkpoint": checkpoint.value,
+            "subject_key": subject_key,
+            "context": authoritative.model_dump(mode="json"),
+            "action": action.value,
+            "rationale": rationale,
+            "expected_revision": expected_revision,
+            "override": None if override is None else override.model_dump(mode="json"),
+            "label": None if label is None else label.model_dump(mode="json"),
+            "lock": None if lock is None else lock.model_dump(mode="json"),
+        }
+        fingerprint = idempotency_fingerprint(request_payload)
+        key = _safe_key(idempotency_key)
+        scope = stable_id("review-action-scope", {"run_id": run_id, "subject_key": subject_key, "principal": principal.subject})
+        existing = self._existing_idempotency(scope=scope, key=key, fingerprint=fingerprint)
+        if existing is not None:
+            body = self._idempotent_response(existing)
+            action_body = body.get("action")
+            state_body = body.get("state")
+            if not isinstance(action_body, dict) or not isinstance(state_body, dict):
+                raise BackendError("IDEMPOTENCY_REPLAY_UNAVAILABLE", "review action replay is unavailable", status=409)
+            return self._review_action_result(ReviewActionRecord.model_validate(action_body), ReviewActionState.model_validate(state_body), replayed=True)
+        if actual_revision != expected_revision:
+            raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409)
+        if state is not None and state.locked:
+            raise BackendError("REVIEW_LOCKED", "locked review subjects reject incompatible mutation", status=409)
+        if action is ReviewAction.OVERRIDE and current is not None and current.decision.decision is ReviewDecisionStatus.ACCEPTED:
+            raise BackendError("REVIEW_OVERRIDE_REQUIRES_INVALIDATION", "an accepted subject requires explicit invalidation before override", status=409)
+        if action is ReviewAction.LOCK:
+            if current is None or current.decision.decision is not ReviewDecisionStatus.ACCEPTED:
+                raise BackendError("REVIEW_LOCK_REQUIRES_ACCEPTED", "LOCK requires a compatible accepted decision", status=409)
+            if not current.decision.is_compatible(authoritative):
+                raise BackendError("REVIEW_CONTEXT_INCOMPATIBLE", "LOCK requires a currently compatible decision", status=409)
+            if lock is None or not lock.confirm:
+                raise BackendError("REVIEW_LOCK_CONFIRMATION_REQUIRED", "LOCK requires explicit confirmation", status=422)
+        if action is ReviewAction.OVERRIDE:
+            if _subject.artifact_kind == "ReviewOverrideProposal":
+                raise BackendError("REVIEW_OVERRIDE_NOT_APPLICABLE", "a revision proposal requires review and cannot override itself", status=409)
+            if override is None:
+                raise BackendError("INVALID_OVERRIDE_PAYLOAD", "OVERRIDE requires a typed replacement payload", status=422)
+        if action is ReviewAction.LABEL and label is None:
+            raise BackendError("INVALID_LABEL_PAYLOAD", "LABEL requires a typed label payload", status=422)
+
+        original_decision = None if current is None else current.decision.decision
+        resulting_decision = original_decision
+        resulting_subject_artifact_id: str | None = None
+        resulting_subject_content_hash = _subject.content_hash
+        lock_scope = None if state is None else state.lock_scope
+        labels = () if state is None else state.labels
+        downstream_effect = "The guarded stage remains paused until a compatible accepted decision is durable."
+        next_required_action = self._review_next_action(resulting_decision)
+        subject_state = "REVIEW_REQUIRED" if current is None else current.decision.decision.value
+        guard_satisfied = False
+
+        try:
+            if action in {ReviewAction.ACCEPT, ReviewAction.REJECT, ReviewAction.DEFER}:
+                decision_map = {
+                    ReviewAction.ACCEPT: ReviewDecisionStatus.ACCEPTED,
+                    ReviewAction.REJECT: ReviewDecisionStatus.REJECTED,
+                    ReviewAction.DEFER: ReviewDecisionStatus.DEFERRED,
+                }
+                # Action revisions include labels/locks, while the existing
+                # decision CAS only counts decision records.
+                decision_record, _ = self.review(
+                    run_id=run_id,
+                    checkpoint=checkpoint,
+                    context=context,
+                    subject_artifact_id=subject_artifact_id,
+                    subject_content_hash=subject_content_hash,
+                    decision=decision_map[action],
+                    rationale=rationale,
+                    expected_revision=0 if current is None else current.revision,
+                    principal=principal,
+                    idempotency_key=key,
+                )
+                resulting_decision = decision_record.decision.decision
+                subject_state = resulting_decision.value
+                guard_satisfied = action is ReviewAction.ACCEPT and decision_record.decision.is_compatible(authoritative)
+                downstream_effect = "The compatible review guard is satisfied; the server may accept a separate resume command." if guard_satisfied else "No downstream stage may consume this proposal as accepted truth."
+                next_required_action = "RESUME_IF_SERVER_ELIGIBLE" if guard_satisfied else self._review_next_action(resulting_decision)
+            elif action is ReviewAction.OVERRIDE:
+                assert override is not None
+                proposal = {
+                    "schema_version": "prompt04-review-override-v1",
+                    "original_subject_artifact_id": _subject.artifact_id,
+                    "original_subject_content_hash": _subject.content_hash,
+                    "checkpoint": checkpoint.value,
+                    "subject_stage": authoritative.subject_stage,
+                    "target": override.target.value,
+                    "replacement": override.replacement.value,
+                    "old_value_ref": override.old_value_ref,
+                    "evidence_ref": override.evidence_ref,
+                    "policy_version": authoritative.policy_version,
+                    "state": "REVIEW_REQUIRED",
+                }
+                new_id = stable_id("review-override-subject", {"run_id": run_id, "subject": _subject.artifact_id, "payload": proposal})
+                new_ref = self.artifact_store.publish(
+                    ArtifactManifest(
+                        artifact_id=new_id,
+                        run_id=run_id,
+                        stage_id=_subject.stage_id,
+                        attempt_id=_subject.attempt_id,
+                        artifact_kind="ReviewOverrideProposal",
+                        media_type="application/json",
+                        producer="application.review_actions",
+                        storage_key=f"runs/{run_id}/artifacts/{new_id}.json",
+                        provenance_refs=(_subject.artifact_id, "review-action:OVERRIDE"),
+                    ),
+                    json.dumps(proposal, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+                )
+                self.control_store.register_artifact(new_ref)
+                replacement_context = authoritative.model_copy(update={
+                    "subject_artifact_id": new_ref.artifact_id,
+                    "subject_content_hash": new_ref.content_hash,
+                    "subject_semantic_id": stable_id("review-override-semantic", {"original": authoritative.subject_semantic_id, "replacement": override.replacement.value}),
+                    "applicability_fingerprint": stable_id("review-override-applicability", {"original": authoritative.applicability_fingerprint, "replacement": override.model_dump(mode="json")}),
+                })
+                self.control_store.register_review_subject_context(run_id=run_id, context=replacement_context)
+                resulting_subject_artifact_id = new_ref.artifact_id
+                resulting_subject_content_hash = new_ref.content_hash
+                subject_state = "REVIEW_REQUIRED"
+                downstream_effect = "A typed replacement subject was persisted; it requires a fresh compatible review and safe recomputation before downstream use."
+                next_required_action = "REVIEW_REPLACEMENT_SUBJECT"
+            elif action is ReviewAction.LABEL:
+                assert label is not None
+                label_value = f"{label.namespace.value}:{label.value.value}"
+                labels = tuple(sorted(set(labels + (label_value,))))
+                subject_state = "LABELLED" if current is None else current.decision.decision.value
+                downstream_effect = "The bounded label is retained as review evidence; it does not satisfy or release the review guard."
+                next_required_action = self._review_next_action(original_decision)
+            elif action is ReviewAction.LOCK:
+                assert lock is not None
+                lock_scope = lock.scope
+                subject_state = "LOCKED"
+                downstream_effect = "The compatible accepted decision is frozen for this scope; incompatible mutation is rejected until lifecycle invalidation."
+                next_required_action = "RESUME_IF_SERVER_ELIGIBLE"
+            else:
+                raise BackendError("INVALID_REVIEW_ACTION", "unsupported review action", status=422)
+
+            payload_fingerprint = action_payload_fingerprint({"action": action.value, "override": override, "label": label, "lock": lock, "rationale": rationale})
+            action_id = stable_id("review-action", {"run_id": run_id, "subject_key": subject_key, "action": action.value, "payload": payload_fingerprint, "actor": principal.subject})
+            resulting_revision = expected_revision + 1
+            action_record = ReviewActionRecord(
+                action_id=action_id,
+                run_id=run_id,
+                project_id=run.project_id,
+                subject_key=subject_key,
+                checkpoint=checkpoint,
+                subject_artifact_id=_subject.artifact_id,
+                subject_content_hash=_subject.content_hash,
+                applicability_fingerprint=authoritative.applicability_fingerprint,
+                action=action,
+                action_payload_fingerprint=payload_fingerprint,
+                previous_revision=expected_revision,
+                resulting_revision=resulting_revision,
+                principal=principal.subject,
+                rationale=rationale,
+                original_decision=original_decision,
+                resulting_decision=resulting_decision,
+                resulting_subject_artifact_id=resulting_subject_artifact_id,
+                override_target=None if override is None else override.target,
+                override_replacement=None if override is None else override.replacement,
+                label_namespace=None if label is None else label.namespace,
+                label_value=None if label is None else label.value,
+                lock_scope=lock_scope,
+                downstream_effect=downstream_effect,
+                next_required_action=next_required_action,
+                execution_eligible=guard_satisfied and action is ReviewAction.ACCEPT and self.control_store.get_execution_plan(run_id) is not None,
+            )
+            action_state = ReviewActionState(
+                run_id=run_id,
+                subject_key=subject_key,
+                action_revision=resulting_revision,
+                locked=action is ReviewAction.LOCK or (False if state is None else state.locked),
+                lock_scope=lock_scope,
+                lock_context_fingerprint=authoritative.applicability_fingerprint if action is ReviewAction.LOCK else (None if state is None else state.lock_context_fingerprint),
+                labels=labels,
+                current_subject_artifact_id=resulting_subject_artifact_id or (subject_artifact_id or authoritative.subject_artifact_id),
+                current_subject_content_hash=resulting_subject_content_hash,
+                last_action_id=action_id,
+            )
+            stored = IdempotencyRecord(
+                scope=scope,
+                key=key,
+                request_fingerprint=fingerprint,
+                response_status=200,
+                response_body={},
+                resource_id=action_id,
+            )
+            action_record, action_state, replayed = self.control_store.record_review_action_with_idempotency(action_record, action_state, expected_revision=expected_revision, idempotency=stored)
+            self.telemetry.operation(event_name="review.action_recorded", component="backend", operation="review_action", correlation=self.telemetry.context(run_id=run_id, stage_id=authoritative.subject_stage, artifact_id=_subject.artifact_id, checkpoint=checkpoint.value), status=action.value, details={"replayed": replayed, "checkpoint": checkpoint.value})
+            telemetry_result = {
+                ReviewAction.ACCEPT: "ACCEPTED",
+                ReviewAction.REJECT: "REJECTED",
+                ReviewAction.DEFER: "DEFERRED",
+            }.get(action, "OK")
+            self.telemetry.metric("ddo_review_lifecycle_total", 1, labels={"review_checkpoint": checkpoint.value, "result_class": telemetry_result})
+            return ReviewActionResult(
+                action_id=action_record.action_id,
+                run_id=run_id,
+                checkpoint=checkpoint,
+                subject_artifact_id=action_record.subject_artifact_id,
+                action=action_record.action,
+                replayed=replayed,
+                previous_revision=action_record.previous_revision,
+                resulting_revision=action_record.resulting_revision,
+                resulting_decision=action_record.resulting_decision,
+                resulting_subject_artifact_id=action_record.resulting_subject_artifact_id,
+                subject_state=subject_state,
+                guard_satisfied=guard_satisfied,
+                execution_eligible=action_record.execution_eligible,
+                downstream_effect=action_record.downstream_effect,
+                next_required_action=action_record.next_required_action,
+                lock_scope=action_state.lock_scope,
+                labels=action_state.labels,
+            )
+        except BackendError:
+            raise
+        except ArtifactConflictError as exc:
+            raise BackendError("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key is bound to a different semantic request", status=409) from exc
+        except ConcurrencyConflictError as exc:
+            raise BackendError("REVIEW_REVISION_CONFLICT", "review subject revision is stale", status=409) from exc
+        except (ValueError, PlatformError) as exc:
+            raise BackendError("REVIEW_ACTION_REJECTED", "review action could not be recorded", status=422) from exc
+
     def invalidate_review(
         self,
         *,
@@ -986,6 +1415,12 @@ class BackendService:
     def list_reviews(self, *, run_id: str, subject_key: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
         self._get_authorized_run(run_id, principal)
         rows = self.control_store.list_review_history(run_id=run_id, subject_key=subject_key, limit=page_size + 1, offset=offset)
+        return self._page(rows, page_size=page_size, offset=offset, order_by="subject_key,revision")
+
+    def list_review_actions(self, *, run_id: str, subject_key: str | None, page_size: int, offset: int, principal: Principal) -> PageResult:
+        self._require_scope(principal, "reviews:read")
+        self._get_authorized_run(run_id, principal)
+        rows = self.control_store.list_review_action_history(run_id=run_id, subject_key=subject_key, limit=page_size + 1, offset=offset)
         return self._page(rows, page_size=page_size, offset=offset, order_by="subject_key,revision")
 
     def _verified_artifact(self, *, run_id: str, artifact_id: str) -> ArtifactRef:

@@ -38,6 +38,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
 )
 from dirty_data_to_olap.domain.contracts.api import IdempotencyRecord, ReviewHistoryRecord, ReviewRecord
 from dirty_data_to_olap.domain.contracts.canonical import ReviewCompatibilityContext, ReviewDecision
+from dirty_data_to_olap.domain.contracts.review_actions import ReviewActionHistoryRecord, ReviewActionRecord, ReviewActionState
 from dirty_data_to_olap.domain.contracts.jobs import ExecutionPlan, JobRecord, StageExecutionResult
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 
@@ -223,6 +224,16 @@ class ControlStorePort(Protocol):
         ...
 
     def list_review_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewHistoryRecord, ...]:
+        ...
+
+    def get_review_action_state(self, *, run_id: str, subject_key: str) -> ReviewActionState | None:
+        ...
+
+    def record_review_action_with_idempotency(self, record: ReviewActionRecord, state: ReviewActionState, *, expected_revision: int, idempotency: IdempotencyRecord) -> tuple[ReviewActionRecord, ReviewActionState, bool]:
+        """Atomically persist one consequential action and its replay record."""
+        ...
+
+    def list_review_action_history(self, *, run_id: str, subject_key: str | None = None, limit: int = 100, offset: int = 0) -> tuple[ReviewActionHistoryRecord, ...]:
         ...
 
     def get_idempotency(self, *, scope: str, key: str) -> IdempotencyRecord | None:

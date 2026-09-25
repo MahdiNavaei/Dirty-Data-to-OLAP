@@ -1,8 +1,8 @@
 schema_version: "product-completion-state-v1"
 state_scope: "Prompt01 original-product audit; separate from MASTER_EXECUTION_STATE"
 repository: "MahdiNavaei/Dirty-Data-to-OLAP"
-audited_head: "28f8777342e053c685ae41c6ab143cc174a737c9"
-branch: "codex/prompt03-generic-product"
+audited_head: "a735f157945df890ef809f1990ed00417f44a4bd"
+branch: "codex/prompt04-review-completion"
 workflow:
   last_completed_specialist_step: 41
   terminal_specialist_state: "G0-G15_PASS"
@@ -50,7 +50,7 @@ product_acceptance:
   overall_status: "AUDIT_COMPLETE_ACCEPTANCE_PENDING"
   multi_source_status: "PASS_HISTORICAL_PROMPT02_CURRENT_BRANCH_RERUN_NOT_EXECUTED"
   generic_product_status: "PASS_LOCAL_TELEMETRY_BOUNDED"
-  human_review_status: "PARTIAL_FOUR_CHECKPOINT_ACCEPT_ONLY"
+  human_review_status: "PASS_LOCAL_PROMPT04_REVIEW_ACTION_MATRIX_AND_BROWSER_CONTRACT"
   output_export_status: "PARTIAL_NO_COMPLETE_PRODUCT_EXPORT"
   g6_status: "PASS_BOUNDED_STEP29_SINGLE_SOURCE_ORDER_PATH"
   g7_status: "PASS_BOUNDED_STEP29_LOCAL_PRODUCT_PATH"
@@ -65,18 +65,22 @@ product_acceptance:
   prompt03_g6_status: "PASS_ELIGIBLE_LOCAL"
   prompt03_wrapper_status: "PASS_LOCAL_EXACT_COMMIT_WRAPPER"
   prompt03_liveness_status: "PASS_LOCAL_PENDING_WAKE_REPAIRED"
-  complete_review_action_matrix_executed: false
+  complete_review_action_matrix_executed: true
+  prompt04_review_negative_controls: "PASS_NC-R01_NC-R20"
+  prompt04_review_order_telemetry: "PASS_LOCAL_DURABLE_ORDER_AND_BOUNDED_TELEMETRY"
+  prompt04_browser_acceptance: "PASS_LOCAL_CHROME_DURABLE_SYNTHETIC_REVIEW_FIXTURE"
+  prompt04_real_provider_review_path: "NOT_CLAIMED_OPTIONAL_DESBORDANTE_UNAVAILABLE"
   safe_export_acceptance_executed: false
   final_product_acceptance: "PENDING"
 next_product_completion_prompt:
-  number: 4
-  title: "Review contract/API/UI completion"
+  number: 5
+  title: "Safe complete output/export"
   status: "NOT_STARTED"
   specification: "05_REVIEW_AND_EXPORT_ACCEPTANCE_SPEC.md"
   prompt02_handoff: "PASS_HISTORICAL_CURRENT_BRANCH_RERUN_NOT_EXECUTED"
 future_prompts:
   prompt03: "PASS_LOCAL_TELEMETRY_BOUNDED"
-  prompt04: "NOT_STARTED"
+  prompt04: "PASS_LOCAL_REVIEW_CONTRACT_AND_UI"
   prompt05: "NOT_STARTED"
   prompt06: "NOT_STARTED"
 evidence_boundary:

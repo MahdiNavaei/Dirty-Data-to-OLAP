@@ -12,6 +12,7 @@ from typing import Any, Mapping, Protocol, Sequence
 from pydantic import Field
 
 from .canonical import ReviewCompatibilityContext, _SourceModel
+from .review_actions import ReviewActionApplicability
 
 
 class ProductPolicyBinding(_SourceModel):
@@ -120,6 +121,20 @@ class ProductReviewView(_SourceModel):
     decision: str | None = None
     revision: int = 0
     context: ReviewCompatibilityContext
+    action_revision: int = 0
+    subject_type: str = "ReviewSubject"
+    subject_description: str = "Server-owned review subject"
+    source_scope: tuple[str, ...] = ()
+    confidence_semantics: str = "Evidence is not a probability."
+    supporting_evidence: tuple[str, ...] = ()
+    missing_evidence: tuple[str, ...] = ()
+    conflicts: tuple[str, ...] = ()
+    provenance_summary: tuple[str, ...] = ()
+    downstream_consequence: str = "The guarded stage remains paused until the server records a satisfying decision."
+    next_required_action: str = "REVIEW"
+    locked: bool = False
+    labels: tuple[str, ...] = ()
+    actions: tuple[ReviewActionApplicability, ...] = ()
 
 
 class ProductDataConditionView(_SourceModel):

@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { ApiError, api, type Source, type Summary } from "./api/client";
+import { ReviewWorkspace } from "./ReviewWorkspace";
 import "./styles.css";
 
 function useSummary(runId: string | undefined) {
@@ -71,7 +72,7 @@ function AppShell() {
       <nav aria-label="Primary navigation"><Link to="/projects">Projects &amp; sources</Link><Link to="/">New run</Link></nav>
       <span className="auth-badge">Local reference auth</span>
     </header>
-    <main><Routes><Route path="/" element={<SetupPage />} /><Route path="/projects" element={<ProjectsPage />} /><Route path="/runs/:runId" element={<RunWorkspace />} /><Route path="*" element={<NotFound />} /></Routes></main>
+    <main><Routes><Route path="/" element={<SetupPage />} /><Route path="/projects" element={<ProjectsPage />} /><Route path="/runs/:runId" element={<ReviewWorkspace />} /><Route path="*" element={<NotFound />} /></Routes></main>
   </div>;
 }
 
@@ -114,7 +115,9 @@ function ProjectsPage() {
   return <div className="page"><section className="hero compact"><p className="eyebrow">Projects / sources</p><h1>Start from a source, then follow the evidence.</h1><p className="lede">The local reference workspace keeps source registration separate from each durable run.</p><Link className="button primary inline" to="/">Create a new run <span aria-hidden="true">→</span></Link></section></div>;
 }
 
-function RunWorkspace() {
+// Retained as a compatibility export for older local snapshots; the active
+// route uses ReviewWorkspace above so all new actions cross the typed API.
+export function RunWorkspace() {
   const { runId } = useParams();
   const { data, error, refreshing } = useSummary(runId);
   const [actionError, setActionError] = useState<ApiError | Error | null>(null);
