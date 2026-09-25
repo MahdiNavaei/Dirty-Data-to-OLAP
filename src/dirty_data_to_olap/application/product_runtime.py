@@ -169,6 +169,14 @@ class LocalProductStageHandlers:
                 continue
         raise ValueError(f"typed {kind} input is unavailable")
 
+    def _optional_typed_from_run(self, run_id: str, kind: str, model):
+        try:
+            return self._typed_from_run(run_id, kind, model)
+        except ValueError as error:
+            if str(error) == f"typed {kind} input is unavailable":
+                return None
+            raise
+
     def _publish(self, request: StageExecutionRequest, kind: str, value: Any, *, artifact_id: str | None = None, provenance: tuple[str, ...] = (), producer: str = "application.product_runtime") -> ArtifactRef:
         identity = artifact_id or stable_id("product-artifact", {"run": request.run_id, "stage": request.stage_id, "attempt": request.attempt_id, "kind": kind, "payload": stable_digest(value)})
         storage_identity = stable_id("artifact-storage", {"artifact_id": identity})

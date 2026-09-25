@@ -48,6 +48,7 @@ from dirty_data_to_olap.domain.contracts.canonical import (
     CanonicalModel,
     CanonicalIdentityMembership,
     IdentityDerivationBasis,
+    EntityResolutionRequirement,
 )
 from dirty_data_to_olap.domain.contracts.dependency import DependencyPrivacyContext, DependencyRequest
 from dirty_data_to_olap.domain.contracts.evidence_fusion import DomainAssertion
@@ -180,6 +181,18 @@ class TelemetryProductPolicy:
             ),
         )
 
+    def dependency_result(self, result: Any, *, catalog: SourceCatalog) -> Any:
+        """Bind telemetry's source-local identity candidate at the policy edge."""
+
+        from dirty_data_to_olap.application.product_dependency import bind_source_local_identity_candidate
+
+        return bind_source_local_identity_candidate(
+            result,
+            catalog=catalog,
+            table_name=self.role_table(catalog).physical_name,
+            column_name=self.identity_column(catalog),
+        )
+
     def quality_request(self, catalog: SourceCatalog, snapshot: SourceSnapshotResult, profile: Any, run_id: str) -> QualityRequest:
         table = self.role_table(catalog)
         role = self.source_role(catalog)
@@ -286,7 +299,13 @@ class TelemetryProductPolicy:
             output.append(CanonicalRelationship(relationship_id=item.decision_id, from_entity_type_id="entity_reading", to_entity_type_id=target, cardinality=item.proposed_cardinality, upstream_decision_ref=item.decision_id, review_decision_ref=review_ref, conflict_refs=tuple(item.conflict_refs), provenance_refs=(item.decision_id, self.provenance)))
         return tuple(output)
 
-    def identity_memberships(self, *, hypothesis, snapshots: Mapping[str, SourceSnapshotResult], catalogs: Mapping[str, SourceCatalog], policy_ref: str) -> tuple[CanonicalIdentityMembership, ...]:
+    def entity_resolution_spec(self, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult]) -> None:
+        return None
+
+    def entity_resolution_requirements(self, entity_types: Sequence[CanonicalEntityType]) -> Mapping[str, EntityResolutionRequirement]:
+        return {item.entity_resolution_family or item.semantic_id: EntityResolutionRequirement.ER_NOT_REQUIRED for item in entity_types}
+
+    def identity_memberships(self, *, hypothesis, snapshots: Mapping[str, SourceSnapshotResult], catalogs: Mapping[str, SourceCatalog], policy_ref: str, entity_resolution_result: Any | None = None, entity_resolution_ref: str | None = None, domain_assertions: Sequence[Any] = ()) -> tuple[CanonicalIdentityMembership, ...]:
         type_by_role = {"device_registry": ("entity_device", "device"), "location_registry": ("entity_location", "location"), "reading_event": ("entity_reading", "reading")}
         memberships = []
         for source_id, catalog in sorted(catalogs.items()):
@@ -294,6 +313,13 @@ class TelemetryProductPolicy:
             for row in snapshots[source_id].record_references:
                 memberships.append(CanonicalIdentityMembership(membership_group_id=stable_id("telemetry-membership", {"source": source_id, "record": row.record_ref}), canonical_entity_type_id=entity_type, entity_resolution_family=semantic, source_record_refs=(row.record_ref,), derivation_basis=IdentityDerivationBasis.SOURCE_LOCAL_EVENT_IDENTITY, evidence_refs=(hypothesis.artifact_id, row.record_ref), policy_refs=(policy_ref,), rationale=f"the versioned telemetry policy preserves source-local {semantic} identity; same-name records are not merged", provenance_refs=(hypothesis.artifact_id, snapshots[source_id].snapshot.snapshot_id, row.record_ref)))
         return tuple(memberships)
+
+    def validate_identity_memberships(self, memberships: Sequence[CanonicalIdentityMembership]) -> None:
+        """Reject an injected cross-record device merge without authorization."""
+
+        for membership in memberships:
+            if membership.canonical_entity_type_id == "entity_device" and len(membership.source_record_refs) > 1:
+                raise ValueError("telemetry same-name device hard-negative requires explicit identity evidence and authorization")
 
     @staticmethod
     def _typed_value(value: Any, logical_type: str) -> Any:
@@ -378,6 +404,9 @@ class TelemetryProductPolicy:
         planning = AnalyticalPlanningRequest(request_id=stable_id("analytical-request", {"run": run_id, "canonical": canonical.model_id, "policy": self.version}), dimensions=(device_dim, location_dim, date_dim), facts=(fact,), grains=(grain,), measures=(measure,), accepted_relationship_refs=(device_rel.relationship_id, location_rel.relationship_id), deferred_concept_refs=tuple(self.data["deferred_concepts"]), deferred_concept_reasons=dict(self.data["deferred_concepts"]), domain_assertion_refs=("telemetry:temperature-semantics", "telemetry:hard-negative-same-name-device", "telemetry:missing-device-reference"), provenance_refs=lineage)
         return dataset, binding, planning
 
+    def build_multi_source_dataset_and_request(self, *, run_id: str, canonical: CanonicalModel, service, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult], relationships: Sequence[Any]):
+        return self.build_dataset_and_request(run_id=run_id, canonical=canonical, service=service, catalogs=catalogs, snapshots=snapshots)
+
     def source_records(self, *, service, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult]) -> tuple[Mapping[str, Any], ...]:
         output = []
         for source_id, catalog in sorted(catalogs.items()):
@@ -451,6 +480,9 @@ class TelemetryProductPolicy:
         truth = SourceTruthManifest(truth_id=stable_id("truth", {"run": run_id, "source_snapshot_ids": source_snapshot_ids, "records": [item.record_ref for item in records]}), truth_version=self.version, source_snapshot_id=source_snapshot_id, source_snapshot_ids=source_snapshot_ids, source_schema_fingerprints={source_id: catalogs[source_id].source.schema_fingerprint for source_id in sorted(catalogs)}, records=tuple(records), entities=tuple(entities), relationships=tuple(relationships), facts=tuple(facts), accounting_expectations=tuple((*source_expectations, *canonical_expectations)), aggregate_expectations=aggregate_expectations, expected_aggregates={"aggregates": [item.model_dump(mode="json") for item in aggregate_expectations]}, provenance_refs=("application.telemetry_policy", source_snapshot_id, self.provenance, *source_snapshot_ids.values()))
         accounting = RecordAccountingArtifact(accounting_id=stable_id("accounting", {"run": run_id, "source_snapshot_ids": source_snapshot_ids}), run_id=run_id, scopes=(RecordAccountingScope(scope_id=stable_id("accounting-scope", {"run": run_id, "boundary": AccountingBoundary.SOURCE_TO_CANONICAL.value}), boundary=AccountingBoundary.SOURCE_TO_CANONICAL, input_object_ref=source_snapshot_id, input_record_refs=tuple(item.record_ref for item in records), entries=tuple(source_entries), policy_version=self.version, provenance_refs=(truth.truth_id, source_snapshot_id)), RecordAccountingScope(scope_id=stable_id("accounting-scope", {"run": run_id, "boundary": AccountingBoundary.CANONICAL_TO_ANALYTICAL.value}), boundary=AccountingBoundary.CANONICAL_TO_ANALYTICAL, input_object_ref=canonical.model_id, input_record_refs=tuple(item.canonical_entity_id for item in entities), entries=tuple(canonical_entries), policy_version=self.version, provenance_refs=(truth.truth_id, canonical.model_id))), policy_version=self.version, provenance_refs=(truth.truth_id, canonical.model_id, self.provenance))
         return truth, accounting
+
+    def record_accounting_ref(self, run_id: str) -> str:
+        return stable_id("accounting", run_id)
 
     def validation_policy(self, *, canonical_model_id: str, materialization_id: str):
         from dirty_data_to_olap.domain.contracts.validation import ValidationPolicy, ValidationStatus

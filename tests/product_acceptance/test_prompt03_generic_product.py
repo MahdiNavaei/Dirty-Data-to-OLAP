@@ -102,20 +102,117 @@ def test_prompt03_telemetry_uses_shared_product_path_and_g6(tmp_path: Path, monk
         import duckdb
 
         with duckdb.connect(str(target), read_only=True) as connection:
-            fact_rows = int(connection.execute("SELECT COUNT(*) FROM fact_device_reading").fetchone()[0])
+            table_names = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
+                ).fetchall()
+            }
+            assert table_names == {"dim_date", "dim_device", "dim_location", "fact_device_reading"}
+            device_rows = int(connection.execute("SELECT COUNT(*) FROM dim_device").fetchone()[0])
+            location_rows = int(connection.execute("SELECT COUNT(*) FROM dim_location").fetchone()[0])
+            date_rows = int(connection.execute("SELECT COUNT(*) FROM dim_date").fetchone()[0])
+            fact_rows, distinct_readings = connection.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT reading_id) FROM fact_device_reading"
+            ).fetchone()
+            fact_rows, distinct_readings = int(fact_rows), int(distinct_readings)
+            date_values = tuple(
+                str(row[0])
+                for row in connection.execute("SELECT full_date FROM dim_date ORDER BY full_date").fetchall()
+            )
+            fact_values = tuple(
+                (row[0], str(row[1]), Decimal(str(row[2])))
+                for row in connection.execute(
+                    """
+                    SELECT f.reading_id, d.full_date, f.temperature
+                    FROM fact_device_reading AS f
+                    JOIN dim_date AS d ON d.date_key = f.date_key
+                    ORDER BY f.reading_id
+                    """
+                ).fetchall()
+            )
             max_temperature = Decimal(str(connection.execute("SELECT MAX(temperature) FROM fact_device_reading").fetchone()[0]))
-            same_name = int(connection.execute("SELECT COUNT(*) FROM dim_device WHERE device_name = 'Pump A'").fetchone()[0])
+            by_date = {
+                str(row[0]): Decimal(str(row[1]))
+                for row in connection.execute(
+                    """
+                    SELECT d.full_date, MAX(f.temperature)
+                    FROM fact_device_reading AS f
+                    JOIN dim_date AS d ON d.date_key = f.date_key
+                    GROUP BY d.full_date
+                    ORDER BY d.full_date
+                    """
+                ).fetchall()
+            }
+            same_name_ids = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT device_id FROM dim_device WHERE device_name = 'Pump A' ORDER BY device_id"
+                ).fetchall()
+            }
         oracle = yaml.safe_load(ORACLE.read_text(encoding="utf-8"))
         expected = oracle["expected"]
+        assert device_rows == expected["canonical_devices"]
+        assert location_rows == expected["canonical_locations"]
+        assert date_rows == len(expected["temperature_by_date"])
+        assert date_values == tuple(sorted(expected["temperature_by_date"]))
         assert fact_rows == expected["fact_rows"]
+        assert distinct_readings == fact_rows
+        assert tuple(item[0] for item in fact_values) == ("R-001", "R-002", "R-003")
+        assert tuple(item[1] for item in fact_values) == ("2026-02-01", "2026-02-01", "2026-02-02")
+        assert tuple(item[2] for item in fact_values) == (Decimal("10.5"), Decimal("11.0"), Decimal("9.5"))
         assert max_temperature == Decimal(expected["temperature_global_max"])
-        assert same_name == len(expected["same_name_device_ids"])
+        assert by_date == {key: Decimal(value) for key, value in expected["temperature_by_date"].items()}
+        assert same_name_ids == set(expected["same_name_device_ids"])
         truth_refs = platform.control_store.list_artifacts(run_id=run.run_id, artifact_kind="SourceTruthManifest", limit=10)
         assert len(truth_refs) == 1
         truth = yaml.safe_load(platform.artifact_store.read(truth_refs[0]).decode("utf-8"))
         assert len(truth["records"]) == expected["source_records"]
+        assert {item["subject_type"] for item in truth["records"]} == {"device", "location", "reading"}
+        assert sum(item["subject_type"] == "device" for item in truth["records"]) == expected["canonical_devices"]
+        assert sum(item["subject_type"] == "location" for item in truth["records"]) == expected["canonical_locations"]
+        assert sum(item["subject_type"] == "reading" for item in truth["records"]) == expected["canonical_readings"]
+        assert {item["entity_type"] for item in truth["entities"]} == {"device", "location", "reading"}
+        assert sum(item["entity_type"] == "device" for item in truth["entities"]) == expected["canonical_devices"]
+        assert sum(item["entity_type"] == "location" for item in truth["entities"]) == expected["canonical_locations"]
+        assert sum(item["entity_type"] == "reading" for item in truth["entities"]) == expected["canonical_readings"]
         assert len(truth["facts"]) == expected["fact_rows"]
+        assert {item["grain_values"]["reading_id"] for item in truth["facts"]} == {"R-001", "R-002", "R-003"}
         assert all(record["grain_values"].get("reading_id") != "R-004" for record in truth["facts"])
+        reading_ref_by_id = {
+            item["values"]["reading_id"]: item["record_ref"]
+            for item in truth["records"]
+            if item["subject_type"] == "reading"
+        }
+        assert {item["from_record_ref"] for item in truth["relationships"]} == {
+            reading_ref_by_id[key] for key in ("R-001", "R-002", "R-003")
+        }
+        assert reading_ref_by_id["R-004"] not in {item["from_record_ref"] for item in truth["relationships"]}
+        accounting_refs = platform.control_store.list_artifacts(run_id=run.run_id, artifact_kind="RecordAccountingArtifact", limit=10)
+        assert len(accounting_refs) == 1
+        accounting = yaml.safe_load(platform.artifact_store.read(accounting_refs[0]).decode("utf-8"))
+        scopes = {item["boundary"]: item for item in accounting["scopes"]}
+        assert set(scopes) == {"SOURCE_TO_CANONICAL", "CANONICAL_TO_ANALYTICAL"}
+        assert len(scopes["SOURCE_TO_CANONICAL"]["input_record_refs"]) == expected["source_records"]
+        assert len(scopes["SOURCE_TO_CANONICAL"]["entries"]) == expected["source_records"]
+        assert len(scopes["CANONICAL_TO_ANALYTICAL"]["input_record_refs"]) == expected["source_records"]
+        assert len(scopes["CANONICAL_TO_ANALYTICAL"]["entries"]) == expected["source_records"]
+        truth_record_by_id = {item["values"].get("reading_id"): item for item in truth["records"]}
+        r004_record = truth_record_by_id["R-004"]
+        assert r004_record["terminal_disposition"] == "EMITTED_DIRECT"
+        source_entry = next(item for item in scopes["SOURCE_TO_CANONICAL"]["entries"] if item["input_record_ref"] == r004_record["record_ref"])
+        assert source_entry["disposition"] == "EMITTED_DIRECT"
+        assert source_entry["output_or_group_ref"] == r004_record["canonical_entity_id"]
+        analytical_entry = next(item for item in scopes["CANONICAL_TO_ANALYTICAL"]["entries"] if item["input_record_ref"] == r004_record["canonical_entity_id"])
+        assert analytical_entry["disposition"] == "QUARANTINED"
+        assert analytical_entry["output_or_group_ref"] is None
+        assert "quarantined" in analytical_entry["reason"].casefold()
+        for expectation in truth["accounting_expectations"]:
+            scope = scopes[expectation["boundary"]]
+            entry = next(item for item in scope["entries"] if item["input_record_ref"] == expectation["input_record_ref"])
+            assert entry["disposition"] == expectation["expected_disposition"]
+            assert entry["output_or_group_ref"] == expectation["expected_output_or_group_ref"]
+            assert expectation["reason_contains"] in entry["reason"].casefold()
         assert any(item.decision.review_checkpoint_id is ReviewCheckpoint.REVIEW_CANONICAL_IDENTITY for item in backend.list_reviews(run_id=run.run_id, subject_key=None, page_size=100, offset=0, principal=principal).items)
     finally:
         if runtime is not None:

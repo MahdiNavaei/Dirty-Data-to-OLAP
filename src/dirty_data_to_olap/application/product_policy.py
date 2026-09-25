@@ -5,13 +5,21 @@ from __future__ import annotations
 import json
 import hashlib
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 from dirty_data_to_olap.domain.contracts.analytical import (
     AggregationClass,
+    AnalyticalCell,
+    AnalyticalColumnBinding,
+    AnalyticalInputBinding,
+    AnalyticalInputDataset,
+    AnalyticalInputRow,
+    AnalyticalInputTable,
     AnalyticalPlanningRequest,
+    AnalyticalRowBatch,
     DimensionAttributeSpec,
     DimensionRole,
     DimensionSpec,
@@ -30,11 +38,25 @@ from dirty_data_to_olap.domain.contracts.analytical import (
 )
 from dirty_data_to_olap.domain.contracts.canonical import (
     CanonicalEntityKind,
+    CanonicalIdentityMembership,
+    CanonicalModel,
     CanonicalEntityType,
     CanonicalRelationship,
     CanonicalSourceTable,
     EntityResolutionRequirement,
     IdentityDerivationBasis,
+)
+from dirty_data_to_olap.domain.contracts.entity_resolution import (
+    ERBlockingRule,
+    ERClusteringPolicy,
+    ERComparisonSpecification,
+    ERExecutionBudget,
+    EntityResolutionMode,
+    EntityResolutionNormalizationRule,
+    EntityResolutionSpec,
+    ERThresholdPolicy,
+    ERTrainingPolicy,
+    IdentityFieldSpecification,
 )
 from dirty_data_to_olap.domain.contracts.dependency import DependencyPrivacyContext, DependencyRequest
 from dirty_data_to_olap.domain.contracts.evidence_fusion import DomainAssertion
@@ -49,7 +71,7 @@ from dirty_data_to_olap.domain.contracts.quality import (
     Repairability,
 )
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSnapshotResult, stable_id
-from dirty_data_to_olap.domain.contracts.product import ProductPolicyBinding
+from dirty_data_to_olap.domain.contracts.product import ProductDomainPolicy, ProductPolicyBinding
 
 
 class OrderProductPolicy:
@@ -99,6 +121,218 @@ class OrderProductPolicy:
             if role == "event" and (names & {"order_id", "ticket_id", "sale_key"}):
                 return table
         return cls.source_table(catalog)
+
+    def dependency_result(self, result: Any, *, catalog: SourceCatalog) -> Any:
+        return result
+
+    def relationship_candidates(self, catalogs: Mapping[str, SourceCatalog]) -> tuple[dict[str, Any], ...]:
+        registries = [catalog for catalog in catalogs.values() if self.source_role(catalog) == "registry"]
+        events = [catalog for catalog in catalogs.values() if self.source_role(catalog) == "event"]
+        if not registries or not events:
+            raise ValueError("Prompt02 requires both customer registries and event sources")
+        registry = sorted(registries, key=lambda item: item.source_id)[0]
+        event = sorted(events, key=lambda item: item.source_id)[0]
+        event_table = self.role_table(event)
+        registry_table = self.role_table(registry)
+        event_customer = self.column(event, event_table.table_id, ("customer_id_ref", "customer_id", "crm_customer_id", "account_no", "account_id", "customer_code", "buyer_ref", "client_code", "customer_ref"))
+        registry_customer = self.column(registry, registry_table.table_id, ("customer_id", "crm_customer_id", "account_no", "account_id", "customer_code", "buyer_ref", "client_code", "customer_ref"))
+        if event_customer is None or registry_customer is None:
+            raise ValueError("Prompt02 relationship candidate lacks an explicit customer key")
+        return (
+            {"candidate_id": stable_id("relationship-candidate", {"kind": "customer", "event": event.source_id, "registry": registry.source_id}), "from_table": event_table.physical_name, "from_columns": (event_customer.physical_name,), "to_table": registry_table.physical_name, "to_columns": (registry_customer.physical_name,), "proposed_cardinality": "MANY_TO_ONE"},
+            {"candidate_id": stable_id("relationship-candidate", {"kind": "source", "event": event.source_id}), "from_table": event_table.physical_name, "from_columns": ("source_id",), "to_table": "source_registry", "to_columns": ("source_id",), "proposed_cardinality": "MANY_TO_ONE"},
+        )
+
+    @staticmethod
+    def _candidate_subject(item: Mapping[str, Any]) -> str:
+        return "rel:" + item["from_table"] + ":" + ",".join(item["from_columns"]) + "->" + item["to_table"] + ":" + ",".join(item["to_columns"])
+
+    def domain_assertions(self, candidates: Sequence[Mapping[str, Any]], catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult]) -> tuple[DomainAssertion, ...]:
+        source_ids = tuple(sorted(catalogs))
+        snapshot_ids = tuple(snapshots[key].snapshot.snapshot_id for key in source_ids)
+        return tuple(
+            DomainAssertion(
+                assertion_id=f"prompt02:{item['candidate_id']}",
+                subject_id=self._candidate_subject(item),
+                statement="the source-role relationship is declared for review by the versioned order policy",
+                status="ACTIVE",
+                source_ids=source_ids,
+                snapshot_ids=snapshot_ids,
+                scope_id=stable_id("prompt02-domain-scope", item["candidate_id"]),
+                asserted_by=f"product-policy:{self.version}",
+                evidence_refs=(self.provenance, item["candidate_id"]),
+            )
+            for item in candidates
+        )
+
+    def entity_resolution_spec(self, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult]) -> EntityResolutionSpec:
+        fields: list[IdentityFieldSpecification] = []
+        for source_id in sorted(catalogs):
+            catalog = catalogs[source_id]
+            if self.source_role(catalog) != "registry":
+                continue
+            table = self.role_table(catalog)
+            for field_id, names, role, anchor in (
+                ("customer_name", ("customer_name", "full_name", "buyer_name", "client_name", "account_name", "name"), "name", False),
+                ("customer_email", ("email", "email_addr", "buyer_email", "customer_email", "client_email"), "email", True),
+                ("customer_phone", ("phone", "phone_e164", "buyer_phone", "client_phone"), "phone", False),
+            ):
+                column = self.column(catalog, table.table_id, names)
+                if column is None:
+                    continue
+                fields.append(IdentityFieldSpecification(field_id=field_id, source_id=source_id, snapshot_id=snapshots[source_id].snapshot.snapshot_id, table_id=table.table_id, column_id=column.column_id, physical_name=column.physical_name, semantic_role=role, normalization_rule_id="identity-normalization-v1", nullable=column.schema_nullable is not False, is_anchor=anchor, anchor_group="email" if anchor else None))
+        if not fields or not {"customer_name", "customer_email"}.issubset({item.field_id for item in fields}):
+            raise ValueError("the selected customer registries must expose name and email identity fields")
+        source_ids = tuple(sorted(catalogs))
+        return EntityResolutionSpec(
+            spec_id=stable_id("er-spec", {"run_sources": source_ids, "snapshots": {key: snapshots[key].snapshot.snapshot_id for key in source_ids}, "fields": [item.model_dump(mode="json") for item in fields]}),
+            entity_family="customer", mode=EntityResolutionMode.LINK_ONLY, source_ids=source_ids,
+            snapshot_ids={key: snapshots[key].snapshot.snapshot_id for key in source_ids},
+            table_ids_by_source={source_id: (self.role_table(catalogs[source_id]).table_id,) for source_id in source_ids},
+            identity_fields=tuple(fields),
+            normalization_rules=(EntityResolutionNormalizationRule(rule_id="identity-normalization-v1", version="1", applies_to=("customer_name", "customer_email", "customer_phone")),),
+            blocking_rules=(ERBlockingRule(rule_id="block-customer-name", version="1", field_ids=("customer_name",), sql_expression="l.customer_name = r.customer_name"), ERBlockingRule(rule_id="block-customer-email", version="1", field_ids=("customer_email",), sql_expression="l.customer_email = r.customer_email"), ERBlockingRule(rule_id="block-customer-phone", version="1", field_ids=("customer_phone",), sql_expression="l.customer_phone = r.customer_phone")),
+            comparisons=(ERComparisonSpecification(comparison_id="compare-customer-name", field_id="customer_name", method="exact"), ERComparisonSpecification(comparison_id="compare-customer-email", field_id="customer_email", method="exact"), ERComparisonSpecification(comparison_id="compare-customer-phone", field_id="customer_phone", method="exact")),
+            training_policy=ERTrainingPolicy(em_blocking_rule_ids=("block-customer-name", "block-customer-email"), max_u_pairs=10_000, max_em_iterations=10),
+            threshold_policy=ERThresholdPolicy(policy_id="prompt02-er-threshold-v1", match_probability_threshold=0.95, review_probability_threshold=0.80, match_weight_threshold=-5.0, require_independent_evidence=True),
+            clustering_policy=ERClusteringPolicy(threshold_policy_id="prompt02-er-threshold-v1", include_review_edges=False),
+            execution_budget=ERExecutionBudget(max_records=100_000, max_candidate_pairs=100_000, max_all_pairs_diagnostic=1_000_000, max_runtime_seconds=300),
+        )
+
+    def entity_resolution_requirements(self, entity_types: Sequence[CanonicalEntityType]) -> Mapping[str, EntityResolutionRequirement]:
+        return {item.entity_resolution_family or item.semantic_id: (EntityResolutionRequirement.ER_REQUIRED if item.semantic_id == "customer" else EntityResolutionRequirement.ER_NOT_REQUIRED) for item in entity_types}
+
+    def entity_types(self, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult], relationships: Sequence[Any], domain_refs: tuple[str, ...]) -> tuple[CanonicalEntityType, ...]:
+        source_tables = tuple(CanonicalSourceTable(source_id=source_id, snapshot_id=snapshots[source_id].snapshot.snapshot_id, table_id=self.role_table(catalogs[source_id]).table_id, schema_fingerprint=catalogs[source_id].source.schema_fingerprint) for source_id in sorted(catalogs))
+        relationship_refs = tuple(item.decision_id for item in relationships)
+        return (
+            CanonicalEntityType(canonical_entity_type_id="entity_customer", semantic_id="customer", business_name="Customer", kind=CanonicalEntityKind.IDENTITY, entity_resolution_family="customer", identity_strategy="REVIEWED_SPLINK_LINKAGE", identity_attribute_ids=("customer_name", "customer_email"), source_table_refs=tuple(item for item in source_tables if self.source_role(catalogs[item.source_id]) == "registry"), canonical_attribute_ids=("customer_name", "customer_email"), relationship_refs=relationship_refs, domain_assertion_refs=domain_refs, review_state="REVIEW_REQUIRED", provenance_refs=(self.provenance,)),
+            CanonicalEntityType(canonical_entity_type_id="entity_order", semantic_id="order", business_name="Order event", kind=CanonicalEntityKind.EVENT, entity_resolution_family="order_event", identity_strategy="SOURCE_LOCAL_EVENT_KEY", identity_attribute_ids=("order_id",), source_table_refs=tuple(item for item in source_tables if self.source_role(catalogs[item.source_id]) == "event"), canonical_attribute_ids=("order_id",), relationship_refs=relationship_refs, domain_assertion_refs=domain_refs, review_state="REVIEW_REQUIRED", provenance_refs=(self.provenance,)),
+            CanonicalEntityType(canonical_entity_type_id="entity_source", semantic_id="source", business_name="Source system", kind=CanonicalEntityKind.IDENTITY, entity_resolution_family="source_system", identity_strategy="REGISTERED_SOURCE_ID", identity_attribute_ids=("source_id",), source_table_refs=(), canonical_attribute_ids=("source_id",), relationship_refs=relationship_refs, domain_assertion_refs=domain_refs, review_state="REVIEW_REQUIRED", provenance_refs=(self.provenance,)),
+        )
+
+    def canonical_relationships(self, relationships: Sequence[Any], review_decision_id_by_subject: Mapping[str, str]) -> tuple[CanonicalRelationship, ...]:
+        output = []
+        for item in relationships:
+            review_ref = review_decision_id_by_subject.get(item.decision_id)
+            if review_ref is None:
+                raise ValueError(f"order relationship {item.decision_id} lacks an accepted evidence review")
+            output.append(CanonicalRelationship(relationship_id=item.decision_id, from_entity_type_id="entity_order", to_entity_type_id="entity_source" if "source_id" in item.from_columns else "entity_customer", cardinality=item.proposed_cardinality, upstream_decision_ref=item.decision_id, review_decision_ref=review_ref, conflict_refs=tuple(item.conflict_refs), provenance_refs=(item.decision_id, self.provenance)))
+        return tuple(output)
+
+    def identity_memberships(self, *, hypothesis, snapshots: Mapping[str, SourceSnapshotResult], catalogs: Mapping[str, SourceCatalog], policy_ref: str, entity_resolution_result: Any | None = None, entity_resolution_ref: str | None = None, domain_assertions: Sequence[Any] = ()) -> tuple[CanonicalIdentityMembership, ...]:
+        if entity_resolution_result is None:
+            raise ValueError("order identity memberships require the authorized entity-resolution result")
+        if not entity_resolution_ref:
+            raise ValueError("order identity memberships require the persisted entity-resolution artifact reference")
+        assertion_refs = tuple(item.assertion_id for item in domain_assertions if item.assertion_id in set(hypothesis.domain_assertion_refs))
+        if not assertion_refs:
+            raise ValueError("order identity memberships require durable domain assertions")
+        memberships = []
+        for cluster in entity_resolution_result.clusters:
+            if cluster.decision == "CANDIDATE_CLUSTER":
+                if len(cluster.record_refs) == 1:
+                    memberships.append(CanonicalIdentityMembership(membership_group_id=cluster.cluster_id, canonical_entity_type_id="entity_customer", entity_resolution_family="customer", source_record_refs=cluster.record_refs, derivation_basis=IdentityDerivationBasis.HUMAN_DOMAIN_REVIEW, actor=domain_assertions[0].asserted_by, actor_source="DOMAIN_ASSERTION", domain_assertion_refs=assertion_refs, cluster_evidence_refs=cluster.diagnostic_refs, evidence_refs=cluster.diagnostic_refs, policy_refs=(policy_ref,), rationale="no authorized linkage edge was observed; the registry row remains a reviewed singleton customer identity", provenance_refs=(hypothesis.artifact_id, entity_resolution_ref)))
+                else:
+                    memberships.append(CanonicalIdentityMembership(membership_group_id=cluster.cluster_id, canonical_entity_type_id="entity_customer", entity_resolution_family="customer", source_record_refs=cluster.record_refs, derivation_basis=IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE, authorized_edge_refs=cluster.edge_refs, cluster_evidence_refs=cluster.diagnostic_refs, evidence_refs=tuple(sorted(set(cluster.edge_refs) | set(cluster.diagnostic_refs))), policy_refs=(policy_ref,), rationale="customer membership is derived from the authorized entity-resolution candidate cluster and remains review-gated", provenance_refs=(hypothesis.artifact_id, entity_resolution_ref)))
+        for source_id, catalog in sorted(catalogs.items()):
+            if self.source_role(catalog) != "event":
+                continue
+            for row in snapshots[source_id].record_references:
+                memberships.append(CanonicalIdentityMembership(membership_group_id=stable_id("event-membership", {"source": source_id, "record": row.record_ref}), canonical_entity_type_id="entity_order", entity_resolution_family="order_event", source_record_refs=(row.record_ref,), derivation_basis=IdentityDerivationBasis.SOURCE_LOCAL_EVENT_IDENTITY, evidence_refs=(row.record_ref, snapshots[source_id].snapshot.snapshot_id), policy_refs=(policy_ref,), rationale="event identity is the source-local event key; no cross-source identity is inferred", provenance_refs=(hypothesis.artifact_id, snapshots[source_id].snapshot.snapshot_id)))
+        return tuple(memberships)
+
+    def validate_identity_memberships(self, memberships: Sequence[CanonicalIdentityMembership]) -> None:
+        for membership in memberships:
+            if len(membership.source_record_refs) > 1 and (membership.derivation_basis is not IdentityDerivationBasis.ER_AUTHORIZED_LINKAGE or not membership.authorized_edge_refs):
+                raise ValueError("order multi-record identity membership requires authorized entity-resolution evidence")
+
+    @staticmethod
+    def _typed_value(value: Any, logical_type: str) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        if logical_type == "DATE":
+            return value if isinstance(value, date) else date.fromisoformat(str(value))
+        if logical_type == "INTEGER":
+            numeric = Decimal(str(value))
+            if numeric != numeric.to_integral_value():
+                raise ValueError(f"non-integral value for INTEGER field: {value!r}")
+            return int(numeric)
+        if logical_type == "DECIMAL":
+            return value if isinstance(value, Decimal) else Decimal(str(value))
+        return str(value) if logical_type == "STRING" else value
+
+    def build_multi_source_dataset_and_request(self, *, run_id: str, canonical: CanonicalModel, service, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult], relationships: Sequence[Any]):
+        maps = {item.record_ref: item for item in canonical.source_record_maps}
+        customer_rows: dict[str, dict[str, Any]] = {}
+        event_rows: list[dict[str, Any]] = []
+        registry_keys: dict[str, str] = {}
+        source_record_refs_by_source: dict[str, list[str]] = {}
+        for source_id, catalog in sorted(catalogs.items()):
+            role, table, snapshot = self.source_role(catalog), self.role_table(catalog), snapshots[source_id]
+            source_record_refs_by_source[source_id] = []
+            for row in service.read_rows(catalog, snapshot):
+                values, record_ref, mapping = row["values"], row["record_ref"], maps.get(row["record_ref"])
+                if mapping is None:
+                    raise ValueError(f"canonical model does not map source record {record_ref}")
+                source_record_refs_by_source[source_id].append(record_ref)
+                if role == "registry":
+                    customer_value = self.logical_value(catalog, table.table_id, values, "customer_id")
+                    if customer_value is not None:
+                        registry_keys[str(customer_value)] = mapping.canonical_entity_id
+                        current = customer_rows.setdefault(mapping.canonical_entity_id, {"canonical_reference": mapping.canonical_entity_id, "customer_id": str(customer_value), "customer_name": self.logical_value(catalog, table.table_id, values, "customer_name"), "email": self.logical_value(catalog, table.table_id, values, "customer_email"), "phone": self.logical_value(catalog, table.table_id, values, "customer_phone"), "source_count": 0, "source_record_refs": ()})
+                        current["source_count"] += 1
+                        current["source_record_refs"] = tuple((*current["source_record_refs"], record_ref))
+                else:
+                    order_value = self.logical_value(catalog, table.table_id, values, "order_id")
+                    customer_value = self.logical_value(catalog, table.table_id, values, "customer_id_ref")
+                    event_rows.append({"canonical_reference": mapping.canonical_entity_id, "order_id": None if order_value is None else str(order_value), "customer_id": None if customer_value is None else str(customer_value), "canonical_customer_id": None if customer_value is None else registry_keys.get(str(customer_value)), "order_date": self.logical_value(catalog, table.table_id, values, "order_date"), "source_id": source_id, "quantity": self.logical_value(catalog, table.table_id, values, "quantity"), "unit_price": self.logical_value(catalog, table.table_id, values, "unit_price"), "source_record_refs": (record_ref,)})
+        for row in event_rows:
+            if row["customer_id"] is not None:
+                row["canonical_customer_id"] = registry_keys.get(row["customer_id"])
+        source_refs = tuple(sorted(catalogs))
+        source_rows = [{"canonical_reference": source_id, "source_id": source_id, "source_role": self.source_role(catalogs[source_id]), "source_record_refs": tuple(source_record_refs_by_source[source_id])} for source_id in source_refs]
+
+        def make_table(table_id, concept, rows, columns):
+            bindings = tuple(AnalyticalColumnBinding(column_id=stable_id("analytical-column", {"table": table_id, "column": name}), column_name=name, logical_type=logical, nullable=nullable, lineage_refs=source_refs) for name, logical, nullable in columns)
+            analytical_rows = tuple(AnalyticalInputRow(row_ref=stable_id("ainput-row", {"run": run_id, "table": table_id, "index": index, "reference": row["canonical_reference"]}), canonical_reference=str(row["canonical_reference"]), values=tuple(AnalyticalCell(column_name=name, value=self._typed_value(row.get(name), logical)) for name, logical, _nullable in columns), source_record_refs=tuple(row["source_record_refs"]), lineage_refs=source_refs) for index, row in enumerate(rows))
+            batch = AnalyticalRowBatch(batch_id=stable_id("analytical-batch", {"run": run_id, "table": table_id}), table_id=table_id, rows=analytical_rows, source_batch_refs=source_refs, source_snapshot_fingerprints={key: snapshots[key].snapshot.source_fingerprint or snapshots[key].snapshot.schema_fingerprint for key in snapshots}, lineage_refs=source_refs)
+            return AnalyticalInputTable(table_id=table_id, canonical_concept_ref=concept, columns=bindings, batches=(batch,), source_table_refs=source_refs, lineage_refs=source_refs)
+
+        customer_table = make_table("customer_input", "customer", tuple(customer_rows.values()), (("customer_id", "STRING", False), ("customer_name", "STRING", False), ("email", "STRING", True), ("phone", "STRING", True), ("source_count", "INTEGER", False)))
+        source_table = make_table("source_input", "source", tuple(source_rows), (("source_id", "STRING", False), ("source_role", "STRING", False)))
+        event_table = make_table("event_input", "order", tuple(event_rows), (("order_id", "STRING", False), ("customer_id", "STRING", True), ("canonical_customer_id", "STRING", True), ("order_date", "DATE", False), ("source_id", "STRING", False), ("quantity", "INTEGER", False), ("unit_price", "DECIMAL", True)))
+        dataset = AnalyticalInputDataset(dataset_id=stable_id("analytical-dataset", {"run": run_id, "canonical": canonical.model_id, "rows": [row.row_ref for table in (customer_table, source_table, event_table) for row in table.rows]}), canonical_model_id=canonical.model_id, canonical_model_content_hash=canonical.content_hash, tables=(customer_table, source_table, event_table), source_schema_fingerprints={key: catalogs[key].source.schema_fingerprint for key in catalogs}, source_snapshot_fingerprints={key: snapshots[key].snapshot.source_fingerprint or snapshots[key].snapshot.schema_fingerprint for key in snapshots}, allow_literal_sql=False, provenance_refs=(run_id, canonical.model_id, *source_refs, self.provenance))
+        binding = AnalyticalInputBinding(binding_id=stable_id("input-binding", {"run": run_id, "dataset": dataset.dataset_id}), canonical_model_id=canonical.model_id, canonical_model_content_hash=canonical.content_hash, dataset_id=dataset.dataset_id, dataset_content_hash=dataset.content_hash, source_schema_fingerprints=dict(dataset.source_schema_fingerprints), source_snapshot_fingerprints=dict(dataset.source_snapshot_fingerprints), row_counts=dataset.row_counts, provenance_refs=(dataset.dataset_id, canonical.model_id, self.provenance))
+        customer_rel = next(item for item in relationships if "source_id" not in item.from_columns)
+        source_rel = next(item for item in relationships if "source_id" in item.from_columns)
+        lineage = (canonical.model_id, run_id, *source_refs, self.provenance)
+        customer_dimension = DimensionSpec(dimension_id="dim_customer", table_name="dim_customer", input_table_id="customer_input", canonical_entity_type_id="entity_customer", canonical_entity_refs=tuple(sorted(customer_rows)), role=DimensionRole.CONFORMED, eligibility_reason="reviewed cross-source customer registry identity", surrogate_key=WarehouseKeySpec(key_name="customer_key", namespace="prompt02.customer"), alternate_key_columns=("customer_id",), attributes=(DimensionAttributeSpec(attribute_id="customer_id", column_name="customer_id", logical_type="STRING", nullable=False, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="customer_name", column_name="customer_name", logical_type="STRING", nullable=False, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="customer_email", column_name="email", input_column_name="email", logical_type="STRING", nullable=True, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="customer_phone", column_name="phone", input_column_name="phone", logical_type="STRING", nullable=True, lineage_refs=lineage)), scd_policy=SCDPolicySpec(mode=SCDMode.TYPE1_SNAPSHOT, rationale="pinned source snapshots provide no historical validity contract"), unknown_member_policy=UnknownMemberPolicySpec(policy=UnknownMemberPolicy.QUARANTINE_FACT, rationale="unresolved customer references are quarantined"), provenance_refs=lineage)
+        source_dimension = DimensionSpec(dimension_id="dim_source", table_name="dim_source", input_table_id="source_input", canonical_entity_type_id="entity_source", canonical_entity_refs=source_refs, role=DimensionRole.CONFORMED, eligibility_reason="registered source identity is explicit and stable for lineage", surrogate_key=WarehouseKeySpec(key_name="source_key", namespace="prompt02.source"), alternate_key_columns=("source_id",), attributes=(DimensionAttributeSpec(attribute_id="source_id", column_name="source_id", logical_type="STRING", nullable=False, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="source_role", column_name="source_role", logical_type="STRING", nullable=False, lineage_refs=lineage)), scd_policy=SCDPolicySpec(mode=SCDMode.TYPE1_SNAPSHOT, rationale="registered source roles are immutable during a run"), unknown_member_policy=UnknownMemberPolicySpec(policy=UnknownMemberPolicy.QUARANTINE_FACT, rationale="unregistered source IDs cannot be materialized"), provenance_refs=lineage)
+        date_dimension = DimensionSpec(dimension_id="dim_date", table_name="dim_date", canonical_entity_type_id="cet_date", canonical_entity_refs=("date",), role=DimensionRole.DATE, eligibility_reason="Gregorian date is deterministically generated from observed events", surrogate_key=WarehouseKeySpec(key_name="date_key", namespace="prompt02.date"), alternate_key_columns=("full_date",), attributes=(DimensionAttributeSpec(attribute_id="date_full", column_name="full_date", logical_type="DATE", derivation="FULL_DATE", nullable=False, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="date_year", column_name="year", logical_type="INTEGER", derivation="YEAR", nullable=False, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="date_month", column_name="month", logical_type="INTEGER", derivation="MONTH", nullable=False, lineage_refs=lineage), DimensionAttributeSpec(attribute_id="date_day", column_name="day", logical_type="INTEGER", derivation="DAY", nullable=False, lineage_refs=lineage)), scd_policy=SCDPolicySpec(mode=SCDMode.TYPE1_SNAPSHOT, rationale="calendar has no historical validity contract"), unknown_member_policy=UnknownMemberPolicySpec(policy=UnknownMemberPolicy.EXPLICIT_UNKNOWN_MEMBER, rationale="date role has an explicit unknown member", unknown_member_key=-1), calendar_policy="GREGORIAN_V1", provenance_refs=lineage)
+        time_rel = stable_id("time_role", {"run": run_id})
+        fact = FactSpec(fact_id="fact_order", table_name="fact_order", input_table_id="event_input", fact_type=FactType.TRANSACTION, canonical_event_type_id="entity_order", canonical_event_refs=tuple(row.canonical_reference for row in event_table.rows), grain_spec_id="grain_order", dimension_foreign_keys=(FactForeignKeySpec(relationship_ref=customer_rel.decision_id, dimension_id="dim_customer", fact_column="customer_key", dimension_key_column="customer_key", canonical_entity_type_id="entity_customer", input_reference_column="canonical_customer_id"), FactForeignKeySpec(relationship_ref=source_rel.decision_id, dimension_id="dim_source", fact_column="source_key", dimension_key_column="source_key", canonical_entity_type_id="entity_source", input_reference_column="source_id"), FactForeignKeySpec(relationship_ref=time_rel, relationship_scope=FactRelationshipScope.ANALYTICAL_TIME_ROLE, dimension_id="dim_date", fact_column="date_key", dimension_key_column="date_key", canonical_entity_type_id="cet_date", input_reference_column="order_date")), degenerate_dimension_columns=("source_id", "customer_id"), measure_ids=("measure_quantity",), date_role_columns=("order_date",), relationship_refs=(customer_rel.decision_id, source_rel.decision_id, time_rel), provenance_refs=lineage)
+        grain = GrainSpec(grain_id="grain_order", fact_id="fact_order", human_readable_grain="one row per source and source-local order key", key_columns=("source_id", "order_id"), null_policy=GrainNullPolicy.REJECT_NULLS, observed_row_count=0, duplicate_key_count=0, evidence_refs=source_refs, provenance_refs=lineage)
+        measure = MeasureSpec(measure_id="measure_quantity", fact_id=fact.fact_id, field_name="quantity", semantic_name="Order quantity", aggregation_class=AggregationClass.ADDITIVE, aggregation_rule="SUM(quantity)", unit_semantics="source quantity units", currency_semantics="not applicable; unit price is retained as a non-aggregated attribute", logical_type="INTEGER", nullable=False, domain_assertion_refs=("prompt02:quantity",), provenance_refs=lineage)
+        planning = AnalyticalPlanningRequest(request_id=stable_id("analytical-request", {"run": run_id, "canonical": canonical.model_id}), dimensions=(customer_dimension, date_dimension, source_dimension), facts=(fact,), grains=(grain,), measures=(measure,), accepted_relationship_refs=(customer_rel.decision_id, source_rel.decision_id), domain_assertion_refs=("prompt02:source-roles", "prompt02:quantity"), provenance_refs=lineage)
+        return dataset, binding, planning
+
+    def source_records(self, *, service, catalogs: Mapping[str, SourceCatalog], snapshots: Mapping[str, SourceSnapshotResult]) -> tuple[Mapping[str, Any], ...]:
+        records = []
+        for source_id, catalog in sorted(catalogs.items()):
+            role = self.source_role(catalog)
+            table = self.role_table(catalog)
+            snapshot = snapshots[source_id]
+            ordinals = {item.record_ref: item.extraction_ordinal for item in snapshot.record_references}
+            for row in service.read_rows(catalog, snapshot):
+                values = row["values"]
+                records.append({"source_id": source_id, "snapshot_id": snapshot.snapshot.snapshot_id, "table_id": table.table_id, "record_ref": row["record_ref"], "role": role, "extraction_ordinal": ordinals.get(row["record_ref"], 0), "logical_values": {"customer_id": self.logical_value(catalog, table.table_id, values, "customer_id" if role == "registry" else "customer_id_ref"), "customer_name": self.logical_value(catalog, table.table_id, values, "customer_name"), "customer_email": self.logical_value(catalog, table.table_id, values, "customer_email"), "customer_phone": self.logical_value(catalog, table.table_id, values, "customer_phone"), "order_id": self.logical_value(catalog, table.table_id, values, "order_id"), "order_date": self.logical_value(catalog, table.table_id, values, "order_date"), "quantity": self.logical_value(catalog, table.table_id, values, "quantity"), "unit_price": self.logical_value(catalog, table.table_id, values, "unit_price")}})
+        return tuple(records)
+
+    def record_accounting_ref(self, run_id: str) -> str:
+        return stable_id("prompt02-accounting", run_id)
 
     @classmethod
     def logical_value(cls, catalog: SourceCatalog, table_id: str, values: Mapping[str, Any], logical_name: str) -> Any:
@@ -360,11 +594,23 @@ class ProductPolicyRegistry:
         "order": "order_v1.json",
         "telemetry": "telemetry_v1.json",
     }
+    POLICY_FACTORIES = {
+        "order": OrderProductPolicy,
+        "telemetry": lambda path: __import__("dirty_data_to_olap.application.telemetry_policy", fromlist=["TelemetryProductPolicy"]).TelemetryProductPolicy(path),
+    }
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, additional_policies: Mapping[str, ProductDomainPolicy] | None = None) -> None:
         self.root = Path(root).resolve()
+        self.additional_policies = dict(additional_policies or {})
 
     def resolve(self, *, product_id: str, version: str, fingerprint: str | None = None):
+        additional = self.additional_policies.get(product_id)
+        if additional is not None:
+            if additional.version != version:
+                raise ValueError(f"product policy version is not registered: {product_id}:{version}")
+            if fingerprint is not None and fingerprint != additional.content_fingerprint:
+                raise ValueError(f"product policy fingerprint is incompatible with {product_id}:{version}")
+            return additional
         if product_id not in self.POLICY_FILES:
             raise ValueError(f"unknown product policy: {product_id}")
         path = self.root / "config" / "product" / self.POLICY_FILES[product_id]
@@ -373,7 +619,7 @@ class ProductPolicyRegistry:
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
         if fingerprint is not None and fingerprint != actual:
             raise ValueError(f"product policy fingerprint is incompatible with {product_id}:{version}")
-        policy = OrderProductPolicy(path) if product_id == "order" else __import__("dirty_data_to_olap.application.telemetry_policy", fromlist=["TelemetryProductPolicy"]).TelemetryProductPolicy(path)
+        policy = self.POLICY_FACTORIES[product_id](path)
         if policy.version != version:
             raise ValueError(f"product policy version is not registered: {product_id}:{version}")
         if policy.content_fingerprint != actual:
