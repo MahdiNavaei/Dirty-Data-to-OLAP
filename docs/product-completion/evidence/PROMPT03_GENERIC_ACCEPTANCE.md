@@ -6,7 +6,7 @@ Prompt03 local acceptance is PASS for the new telemetry/device product path on b
 
 This evidence is local-first. No GitHub Actions workflow was started or modified, and Prompt04/Step42 was not started.
 
-The accepted Prompt02 base was `7786ea301e3482b374e57447974b73d9a0176f8c`. The final post-commit rerun must replace the provisional run reference below with the run whose durable G6 evidence records the final candidate commit.
+The accepted Prompt02 base was `7786ea301e3482b374e57447974b73d9a0176f8c`. The final candidate is verified by the durable post-commit run below.
 
 ## Generic policy and durable binding
 
@@ -21,11 +21,12 @@ The accepted Prompt02 base was `7786ea301e3482b374e57447974b73d9a0176f8c`. The f
 
 The local test `tests/product_acceptance/test_prompt03_generic_product.py` executed the three heterogeneous CSV sources through the public backend boundary with the locally available Desbordante Docker provider image `dirty-data-to-olap-desbordante-step37:local`.
 
-Provisional successful run before the final commit: `run_934c82dded706a04efa21e690dccba5c`.
+Final post-commit run: `run_7b483b4744126d624aa4842dc6153d92`.
+Its durable G6 evidence records `verified_content_commit=ce955a851f6047e92c2f5c019da35bf8ada1b247`.
 
 The durable stage sequence completed through source discovery, snapshots, profiling, dependency discovery, schema matching, quality, evidence fusion, persisted evidence review, canonical hypothesis and identity review, canonical finalization, analytical planning and review, compilation and materialization review, materialization, semantic modeling, and validation reconciliation.
 
-All stage jobs in that run succeeded. The run metadata recorded:
+All stage jobs in the final run succeeded. The run metadata recorded:
 
 - `product_policy_id=telemetry`
 - `product_policy_version=telemetry-product-v1`
@@ -71,9 +72,9 @@ The end-to-end fixture also provides actual heterogeneous-data negative controls
 
 - `python -m compileall -q src/dirty_data_to_olap config tests/product_acceptance`: PASS
 - unit, contract, security, and Prompt03 negative-control tests: PASS (`379 passed`, 2 warnings)
-- Prompt03 real local telemetry acceptance: PASS (`1 passed`, 12 warnings)
+- Prompt03 real local telemetry acceptance: PASS (`1 passed`, 12 warnings); final run `run_7b483b4744126d624aa4842dc6153d92`
 - Prompt02 live-provider acceptance harness: 3 auxiliary tests passed and the live multi-source test was skipped because the required PostgreSQL environment variable was not configured locally. This is reported as an environment limitation, not as a Prompt02 live PASS.
-- `git diff --check`: required before commit
+- `git diff --check`: PASS
 - No workflow or CI run was started.
 
 ## Architectural review and limitations
