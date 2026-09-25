@@ -12,10 +12,11 @@ from dirty_data_to_olap.application.backend import BackendService
 from dirty_data_to_olap.application.jobs import DurableExecutionSubmission, JobWorker, StageHandlerRegistry
 from dirty_data_to_olap.application.evidence_fusion import EvidenceFusionService
 from dirty_data_to_olap.application.review_policy import ReviewPolicyService
+from dirty_data_to_olap.application.review_subjects import ReviewCheckpointSubjectResolver
 from dirty_data_to_olap.composition import build_local_backend
 from dirty_data_to_olap.domain.contracts.api import ExecutionAction, ExecutionCommand
 from dirty_data_to_olap.domain.contracts.canonical import CanonicalEntityKind, CanonicalEntityType, CanonicalModelHypothesis, EntityResolutionRequirement, ReviewCheckpoint, review_subject_key
-from dirty_data_to_olap.domain.contracts.evidence_fusion import DecisionExplanation, DecisionState, FusionScore, RelationshipDecision
+from dirty_data_to_olap.domain.contracts.evidence_fusion import DomainAssertion, DecisionExplanation, DecisionState, FusionScore, RelationshipDecision
 from dirty_data_to_olap.domain.contracts.jobs import (
     ExecutionPlan,
     ExecutionPlanIntent,
@@ -29,6 +30,7 @@ from dirty_data_to_olap.domain.contracts.jobs import (
 from dirty_data_to_olap.domain.contracts.platform import ArtifactManifest, RunRecord
 from dirty_data_to_olap.domain.contracts.source import AdapterReference, SelectionScope, SourceCatalog, SourceDescriptor, SourceType, stable_digest, stable_id
 from dirty_data_to_olap.entrypoints.api import create_app
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 
 
 AUTH = {"X-Local-Principal": "step28-plan-review-test"}
@@ -213,14 +215,26 @@ def test_real_evidence_checkpoint_pauses_then_resumes_guarded_downstream(tmp_pat
     assert control.get_stage_job(run_id=run.run_id, stage_id="CANONICAL_HYPOTHESES") is None
     context = review_job.review_context
     assert context is not None
-    assert context == ReviewPolicyService().evidence_context(decision, ())
+    subject = control.get_artifact(context.subject_artifact_id)
+    assert subject is not None
+    expected_context = ReviewPolicyService().evidence_context(decision, (), subject_content_hash=subject.content_hash).model_copy(update={"subject_artifact_id": subject.artifact_id})
+    assert context == expected_context
+    assert context.subject_content_hash == subject.content_hash
     assert control.get_current_review(run_id=run.run_id, subject_key=review_subject_key(context)) is None
+
+    DurableExecutionSubmission(control).submit_command(command=_command(run.run_id, "resume-before-review", ExecutionAction.RESUME), run=run)
+    blocked_resume = worker.run_once()
+    assert blocked_resume.status == JobStatus.BLOCKED.value
+    assert "accepted review is required" in blocked_resume.detail
+    assert control.get_run(run.run_id).status.value == "NEEDS_REVIEW"
+    assert control.get_stage_job(run_id=run.run_id, stage_id="CANONICAL_HYPOTHESES") is None
+    record_control_observation("NC14", f"RESUME_NOT_AUTHORIZED:{blocked_resume.detail};downstream_absent", "tests/integration/test_step28_execution_plan_review_repair.py:218")
 
     client = TestClient(create_app(BackendService(control_store=control, artifact_store=artifacts)), raise_server_exceptions=False)
     reviewed = client.post(
         f"/api/v1/runs/{run.run_id}/reviews/{ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS.value}",
         headers={**AUTH, "Idempotency-Key": "real-evidence-review"},
-        json={"subject_artifact_id": decision.decision_id, "subject_content_hash": control.get_artifact(decision.decision_id).content_hash, "decision": "ACCEPTED", "rationale": "reviewed typed evidence subject", "expected_revision": 0},
+        json={"subject_artifact_id": decision.decision_id, "subject_content_hash": subject.content_hash, "context": context.model_dump(mode="json"), "decision": "ACCEPTED", "rationale": "reviewed typed evidence subject", "expected_revision": 0},
     )
     assert reviewed.status_code == 200, reviewed.text
     assert control.get_current_review(run_id=run.run_id, subject_key=review_subject_key(context)) is not None
@@ -253,7 +267,12 @@ def test_real_analytical_checkpoint_derives_context_without_provider_handler(tmp
     assert worker.run_once().status == JobStatus.NEEDS_REVIEW.value
     checkpoint_job = control.get_stage_job(run_id=run.run_id, stage_id="REVIEW_ANALYTICAL_PLAN")
     assert checkpoint_job is not None and checkpoint_job.status is JobStatus.NEEDS_REVIEW
-    assert checkpoint_job.review_context == ReviewPolicyService().analytical_plan_context(analytical_plan)
+    subject = control.get_artifact(analytical_plan.plan_id)
+    assert subject is not None
+    expected_context = ReviewPolicyService().analytical_plan_context(analytical_plan).model_copy(
+        update={"subject_content_hash": subject.content_hash, "subject_artifact_id": subject.artifact_id}
+    )
+    assert checkpoint_job.review_context == expected_context
     control.close()
 
 
@@ -281,6 +300,60 @@ def test_multiple_real_evidence_subjects_are_explicitly_retained(tmp_path: Path)
     assert job.review_context is None
     assert len(job.review_contexts) == 2
     assert {context.subject_artifact_id for context in job.review_contexts} == {value.decision_id for value in decisions}
+    control.close()
+
+
+def test_evidence_review_context_scopes_domain_assertions_to_each_subject(tmp_path: Path) -> None:
+    control, artifacts, run = _stores(tmp_path, "scoped-evidence")
+    decisions = (_relationship_decision("relationship-one"), _relationship_decision("relationship-two"))
+    assertions = tuple(
+        DomainAssertion(
+            assertion_id=f"assertion-{index}",
+            subject_id=decision.subject_id,
+            statement=f"reviewed assertion for {decision.subject_id}",
+            status="ACTIVE",
+            scope_id=f"scope-{index}",
+            asserted_by="step28-test",
+        )
+        for index, decision in enumerate(decisions, start=1)
+    )
+    refs = tuple(
+        _publish_typed(
+            control,
+            artifacts,
+            run_id=run.run_id,
+            stage_id="EVIDENCE_FUSION",
+            attempt_id="evidence-attempt",
+            artifact_id=value_id,
+            artifact_kind=kind,
+            value=value,
+        )
+        for value_id, kind, value in (
+            (assertion.assertion_id, "DomainAssertion", assertion) for assertion in assertions
+        )
+    ) + tuple(
+        _publish_typed(
+            control,
+            artifacts,
+            run_id=run.run_id,
+            stage_id="EVIDENCE_FUSION",
+            attempt_id="evidence-attempt",
+            artifact_id=decision.decision_id,
+            artifact_kind="RelationshipDecision",
+            value=decision,
+        )
+        for decision in decisions
+    )
+
+    derivation = ReviewCheckpointSubjectResolver(control, artifacts).derive(
+        run_id=run.run_id,
+        checkpoint=ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS,
+        upstream_artifacts=refs,
+    )
+
+    by_subject = {context.subject_artifact_id: context for context in derivation.contexts}
+    assert by_subject["relationship-one"].domain_assertion_refs == ("assertion-1",)
+    assert by_subject["relationship-two"].domain_assertion_refs == ("assertion-2",)
     control.close()
 
 
@@ -337,6 +410,7 @@ def test_execution_plan_rejects_inconsistent_selection_and_success_guards(tmp_pa
             ),
             selection=_selection(run_id, (_decision("OPTIONAL", selected=False, reason="excluded"),)),
         )
+    record_control_observation("NC08", "ValueError:unselected hard dependency", "tests/integration/test_step28_execution_plan_review_repair.py:341")
     with pytest.raises(ValueError, match="selected review checkpoint guard"):
         ExecutionPlan(
             run_id=run_id,

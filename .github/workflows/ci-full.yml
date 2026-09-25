@@ -1,0 +1,612 @@
+name: Dirty Data to OLAP CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dirty-data-to-olap-full-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  g8:
+    name: Clean-room G8 / build / runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      DDO_BACKEND_IMAGE: dirty-data-to-olap-backend:ci
+      DDO_FRONTEND_IMAGE: dirty-data-to-olap-frontend:ci
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.14.0"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute clean-room Step30 validator
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/resume_step31_final_ci.py --ci
+      - name: Verify clean worktree after validation
+        run: |
+          git diff --check
+          git status --short --untracked-files=all
+          test -z "$(git status --porcelain)"
+
+  image-scan:
+    name: Container image vulnerability scan
+    needs: g8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      DDO_BACKEND_IMAGE: dirty-data-to-olap-backend:ci
+      DDO_FRONTEND_IMAGE: dirty-data-to-olap-frontend:ci
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Rebuild fixed image references for scan
+        run: |
+          docker compose build --no-cache backend
+          docker compose build --no-cache frontend
+      - name: Install pinned Trivy
+        env:
+          TRIVY_VERSION: "0.74.0"
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl --fail --silent --show-error --location --retry 3 \
+            "${base_url}/${archive}" --output trivy.tar.gz
+          curl --fail --silent --show-error --location --retry 3 \
+            "${base_url}/trivy_${TRIVY_VERSION}_checksums.txt" --output trivy_checksums.txt
+          expected="$(grep -E "[[:space:]]${archive}$" trivy_checksums.txt | awk '{print $1}')"
+          actual="$(sha256sum trivy.tar.gz | awk '{print $1}')"
+          test -n "${expected}"
+          test "${actual}" = "${expected}"
+          mkdir -p "${RUNNER_TEMP}/trivy-bin"
+          tar --extract --gzip --file trivy.tar.gz --directory "${RUNNER_TEMP}/trivy-bin" trivy
+          chmod 0755 "${RUNNER_TEMP}/trivy-bin/trivy"
+          echo "${RUNNER_TEMP}/trivy-bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/trivy-bin/trivy" --version
+      - name: Export images without daemon socket access
+        run: |
+          docker save --output trivy-backend.tar dirty-data-to-olap-backend:ci
+          docker save --output trivy-frontend.tar dirty-data-to-olap-frontend:ci
+      - name: Scan backend image
+        run: trivy image --input trivy-backend.tar --format json --output trivy-backend.json --exit-code 0 --ignore-unfixed
+      - name: Scan frontend image
+        run: trivy image --input trivy-frontend.tar --format json --output trivy-frontend.json --exit-code 0 --ignore-unfixed
+
+  qa-system:
+    name: Step31 independent QA / system / browser
+    needs: g8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.14.0"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute independent Step31 QA validator
+        run: uv run --locked --group dev --extra api --extra files --extra profiling python tools/validate_step31_qa.py --ci
+      - name: Verify clean worktree after QA validation
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  compatibility:
+    name: Step32 compatibility / G9 functional support
+    needs: [g8, image-scan, qa-system]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+      mysql:
+        image: mysql:8.4.3
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: compat
+        ports:
+          - 3306:3306
+      mariadb:
+        image: mariadb:11.4.3
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+          MARIADB_DATABASE: compat
+        ports:
+          - 3307:3306
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Step32Compat_2026"
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+    env:
+      DDO_STEP32_REQUIRE_LIVE_DB: "1"
+      DDO_STEP32_POSTGRES_ADMIN_URL: postgresql+psycopg://postgres@127.0.0.1:5432/postgres
+      DDO_STEP32_POSTGRES_URL: postgresql+psycopg://ddo_source:ddo_step32_source@127.0.0.1:5432/postgres
+      DDO_STEP32_MYSQL_ADMIN_URL: mysql+pymysql://root@127.0.0.1:3306/compat
+      DDO_STEP32_MYSQL_URL: mysql+pymysql://ddo_source:ddo_step32_source@127.0.0.1:3306/compat
+      DDO_STEP32_MARIADB_ADMIN_URL: mariadb+pymysql://root@127.0.0.1:3307/compat
+      DDO_STEP32_MARIADB_URL: mariadb+pymysql://ddo_source:ddo_step32_source@127.0.0.1:3307/compat
+      DDO_STEP32_SQLSERVER_ADMIN_URL: mssql+pyodbc://sa:Step32Compat_2026@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+      DDO_STEP32_SQLSERVER_URL: mssql+pyodbc://ddo_source:Step32Compat_2026@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.14.0"
+          check-latest: false
+      - name: Install SQL Server ODBC driver
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc >/dev/null
+          curl --fail --silent --show-error --location https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install --yes msodbcsql18
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute Step32 compatibility matrix
+        run: uv run --locked --group dev --extra sql --extra files --extra excel --extra compatibility python tools/validate_step32_compatibility.py --ci
+      - name: Verify compatibility test worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  prompt02-product-acceptance:
+    name: Prompt02 four-source product acceptance
+    needs: [compatibility]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      DDO_PROMPT02_REQUIRE_LIVE: "1"
+      DESBORDANTE_PROVIDER_IMAGE: dirty-data-to-olap-desbordante-prompt02:${{ github.sha }}
+      POT_BACKEND_DISABLE_PYTORCH: "1"
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install SQL Server ODBC driver
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc >/dev/null
+          curl --fail --silent --show-error --location https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install --yes msodbcsql18
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Start disposable Prompt02 source estate
+        run: |
+          set -euo pipefail
+          prefix="ddo-prompt02-${GITHUB_RUN_ID}"
+          password="P02${GITHUB_RUN_ID}Aa"
+          docker run --detach --name "${prefix}-postgres" --publish 5432:5432 \
+            --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=postgres postgres:16.4
+          docker run --detach --name "${prefix}-mysql" --publish 3306:3306 \
+            --env MYSQL_ALLOW_EMPTY_PASSWORD=yes --env MYSQL_DATABASE=prompt02 mysql:8.4.3
+          docker run --detach --name "${prefix}-sqlserver" --publish 1433:1433 \
+            --env ACCEPT_EULA=Y --env "MSSQL_SA_PASSWORD=${password}" --env MSSQL_PID=Developer \
+            mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04
+          {
+            echo "DDO_PROMPT02_CONTAINER_PREFIX=${prefix}"
+            echo "DDO_PROMPT02_POSTGRES_ADMIN_URL=postgresql+psycopg://postgres@127.0.0.1:5432/postgres"
+            echo "DDO_PROMPT02_POSTGRES_URL=postgresql+psycopg://ddo_source:${password}@127.0.0.1:5432/postgres"
+            echo "DDO_PROMPT02_MYSQL_ADMIN_URL=mysql+pymysql://root@127.0.0.1:3306/prompt02"
+            echo "DDO_PROMPT02_MYSQL_URL=mysql+pymysql://ddo_source:${password}@127.0.0.1:3306/prompt02"
+            echo "DDO_PROMPT02_SQLSERVER_ADMIN_URL=mssql+pyodbc://sa:${password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+            echo "DDO_PROMPT02_SQLSERVER_URL=mssql+pyodbc://ddo_source:${password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+            echo "DDO_PROMPT02_EVIDENCE_DIR=${RUNNER_TEMP}/prompt02-evidence"
+          } >> "${GITHUB_ENV}"
+      - name: Provision pinned Desbordante provider image
+        run: |
+          set -euo pipefail
+          docker build --target desbordante-provider-runtime --tag "${DESBORDANTE_PROVIDER_IMAGE}" .
+          provider_id="$(docker image inspect "${DESBORDANTE_PROVIDER_IMAGE}" --format='{{.Id}}')"
+          case "${provider_id}" in sha256:*) ;; *) echo "provider image ID is not immutable: ${provider_id}"; exit 1 ;; esac
+      - name: Install Prompt02 runtime and pinned provider packages
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: |
+          uv sync --locked --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility
+          uv run --locked --no-sync --python "$(command -v python)" python -m pip install --no-deps \
+            valentine==1.0.0 splink==4.0.17 anytree==2.13.0 nltk==3.10.3 PuLP==3.3.2 POT==0.9.7.post1 \
+            altair==6.2.2 igraph==1.0.0 networkx==3.4.2 chardet==7.6.0 rapidfuzz==3.14.5 \
+            joblib==1.6.0 regex==2026.9.10 tqdm==4.70.1 \
+            scipy==1.15.3 python-dateutil==2.9.0.post0 duckdb==1.5.5 jinja2==3.1.6 sqlglot==30.18.0
+      - name: Provision pinned NLTK resources
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/nltk_data"
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra profiling python -m nltk.downloader -d "$HOME/nltk_data" punkt_tab omw-1.4 stopwords wordnet
+          echo "NLTK_DATA=$HOME/nltk_data" >> "$GITHUB_ENV"
+      - name: Preflight Prompt02 Python dependencies
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python -c 'import fastapi; import fastapi.testclient; import pytest; print("PROMPT02_DEPENDENCY_PREFLIGHT=PASS")'
+      - name: Execute isolated Prompt02 negative controls
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python tools/run_prompt02_negative_controls.py
+      - name: Execute real Prompt02 four-source acceptance
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra sql --extra files --extra profiling --extra compatibility python -m pytest tests/product_acceptance/test_multi_source_v1.py -q
+      - name: Validate Prompt02 evidence and exact-head binding
+        if: always()
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/prompt02-main
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev python tools/validate_prompt02_acceptance.py --require-evidence --evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_MULTI_SOURCE_ACCEPTANCE.json" --negative-control-evidence "${DDO_PROMPT02_EVIDENCE_DIR}/PROMPT02_NEGATIVE_CONTROLS.json" --oracle tests/product_acceptance/oracle/multi_source_v1_truth.yml --expected-commit "${GITHUB_SHA}"
+      - name: Retain sanitized Prompt02 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prompt02-acceptance-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/prompt02-evidence/*
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Verify Prompt02 content worktree
+        if: always()
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+      - name: Stop disposable Prompt02 source estate
+        if: always()
+        run: |
+          set +e
+          prefix="${DDO_PROMPT02_CONTAINER_PREFIX:-ddo-prompt02-${GITHUB_RUN_ID}}"
+          docker rm --force "${prefix}-postgres" "${prefix}-mysql" "${prefix}-sqlserver"
+
+  appsec:
+    name: Step33 application security / G10
+    needs: [compatibility]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.14.0"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute Step33 security scenarios
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python -m pytest tests/security/test_step33_application_security.py tests/unit/test_step33_appsec_validator.py -q
+      - name: Run locked Python dependency audit
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python -m pip_audit --local --format columns --progress-spinner off
+      - name: Validate Step33 evidence and dependency audits
+        run: |
+          uv run --locked --group dev --extra api --extra sql --extra files --extra profiling --extra compatibility python tools/validate_step33_appsec.py
+          npm ci --ignore-scripts --no-audit --no-fund --prefix frontend
+          npm audit --prefix frontend --omit=dev
+          npm audit --prefix frontend
+      - name: Verify application-security content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  observability:
+    name: Step34 observability / runtime telemetry
+    needs: [appsec]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute Step34 observability scenarios
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/observability/test_step34_observability.py -q
+      - name: Validate Step34 evidence and state
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step34_observability.py
+      - name: Verify observability content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  sre:
+    name: Step35 SRE reliability and recovery
+    needs: [observability]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute Step35 SRE scenarios
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/sre/test_step35_sre.py tests/unit/test_step35_state_classification.py -q
+      - name: Validate Step35 SRE evidence
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step35_sre.py
+      - name: Verify SRE content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  chaos-resilience:
+    name: Step36 chaos / resilience / G11
+    needs: [sre]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute Step36 chaos scenarios
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/chaos/test_step36_chaos.py -q
+      - name: Validate Step36 resilience evidence
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step36_resilience.py --ci
+      - name: Verify Step36 content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  performance:
+    name: Step37 performance / baseline / regression
+    needs: [chaos-resilience]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DESBORDANTE_PROVIDER_IMAGE: dirty-data-to-olap-desbordante-step37:${{ github.sha }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Provision pinned Desbordante provider image
+        run: |
+          mkdir -p "${RUNNER_TEMP}/step37-provider-input"
+          docker build --target desbordante-provider-runtime --tag "${DESBORDANTE_PROVIDER_IMAGE}" .
+          provider_id="$(docker image inspect "${DESBORDANTE_PROVIDER_IMAGE}" --format='{{.Id}}')"
+          case "${provider_id}" in sha256:*) ;; *) echo "provider image ID is not immutable: ${provider_id}"; exit 1 ;; esac
+          docker run --rm --network none --read-only \
+            --mount "type=bind,source=${RUNNER_TEMP}/step37-provider-input,target=/input,readonly" \
+            "${DESBORDANTE_PROVIDER_IMAGE}" python -c 'import sys; sys.path.insert(0, "/work/build/src/python_bindings"); import desbordante; print(getattr(desbordante, "__version__", "import-ok"))'
+      - name: Install locked Step37 core / profiling environment
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
+        run: uv sync --locked --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling
+      - name: Execute real Dependency Discovery stage baseline
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
+        run: |
+          mkdir -p "${RUNNER_TEMP}/step37-stage-baselines"
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra profiling --extra files python tools/run_step37_stage_baselines.py \
+            --stage dependency --output "${RUNNER_TEMP}/step37-stage-baselines/dependency.json"
+      - name: Install locked Step37 schema-matching environment
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-matching
+        run: uv sync --locked --python "$(command -v python)" --group dev --extra matching --extra files
+      - name: Execute real Valentine schema-matching stage baseline
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-matching
+        run: |
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra matching --extra files python tools/run_step37_stage_baselines.py \
+            --stage schema_matching --output "${RUNNER_TEMP}/step37-stage-baselines/schema_matching.json"
+      - name: Install locked Step37 entity-resolution environment
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-entity
+        run: uv sync --locked --python "$(command -v python)" --group dev --extra entity_resolution --extra files
+      - name: Execute real Splink entity-resolution stage baseline
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-entity
+        run: |
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra entity_resolution --extra files python tools/run_step37_stage_baselines.py \
+            --stage entity_resolution --output "${RUNNER_TEMP}/step37-stage-baselines/entity_resolution.json"
+      - name: Execute bounded Step37 E2E / Medium performance evidence
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
+        run: |
+          mkdir -p "${RUNNER_TEMP}/step37-performance/evidence"
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling python tools/run_step37_performance.py \
+            --output-root "${RUNNER_TEMP}/step37-performance/evidence" \
+            --report-path "${RUNNER_TEMP}/step37-performance/STEP37_PERFORMANCE_REPORT.md" \
+            --stage-baselines-dir "${RUNNER_TEMP}/step37-stage-baselines" \
+            --assessed-commit "${GITHUB_SHA}" --ci --ci-run-id "${GITHUB_RUN_ID}"
+      - name: Execute Step37 performance tests and validator controls
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
+          STEP37_RECEIPT: ${{ runner.temp }}/step37-performance/evidence/step37_performance_validation.json
+        run: uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/performance/test_step37_performance.py tests/performance/test_step37_performance_validator_controls.py -q
+      - name: Validate Step37 evidence and exact-head binding
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/step37-main
+        run: |
+          uv run --locked --no-sync --python "$(command -v python)" --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step37_performance.py \
+            --evidence "${RUNNER_TEMP}/step37-performance/evidence/step37_performance_validation.json" \
+            --report "${RUNNER_TEMP}/step37-performance/STEP37_PERFORMANCE_REPORT.md" \
+            --expected-commit "${GITHUB_SHA}" --ci
+      - name: Verify Step37 content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  redteam:
+    name: Step39 adversarial security / G13
+    needs: [performance]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute independent Step39 adversarial scenarios
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python -m pytest tests/redteam/test_step39_red_team.py tests/unit/test_step39_red_team_validator.py -q
+      - name: Validate Step39 receipt and G13 handoff
+        run: uv run --locked --group dev --extra api --extra sql --extra files --extra profiling python tools/validate_step39_red_team.py
+      - name: Verify Step39 content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  developer-experience:
+    name: Step40 developer experience / G14
+    needs: [redteam]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.14.0"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Bootstrap locked DX dependencies
+        run: |
+          python tools/ddo.py bootstrap --profile core
+          python tools/ddo.py bootstrap --profile core
+      - name: Execute Step40 developer-experience validator
+        run: uv run --locked --no-sync --group dev --extra api --extra files python tools/verify_step40_developer_experience.py --ci --include-frontend
+      - name: Verify Step40 content worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  documentation:
+    name: Step41 documentation / G15 evidence
+    needs: [developer-experience]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact content
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: "3.11.16"
+          check-latest: false
+      - name: Install locked project tooling
+        run: python -m pip install --disable-pip-version-check uv==0.11.26
+      - name: Execute Step41 documentation validator
+        run: uv run --locked --group dev python tools/validate_step41_documentation.py
+      - name: Verify Step41 documentation worktree
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"

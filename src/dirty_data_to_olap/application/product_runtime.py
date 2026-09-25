@@ -50,8 +50,8 @@ from dirty_data_to_olap.domain.contracts.profiling import ProfileCompleteness, P
 from dirty_data_to_olap.domain.contracts.quality import QualityResult
 from dirty_data_to_olap.domain.contracts.semantic import SemanticModel, SemanticValidationResult
 from dirty_data_to_olap.domain.contracts.source import SourceCatalog, SourceSelection, SourceSnapshotResult, SourceType, stable_digest, stable_id
-from dirty_data_to_olap.domain.contracts.validation import ValidationArtifactBindings, ValidationReport
-from dirty_data_to_olap.observability import TelemetryClient
+from dirty_data_to_olap.domain.contracts.validation import ValidationArtifactBindings
+from dirty_data_to_olap.observability import TelemetryClient, safe_exception_detail
 
 
 def _json(value: Any) -> bytes:
@@ -105,7 +105,7 @@ class LocalProductStageHandlers:
             try:
                 result = self._execute(request)
             except Exception as exc:
-                result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__})
+                result = StageExecutionResult(status=StageResultStatus.FAILED, failure_code="PRODUCT_STAGE_FAILED", failure_classification=FailureClassification.TERMINAL_FAILURE, failure_reason="the local product stage could not produce its typed output", metadata={"error_type": type(exc).__name__, "error_detail": safe_exception_detail(exc)})
         duration = max(0.0, monotonic() - started)
         self.telemetry.observe_adapter_operation(self._adapter_kind(request.stage_id), duration, result.status.value)
         self.telemetry.observe_stage_result(correlation=correlation, stage_id=request.stage_id, status=result.status.value, duration_seconds=duration, metadata=result.metadata, failure_code=result.failure_code, failure_classification=result.failure_classification.value if result.failure_classification else None)
@@ -480,6 +480,36 @@ class LocalProductRuntime:
         self.platform.close()
 
 
+class MultiSourceProductRuntime:
+    """Composition root for the accepted durable multi-source product path.
+
+    The multi-source handlers are injected at this boundary, but execution is
+    still owned by the same platform, plan service, durable worker, leases,
+    attempts, and artifact store as the accepted single-source product.
+    """
+
+    def __init__(self, project_root: Path, platform, *, execution_plan_service: ExecutionPlanService, handlers, telemetry: TelemetryClient | None = None) -> None:
+        self.project_root = Path(project_root).resolve()
+        self.platform = platform
+        self.telemetry = telemetry or TelemetryClient()
+        self.handlers = handlers
+        worker = JobWorker(
+            control_store=platform.control_store,
+            artifact_store=platform.artifact_store,
+            executor=handlers.handlers(),
+            worker_id="prompt02-multi-source-worker",
+            plan_advancer=execution_plan_service,
+            telemetry=self.telemetry,
+        )
+        self.pool = BoundedWorkerPool((worker,), max_workers=1, max_jobs_per_pump=500, max_active_per_run=1, max_active_per_source=1)
+        self.execution = LocalProductExecutionSubmission(platform.control_store, self.pool)
+        self.source_service = handlers.source_service
+
+    def close(self) -> None:
+        self.execution.close()
+        self.platform.close()
+
+
 def build_local_product(project_root: Path, *, graph_root: Path | None = None, telemetry: TelemetryClient | None = None):
     from dirty_data_to_olap.platform import LocalPlatform
 
@@ -494,18 +524,35 @@ def build_local_product(project_root: Path, *, graph_root: Path | None = None, t
 
 
 def build_multi_source_product(project_root: Path, *, adapters, graph_root: Path | None = None):
-    """Build the additive Prompt02 source-set application boundary.
+    """Build the accepted durable Prompt02 source-set runtime.
 
-    Adapters are injected by the trusted composition/CI boundary so runtime
-    credentials and provider security verifiers never enter project metadata.
-    The accepted Step29 ``build_local_product`` composition is unchanged.
+    This has the same composition shape as ``build_local_product``.  The
+    injected adapters are provider configuration only; run identity, plans,
+    jobs, leases, artifacts, reviews, and stage completion remain owned by the
+    shared platform/runtime boundary.
     """
 
-    from dirty_data_to_olap.application.multi_source_product import MultiSourceProductService
+    from dirty_data_to_olap.application.multi_source_runtime import MultiSourceStageHandlers
+    from dirty_data_to_olap.platform import LocalPlatform
 
     root = Path(project_root).resolve()
-    registry = DurableSourceRegistry(root / "workspace" / "platform" / "prompt02" / "source_registry.json")
-    return MultiSourceProductService(project_root=root, registry=registry, adapters=adapters, graph_root=graph_root or root)
+    platform = LocalPlatform.from_project_root(root)
+    graph = Path(graph_root or root).resolve()
+    plan_service = ExecutionPlanService(root, platform.control_store, platform.artifact_store, graph_root=graph)
+    shared_telemetry = TelemetryClient()
+    registry = DurableSourceRegistry(root / "workspace" / "platform" / "product" / "source_registry.json")
+    handlers = MultiSourceStageHandlers(project_root=root, platform=platform, registry=registry, adapters=adapters, policy_root=graph, telemetry=shared_telemetry)
+    runtime = MultiSourceProductRuntime(root, platform, execution_plan_service=plan_service, handlers=handlers, telemetry=shared_telemetry)
+    backend = BackendService(
+        control_store=platform.control_store,
+        artifact_store=platform.artifact_store,
+        execution=runtime.execution,
+        configuration_fingerprint=platform.config.configuration_fingerprint,
+        execution_plan_service=plan_service,
+        source_service=runtime.source_service,
+        telemetry=shared_telemetry,
+    )
+    return platform, backend, runtime
 
 
-__all__ = ["LocalProductRuntime", "build_local_product", "build_multi_source_product"]
+__all__ = ["LocalProductRuntime", "MultiSourceProductRuntime", "build_local_product", "build_multi_source_product"]

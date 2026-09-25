@@ -236,7 +236,7 @@ def run_target_negative_controls(
         ]
         if not detected:
             raise ValidationFailure(f"negative control was not detected: {control_id}")
-        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": detected})
+        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": detected, "observed_rejection": f"ValidationStatus.FAIL:{','.join(detected)}"})
     return results
 
 
@@ -285,6 +285,18 @@ def run_accounting_negative_controls(
         item for item in context.inputs.accounting.scopes[0].entries if item.input_record_ref == source_ref
     )
     controls = [
+        (
+            "missing_source_disposition",
+            context.inputs.accounting.model_copy(update={
+                "scopes": (
+                    context.inputs.accounting.scopes[0].model_copy(update={
+                        "entries": tuple(item for item in context.inputs.accounting.scopes[0].entries if item.input_record_ref != source_ref),
+                    }),
+                    *context.inputs.accounting.scopes[1:],
+                ),
+            }),
+            "source_record_accounting",
+        ),
         (
             "wrong_source_disposition",
             replace_accounting_entry(
@@ -335,7 +347,7 @@ def run_accounting_negative_controls(
         item = next(item for item in outcome.report.checks if item.check_id == check_id)
         if item.status is not ValidationStatus.FAIL:
             raise ValidationFailure(f"accounting control was not detected: {control_id}")
-        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id]})
+        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id], "observed_rejection": f"ValidationStatus.{item.status.value}:{check_id}"})
     return results
 
 
@@ -407,7 +419,7 @@ def run_canonical_negative_controls(
         item = next(item for item in outcome.report.checks if item.check_id == check_id)
         if item.status is not ValidationStatus.FAIL:
             raise ValidationFailure(f"canonical control was not detected: {control_id}")
-        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id]})
+        results.append({"control_id": control_id, "status": "DETECTED", "detected_checks": [check_id], "observed_rejection": f"ValidationStatus.{item.status.value}:{check_id}"})
     return results
 
 

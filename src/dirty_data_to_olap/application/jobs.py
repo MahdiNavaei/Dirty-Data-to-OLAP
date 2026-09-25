@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
+from threading import Event, Thread
 from typing import Callable, Mapping, Protocol, Sequence
 
 from dirty_data_to_olap.application.platform import (
@@ -24,7 +24,7 @@ from dirty_data_to_olap.application.platform import (
 from dirty_data_to_olap.application.review_policy import ReviewCompatibilityError, ReviewPolicyService
 from dirty_data_to_olap.application.review_subjects import ReviewSubjectDerivationPort, ReviewCheckpointSubjectResolver
 from dirty_data_to_olap.domain.contracts.api import ExecutionCommand, ExecutionAction, SubmissionResult
-from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewCompatibilityContext, ReviewDecisionStatus, review_subject_key
+from dirty_data_to_olap.domain.contracts.canonical import ReviewCheckpoint, ReviewDecisionStatus, review_subject_key
 from dirty_data_to_olap.domain.contracts.jobs import (
     DeliveryPhase,
     ExecutionPlan,
@@ -53,7 +53,7 @@ from dirty_data_to_olap.domain.contracts.platform import (
 )
 from dirty_data_to_olap.domain.contracts.validation import ValidationReport
 from dirty_data_to_olap.domain.contracts.source import stable_id, utc_now
-from dirty_data_to_olap.observability import TelemetryClient, classify_error
+from dirty_data_to_olap.observability import TelemetryClient, classify_error, safe_exception_detail
 
 
 class StageExecutorPort(Protocol):
@@ -489,7 +489,37 @@ class JobWorker:
             self.telemetry.operation(event_name="stage.delivery_started", component="worker", operation="handler_delivery", correlation=correlation, status="STARTED")
             attempt = self.control_store.get_stage_attempt(attempt.attempt_id) or attempt.model_copy(update={"revision": attempt.revision + 1, "delivery_phase": DeliveryPhase.HANDLER_DELIVERY_STARTED.value})
             self._inject_fault("after_handler_delivery_marker", job, attempt)
-            result = self._execute(stage.handler_key, request, probe)
+            heartbeat_stop = Event()
+            heartbeat_errors: list[Exception] = []
+
+            def renew_delivery_lease() -> None:
+                interval = max(0.5, self.lease_seconds / 3)
+                while not heartbeat_stop.wait(interval):
+                    try:
+                        self.control_store.heartbeat_job(
+                            job_id=job.job_id,
+                            worker_id=self.worker_id,
+                            lease_generation=job.lease_generation,
+                            now=_safe_now(self.clock),
+                            lease_seconds=self.lease_seconds,
+                        )
+                    except Exception as exc:
+                        heartbeat_errors.append(exc)
+                        return
+
+            heartbeat_thread = Thread(
+                target=renew_delivery_lease,
+                name=f"{self.worker_id}-lease-heartbeat",
+                daemon=True,
+            )
+            heartbeat_thread.start()
+            try:
+                result = self._execute(stage.handler_key, request, probe)
+                if heartbeat_errors:
+                    raise heartbeat_errors[0]
+            finally:
+                heartbeat_stop.set()
+                heartbeat_thread.join()
             self._inject_fault("after_handler_returns_before_result_record", job, attempt)
             self._inject_fault("after_artifact_publication", job, attempt)
             after = _safe_now(self.clock)
@@ -519,7 +549,7 @@ class JobWorker:
                 failure_code="STAGE_OUTCOME_UNKNOWN",
                 failure_classification=FailureClassification.UNKNOWN_SIDE_EFFECT,
                 failure_reason="stage execution outcome is unknown after worker delivery",
-                metadata={"error_type": type(exc).__name__},
+                metadata={"error_type": type(exc).__name__, "error_detail": safe_exception_detail(exc)},
             )
         self.control_store.record_stage_result(job_id=job.job_id, worker_id=self.worker_id, lease_generation=job.lease_generation, attempt=attempt, result=result, now=_safe_now(self.clock))
         self.telemetry.operation(event_name="stage.result_recorded", component="worker", operation="result_record", correlation=correlation, status=result.status.value, error_class=classify_error(result.failure_code, result.failure_classification.value if result.failure_classification else None) if result.failure_code else None, details={"output_artifact_count": len(result.output_artifact_refs)})

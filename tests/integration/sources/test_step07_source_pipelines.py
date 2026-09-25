@@ -30,6 +30,7 @@ from dirty_data_to_olap.domain.contracts.source import (
     RowCountSemantics,
     TableObservationStatus,
 )
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -125,7 +126,7 @@ def test_sqlite_dlt_discovery_extraction_and_staging(step07_workspace: Path) -> 
     )
     assert result.accounting.input_records_observed == 11
     assert result.accounting.successfully_staged_records == 11
-    assert result.snapshot.consistency.value == "BEST_EFFORT"
+    assert result.snapshot.consistency.value == "TRANSACTION_SCOPED"
     assert len(result.batches) >= 5
     assert all(batch.publication_state is PublicationState.COMPLETE for batch in result.batches)
     assert all((ROOT / batch.artifact_location).is_file() for batch in result.batches)
@@ -198,6 +199,7 @@ def test_file_snapshot_rejects_change_between_discovery_and_extraction(step07_wo
         )
     assert raised.value.failure.kind is SourceFailureKind.SNAPSHOT_INVALID
     assert not list((step07_workspace / "workspace" / "runs" / "before").rglob("*.parquet"))
+    record_control_observation("NC02", f"SourceIngestionError:{raised.value.failure.kind.value}", "tests/integration/sources/test_step07_source_pipelines.py:199")
 
 
 def test_file_snapshot_rejects_change_during_extraction(step07_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:

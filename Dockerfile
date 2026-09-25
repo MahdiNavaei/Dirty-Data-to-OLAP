@@ -149,7 +149,8 @@ FROM ${NODE_IMAGE} AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --include=optional \
+    && node -e "require.resolve('@rolldown/binding-linux-x64-gnu')"
 COPY frontend ./
 COPY --from=python-dependencies /app/frontend-openapi.json ./openapi.json
 

@@ -75,7 +75,13 @@ class ReviewPolicyService:
             raise ReviewCompatibilityError(errors)
         return decision
 
-    def evidence_context(self, decision: RelationshipDecision | SemanticMappingDecision, domain_assertion_refs: tuple[str, ...]) -> ReviewCompatibilityContext:
+    def evidence_context(
+        self,
+        decision: RelationshipDecision | SemanticMappingDecision,
+        domain_assertion_refs: tuple[str, ...],
+        *,
+        subject_content_hash: str | None = None,
+    ) -> ReviewCompatibilityContext:
         if isinstance(decision, RelationshipDecision):
             scope = {
                 "from": {"table": decision.from_table, "columns": decision.from_columns},
@@ -86,9 +92,13 @@ class ReviewPolicyService:
                 "source": {"source_id": decision.source_id, "column_id": decision.source_column_id},
                 "target": {"source_id": decision.target_source_id, "column_id": decision.target_column_id},
             }
-        content_hash = stable_id("evidence-content", decision.model_dump(mode="json"))
+        # The default keeps the semantic policy fingerprint useful for pure
+        # domain callers.  Durable review subjects must override it with the
+        # immutable artifact-store hash at the persistence boundary.
+        semantic_content_hash = stable_id("evidence-content", decision.model_dump(mode="json"))
+        content_hash = subject_content_hash or semantic_content_hash
         policy_version = f"{decision.policy.policy_id}:{decision.policy.version}"
-        applicability = stable_id("evidence-applicability", {"decision": decision.decision_id, "content": content_hash, "input": decision.input_evidence_fingerprint, "scope": scope})
+        applicability = stable_id("evidence-applicability", {"decision": decision.decision_id, "content": semantic_content_hash, "input": decision.input_evidence_fingerprint, "scope": scope})
         return ReviewCompatibilityContext(
             review_checkpoint_id=ReviewCheckpoint.REVIEW_EVIDENCE_DECISIONS,
             subject_stage="EVIDENCE_FUSION",
@@ -108,7 +118,7 @@ class ReviewPolicyService:
             raise ValueError("invalidation requires a reason")
         return decision.model_copy(update={"decision": ReviewDecisionStatus.INVALIDATED, "invalidation_reason": reason})
 
-    def analytical_plan_context(self, plan: AnalyticalPlan) -> ReviewCompatibilityContext:
+    def analytical_plan_context(self, plan: AnalyticalPlan, *, subject_content_hash: str | None = None) -> ReviewCompatibilityContext:
         """Bind analytical review to the exact plan and finalized canonical model."""
 
         semantic_scope = {
@@ -136,7 +146,10 @@ class ReviewPolicyService:
             review_checkpoint_id=ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN,
             subject_stage="ANALYTICAL_PLANNING",
             subject_artifact_id=plan.plan_id,
-            subject_content_hash=plan.content_hash,
+            # Domain callers retain the semantic model hash by default. The
+            # durable review boundary supplies the immutable artifact-store
+            # hash so the API can bind the assertion to published bytes.
+            subject_content_hash=subject_content_hash or plan.content_hash,
             subject_schema_version=plan.schema_version,
             model_version=plan.plan_version,
             source_schema_fingerprints={
@@ -157,6 +170,8 @@ class ReviewPolicyService:
         compiled_plan: CompiledPlan,
         generated_sql: GeneratedSQL,
         target_config: TargetConfig,
+        *,
+        subject_content_hash: str | None = None,
     ) -> ReviewCompatibilityContext:
         """Bind materialization approval to compiled SQL and controlled target."""
 
@@ -169,7 +184,10 @@ class ReviewPolicyService:
             review_checkpoint_id=ReviewCheckpoint.REVIEW_MATERIALIZATION_PLAN,
             subject_stage="COMPILATION",
             subject_artifact_id=compiled_plan.compiled_plan_id,
-            subject_content_hash=subject_hash,
+            # Domain callers retain the semantic binding by default. The
+            # durable review boundary overrides this with the compiled-plan
+            # artifact-store hash.
+            subject_content_hash=subject_content_hash or subject_hash,
             subject_schema_version=compiled_plan.schema_version,
             model_version=compiled_plan.compiler_version,
             source_schema_fingerprints={

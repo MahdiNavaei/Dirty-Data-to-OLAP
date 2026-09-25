@@ -1,0 +1,62 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+description = "Prompt02 logical identifiers incorrectly classified as generic API keys"
+
+  [[rules.allowlists]]
+  description = "Only the four redacted historical false positives from Prompt02-R3"
+  condition = "AND"
+  commits = ["9e51a15333106b70325e90cbcd093ce9fcfff17c"]
+  paths = [
+    '''^tests/product_acceptance/test_multi_source_v1\.py$''',
+    '''^src/dirty_data_to_olap/application/multi_source_runtime\.py$''',
+  ]
+  regexTarget = "line"
+  regexes = [
+    '''idempotency_key="prompt02-submit"''',
+    '''(?:customer|source|date)_key''',
+  ]
+
+[[rules.allowlists]]
+description = "Only typed foreign-key field names in historical analytical-spec code"
+condition = "AND"
+commits = [
+  "f7c04b0366ecaeb3433a28efc48ee5aaaede3be6",
+  "4ac963e4747cb7551dced5d1a09c428928efae27",
+  "36071d6057f5bfc7176260ac4832de62424e0475",
+  "b8cebf561addbc4a9e21c8ce1da9792293cec64c",
+  "1d031b6815579b81c9a08b91d896dab12db4440c",
+]
+paths = [
+  '''^src/dirty_data_to_olap/application/analytical_planner\.py$''',
+  '''^src/dirty_data_to_olap/application/product_policy\.py$''',
+  '''^src/dirty_data_to_olap/application/product_runtime\.py$''',
+  '''^tools/run_step20_generic_reference\.py$''',
+  '''^tools/run_step20_reference\.py$''',
+]
+regexTarget = "line"
+regexes = [
+  '''FactForeignKeySpec\(.*(?:fact_column|dimension_key_column|canonical_entity_type_id|input_reference_column)''',
+]
+
+[[rules.allowlists]]
+description = "Only historical execution-gate identifiers in validator compatibility code"
+condition = "AND"
+commits = [
+  "d4ea0967f9d5716a517fd0b94a4986bb6ec268d4",
+  "3ceff6bde3e1d0ab44c35b56c6043d790ab6548b",
+  "4897437c9e7f2340073cf3c7aed5400e71d94742",
+  "596a8507a0c549d3852ccae2a34dfb1fba13ae36",
+]
+paths = [
+  '''^tools/execution_state\.py$''',
+  '''^tools/validate_data_architecture\.py$''',
+  '''^tools/validate_engineering_plan\.py$''',
+  '''^tools/validate_solution_architecture\.py$''',
+]
+regexTarget = "line"
+regexes = [
+  '''key\s*==\s*"(?:G14_USABILITY|G5_INFERENCE_VALIDITY|G7_END_TO_END_PRODUCT|G8_REPRODUCIBLE_BUILD|G9_FUNCTIONAL_SUPPORT|G10_APPLICATION_SECURITY|G11_RESILIENCE|G12_CAPACITY|G13_ADVERSARIAL_SECURITY)"''',
+]

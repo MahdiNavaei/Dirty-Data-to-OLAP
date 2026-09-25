@@ -75,7 +75,7 @@ class ReviewCheckpointSubjectResolver:
             return self._identity_contexts(run_id, verified, unresolved)
         if checkpoint is ReviewCheckpoint.REVIEW_ANALYTICAL_PLAN:
             contexts = tuple(
-                self.review_policy.analytical_plan_context(payload)
+                self.review_policy.analytical_plan_context(payload, subject_content_hash=artifact.content_hash).model_copy(update={"subject_artifact_id": artifact.artifact_id})
                 for artifact, payload in verified
                 if artifact.artifact_kind == "AnalyticalPlan" and isinstance(payload, AnalyticalPlan) and payload.plan_id == artifact.artifact_id
             )
@@ -89,16 +89,21 @@ class ReviewCheckpointSubjectResolver:
         verified: list[tuple[ArtifactRef, object]],
         unresolved: list[str],
     ) -> ReviewSubjectDerivation:
-        # Keep semantic assertion identities in the review context while the
-        # subject itself is the run-scoped persisted artifact identity.
-        domain_refs = tuple(sorted(payload.assertion_id for artifact, payload in verified if artifact.artifact_kind == "DomainAssertion" and isinstance(payload, DomainAssertion)))
+        # Keep only the assertions for the reviewed decision in its context.
+        # The canonical stage reconstructs this same per-subject scope from
+        # evidence_domain_assertion_refs; using every assertion in the run
+        # would make an otherwise valid persisted review fail compatibility.
+        domain_refs_by_subject: dict[str, list[str]] = {}
+        for artifact, payload in verified:
+            if artifact.artifact_kind == "DomainAssertion" and isinstance(payload, DomainAssertion):
+                domain_refs_by_subject.setdefault(payload.subject_id, []).append(payload.assertion_id)
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, payload in verified:
             if artifact.artifact_kind == "RelationshipDecision" and isinstance(payload, RelationshipDecision):
-                context = self.review_policy.evidence_context(payload, domain_refs)
+                context = self.review_policy.evidence_context(payload, tuple(sorted(domain_refs_by_subject.get(payload.subject_id, ()))), subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "SemanticMappingDecision" and isinstance(payload, SemanticMappingDecision):
-                context = self.review_policy.evidence_context(payload, domain_refs)
+                context = self.review_policy.evidence_context(payload, tuple(sorted(domain_refs_by_subject.get(payload.subject_id, ()))), subject_content_hash=artifact.content_hash)
                 contexts.append(context.model_copy(update={"subject_artifact_id": artifact.artifact_id}))
             elif artifact.artifact_kind == "EvidenceFusionResult" and isinstance(payload, EvidenceFusionResult):
                 # A container with more than one decision is never collapsed
@@ -127,11 +132,38 @@ class ReviewCheckpointSubjectResolver:
             for artifact, payload in verified
             if artifact.artifact_kind == "CanonicalIdentityProposal" and isinstance(payload, CanonicalIdentityProposal) and payload.proposal_id == artifact.artifact_id
         ]
-        er_results = {
-            artifact.artifact_id: payload
-            for artifact, payload in verified
-            if artifact.artifact_kind == "EntityResolutionResult" and isinstance(payload, EntityResolutionResult)
-        }
+        er_results: dict[str, EntityResolutionResult] = {}
+        verified_er_ids: set[str] = set()
+
+        def bind_er_result(artifact: ArtifactRef, payload: EntityResolutionResult) -> None:
+            # CanonicalIdentityProposal.er_result_refs bind the proposal to
+            # the durable ER output references carried inside the typed
+            # EntityResolutionResult.  Retain both the outer published
+            # artifact identity and each verified nested result reference.
+            er_results[artifact.artifact_id] = payload
+            verified_er_ids.add(artifact.artifact_id)
+            for result_artifact in payload.artifacts:
+                er_results[result_artifact.artifact_id] = payload
+
+        for artifact, payload in verified:
+            if artifact.artifact_kind == "EntityResolutionResult" and isinstance(payload, EntityResolutionResult):
+                bind_er_result(artifact, payload)
+
+        # REVIEW_CANONICAL_IDENTITY directly depends on the proposal.  The
+        # proposal's typed references may therefore point to the ER artifact
+        # without that artifact being present in the review job's direct input
+        # list.  Rehydrate only run-scoped, published, integrity-verified ER
+        # outputs from the durable artifact registry; no review context is
+        # synthesized and no unregistered payload is accepted.
+        for candidate in self.control_store.list_artifacts(run_id=run_id, artifact_kind="EntityResolutionResult", limit=10000):
+            if candidate.artifact_id in verified_er_ids:
+                continue
+            try:
+                actual, payload = self._read_verified(run_id, candidate)
+            except (KeyError, OSError, PlatformError, ValueError):
+                continue
+            if isinstance(payload, EntityResolutionResult):
+                bind_er_result(actual, payload)
         contexts: list[ReviewCompatibilityContext] = []
         for artifact, proposal in proposals:
             hypothesis = hypotheses.get(proposal.hypothesis_artifact_id)
@@ -160,7 +192,14 @@ class ReviewCheckpointSubjectResolver:
                 er_hashes[result.spec.entity_family] = stable_digest(result.model_dump(mode="json"))
             else:
                 try:
-                    contexts.append(self.canonical_finalization.identity_context(hypothesis, proposal, er_hashes))
+                    contexts.append(
+                        self.canonical_finalization.identity_context(
+                            hypothesis,
+                            proposal,
+                            er_hashes,
+                            subject_content_hash=artifact.content_hash,
+                        )
+                    )
                 except ValueError:
                     unresolved.append(artifact.artifact_id)
         return ReviewSubjectDerivation(
@@ -224,7 +263,14 @@ class ReviewCheckpointSubjectResolver:
                 # transport hashes are independently checked above and by
                 # _read_verified; they are deliberately not substituted for
                 # the builder's semantic review hash.
-                contexts.append(self.review_policy.materialization_context(compiled_plan, sql, target))
+                contexts.append(
+                    self.review_policy.materialization_context(
+                        compiled_plan,
+                        sql,
+                        target,
+                        subject_content_hash=compiled_artifact.content_hash,
+                    ).model_copy(update={"subject_artifact_id": compiled_artifact.artifact_id})
+                )
         return ReviewSubjectDerivation(
             contexts=self._unique_contexts(contexts),
             unresolved_subject_ids=tuple(sorted(set(unresolved))),

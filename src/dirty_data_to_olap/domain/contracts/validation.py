@@ -194,6 +194,11 @@ class SourceTruthManifest(_SourceModel):
     truth_id: str = Field(min_length=1)
     truth_version: str = Field(min_length=1)
     source_snapshot_id: str = Field(min_length=1)
+    # V1 keeps ``source_snapshot_id`` as the stable binding identity used by
+    # ValidationArtifactBindings.  Multi-source truth additionally records the
+    # exact snapshot for each source so provenance checks do not collapse four
+    # independent observations into one fictitious snapshot.
+    source_snapshot_ids: Mapping[str, str] = Field(default_factory=dict)
     source_schema_fingerprints: Mapping[str, str] = Field(min_length=1)
     records: tuple[SourceTruthRecord, ...] = Field(min_length=1)
     entities: tuple[SourceTruthEntity, ...] = ()
@@ -210,6 +215,13 @@ class SourceTruthManifest(_SourceModel):
         refs = [item.record_ref for item in self.records]
         if len(set(refs)) != len(refs):
             raise ValueError("source truth record references must be unique")
+        if self.source_snapshot_ids:
+            if set(self.source_snapshot_ids) != set(self.source_schema_fingerprints):
+                raise ValueError("multi-source truth snapshot and schema maps must cover the same sources")
+            if any(record.source_id not in self.source_snapshot_ids for record in self.records):
+                raise ValueError("multi-source truth record references an unknown source snapshot")
+            if any(record.snapshot_id != self.source_snapshot_ids[record.source_id] for record in self.records):
+                raise ValueError("multi-source truth record snapshot does not match its source snapshot map")
         entity_ids = [item.canonical_entity_id for item in self.entities]
         if len(set(entity_ids)) != len(entity_ids):
             raise ValueError("source truth entity references must be unique")
@@ -248,6 +260,7 @@ class SourceTruthManifest(_SourceModel):
     def source_snapshot_fingerprint(self) -> str:
         return stable_digest({
             "source_snapshot_id": self.source_snapshot_id,
+            "source_snapshot_ids": dict(sorted(self.source_snapshot_ids.items())),
             "source_schema_fingerprints": dict(sorted(self.source_schema_fingerprints.items())),
             "record_refs": sorted(item.record_ref for item in self.records),
         })

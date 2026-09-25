@@ -685,7 +685,12 @@ def extended_scenarios(root: Path) -> int:
     assert analytical_worker.run_once().status == JobStatus.SUCCEEDED.value
     assert analytical_worker.run_once().status == JobStatus.NEEDS_REVIEW.value
     analytical_job = analytical_control.get_stage_job(run_id=analytical_run.run_id, stage_id="REVIEW_ANALYTICAL_PLAN")
-    assert analytical_job is not None and analytical_job.review_context == ReviewPolicyService().analytical_plan_context(analytical_plan)
+    analytical_subject = analytical_control.get_artifact(analytical_plan.plan_id)
+    assert analytical_subject is not None
+    expected_analytical_context = ReviewPolicyService().analytical_plan_context(analytical_plan).model_copy(
+        update={"subject_content_hash": analytical_subject.content_hash, "subject_artifact_id": analytical_subject.artifact_id}
+    )
+    assert analytical_job is not None and analytical_job.review_context == expected_analytical_context
     scenarios += 4
     analytical_control.close()
 

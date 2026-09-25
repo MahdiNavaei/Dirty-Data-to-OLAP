@@ -249,7 +249,12 @@ class AnalyticalCompilerService:
         if plan.review_state is not AnalyticalReviewState.REVIEW_REQUIRED:
             raise AnalyticalCompilationError("compiler accepts only a review-required plan with a separate compatible review")
         try:
-            ReviewPolicyService().require_compatible(analytical_review, ReviewPolicyService().analytical_plan_context(plan))
+            ReviewPolicyService().require_compatible(
+                analytical_review,
+                ReviewPolicyService().analytical_plan_context(plan).model_copy(
+                    update={"subject_content_hash": analytical_review.subject_content_hash}
+                ),
+            )
         except ReviewCompatibilityError as exc:
             raise AnalyticalCompilationError("REVIEW_ANALYTICAL_PLAN_INCOMPATIBLE:" + ",".join(exc.errors)) from exc
         if plan.unresolved_items:

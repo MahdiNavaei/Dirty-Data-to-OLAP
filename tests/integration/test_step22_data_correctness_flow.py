@@ -13,6 +13,7 @@ from tools.validate_step22_data_correctness import (
     run_negative_controls,
     run_oracle_mismatch_controls,
 )
+from tests.product_acceptance.prompt02_control_evidence import record_control_observation
 
 
 def test_retail_reference_closes_g6_from_runtime_canonical_to_target():
@@ -52,6 +53,8 @@ def test_adversarial_controls_detect_same_totals_count_and_fk_traps():
         "orphan_required_fk",
         "warehouse_key_collision",
     }
+    grain = next(item for item in controls if item["control_id"] == "same_count_remove_and_duplicate_grain")
+    record_control_observation("NC12", grain["observed_rejection"], "tests/integration/test_step22_data_correctness_flow.py:44")
 
 
 def test_step22_detects_runtime_accounting_canonical_oracle_and_binding_mutations():
@@ -59,14 +62,19 @@ def test_step22_detects_runtime_accounting_canonical_oracle_and_binding_mutation
     outcome = ValidationService().validate(context.inputs, DuckDBValidationTargetReader(Path(".")))
     snapshot = outcome.target_snapshot
     assert snapshot is not None
-    for controls in (
+    observed_controls = (
         run_binding_negative_controls(context, snapshot),
         run_accounting_negative_controls(context, snapshot),
         run_canonical_negative_controls(context, snapshot),
         run_oracle_mismatch_controls(context, snapshot),
-    ):
+    )
+    for controls in observed_controls:
         assert controls
         assert all(item["status"] == "DETECTED" for item in controls)
+    accounting = next(item for item in observed_controls[1] if item["control_id"] == "missing_source_disposition")
+    canonical = next(item for item in observed_controls[2] if item["control_id"] == "false_merge")
+    record_control_observation("NC05", accounting["observed_rejection"], "tests/integration/test_step22_data_correctness_flow.py:75")
+    record_control_observation("NC13", canonical["observed_rejection"], "tests/integration/test_step22_data_correctness_flow.py:76")
 
 
 def test_generic_device_location_reading_uses_same_validator():
