@@ -1,7 +1,8 @@
 # Product Completion Execution Plan
 
-This plan follows Prompt 01. Prompt 02 implementation is now in progress; the
-plan does not authorize Prompt 03 or any later prompt.
+This plan follows Prompt 01. Prompt 02 has a historical exact-commit PASS;
+Prompt 03 is the current bounded composition scope. The plan does not
+authorize Prompt 04 or any later prompt.
 
 ## Completion sequence
 
@@ -28,13 +29,20 @@ Do not solve generic domain policy, review UI action expansion, or export in
 this prompt except where a minimal shared contract is required to execute the
 scenario.
 
-### Prompt 02 current closure status (2026-09-21)
+### Prompt 02 current closure status
 
-The additive source-set implementation, real-source acceptance harness,
-independent oracle boundary, negative controls, and CI job are present. The
-exit evidence is still outstanding: no successful live four-source run or
-exact-commit CI PASS receipt has been produced locally, so Prompt 02 remains
-blocked and Prompt 03 is not started.
+Prompt 02 is historically accepted for exact commit
+`7786ea301e3482b374e57447974b73d9a0176f8c` by successful run
+`36081128931`, with artifact `prompt02-acceptance-evidence-36081128931`
+(`10844010695`). The receipt records all 16 jobs successful, real PostgreSQL,
+MySQL, SQL Server and CSV participation, persisted reviews, DuckDB
+materialization, G6, independent oracle comparison, and NC01-NC14 `14/14`.
+
+The earlier failed run `35700636572` remains historical failure evidence, not
+the current Prompt 02 verdict. The current Prompt 03 branch has not repeated
+the full four-source regression locally; its focused result is `3 passed, 1
+skipped` because the local database environment is unavailable. That limitation
+is separate from the accepted Prompt 02 result.
 
 ## Prompt 03 — Generic product boundary
 

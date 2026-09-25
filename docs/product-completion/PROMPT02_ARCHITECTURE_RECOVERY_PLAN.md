@@ -1,6 +1,11 @@
 # Prompt02-R Architecture Recovery Plan
 
-Status: `PHASE_B_LOCAL_WIRING_COMPLETE_LIVE_ACCEPTANCE_BLOCKED`
+Status: `HISTORICAL PHASE_B SNAPSHOT — PROMPT02 ACCEPTANCE LATER PASSED`
+
+This document preserves the earlier recovery plan and its historical
+limitations. The later accepted Prompt02 result is bound to commit
+`7786ea301e3482b374e57447974b73d9a0176f8c` and run `36081128931`; current
+Prompt03-branch rerun status is tracked in `07_PRODUCT_ACCEPTANCE_STATE.yml`.
 
 Starting committed HEAD: `eb6f9aa81bacabf5b2c05e59fdcf3d4e28e0c304`
 
@@ -93,4 +98,6 @@ not upgraded to a Prompt02 result.
 - Only after those checks may a reviewed recovery commit and bounded CI attempt
   be considered.
 
-Prompt02 remains `BLOCKED`; Prompt03 and Step42 remain `NOT_STARTED`.
+At the time of this historical plan Prompt02 remained `BLOCKED`. That statement
+is superseded by the accepted Prompt02 evidence above. Prompt03 is now the
+current bounded scope; Prompt04 and Step42 remain `NOT_STARTED`.

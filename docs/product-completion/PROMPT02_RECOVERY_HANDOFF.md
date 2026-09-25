@@ -1,6 +1,12 @@
 # Prompt02-R Recovery Handoff
 
-Status: `BLOCKED — LIVE HETEROGENEOUS ACCEPTANCE PENDING`
+Status: `HISTORICAL SNAPSHOT — SUPERSEDED BY PROMPT02 ACCEPTED EVIDENCE`
+
+This handoff records the pre-acceptance recovery state. The current Prompt02
+truth is PASS for commit `7786ea301e3482b374e57447974b73d9a0176f8c`, run
+`36081128931`, artifact `prompt02-acceptance-evidence-36081128931`.
+The current Prompt03 branch has not repeated the full four-source regression
+locally; that limitation does not invalidate the historical accepted commit.
 
 ## Baseline and worktree
 
@@ -49,8 +55,9 @@ evidence, no materialized Prompt02 target, and no G6 acceptance receipt to
 report. Do not start another remote CI attempt until the local provider-capable
 ladder can run.
 
-Prompt02 remains `BLOCKED`; the original V1 state remains `PENDING`; Prompt03
-and Step42 remain `NOT_STARTED`.
+At the time of this historical handoff Prompt02 was `BLOCKED`. It is superseded
+by the accepted Prompt02 evidence above. The original V1 state remains
+`PENDING`; Prompt04 and Step42 remain `NOT_STARTED`.
 
 The protected `tests/quality_unit_artifacts/` directory and the user-owned RAR
 remain unmodified, unstaged and uncommitted. No reset, clean, amend, rebase,
@@ -78,4 +85,6 @@ R4 adds a commit/path/rule-scoped Gitleaks exception for those historical
 logical identifiers, corrects the runtime-owned registry access, writes
 sanitized failure/acceptance evidence, retains JSON evidence in CI, and makes
 the independent validator reject missing or unexecuted NC01-NC14 controls.
-Prompt02 remains `BLOCKED` until all fourteen controls execute honestly.
+At that historical point Prompt02 remained `BLOCKED` until all fourteen
+controls executed honestly; the later accepted run `36081128931` records all
+fourteen controls as PASS.
