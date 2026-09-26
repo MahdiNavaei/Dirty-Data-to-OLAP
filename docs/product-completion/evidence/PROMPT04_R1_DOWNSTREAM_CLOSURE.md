@@ -131,3 +131,74 @@ override path. Overall V1 remains pending. Historical Prompt02 acceptance
 remains bound to its accepted commit and CI evidence; this work does not
 upgrade it to a current-branch four-source rerun. Prompt05 and Prompt06 are
 not started, and Step42 remains not started.
+
+## Remote completeness repair
+
+The pushed Prompt04-R1 commit `f5a759218ddb9332ef15c7ca37ec2135c496d323`
+was tracked-clean in the original working tree but was not self-contained.
+The relevant local untracked-file audit found exactly one project-owned
+implementation file:
+
+`src/dirty_data_to_olap/application/review_readiness.py`
+
+The file was present locally, was created during the Prompt04-R1 work, and
+was omitted because the earlier explicit staging list did not include it. The
+R1 implementation imported it from both `BackendService` and `JobWorker`, so
+the omission was a publication error rather than a missing design.
+
+No other relevant untracked Python source or Prompt04 test dependency was
+found. The import-closure audit scanned 88 project files and 403 project-owned
+import edges. There were no unresolved project modules; the readiness module
+was the only resolved-but-untracked module.
+
+### Original remote reproduction
+
+A clean detached worktree was created outside the repository at:
+
+`D:\_C_DRIVE_OFFLOAD\temp\ddo-prompt04-r2-remote-20260926`
+
+It was checked out from remote SHA `f5a759218ddb9332ef15c7ca37ec2135c496d323`.
+The readiness file was absent there. With `PYTHONPATH` set only to that
+worktree's `src` directory, this command:
+
+```text
+python -c "import dirty_data_to_olap.application.backend; import dirty_data_to_olap.application.jobs"
+```
+
+failed with:
+
+`ModuleNotFoundError: No module named 'dirty_data_to_olap.application.review_readiness'`
+
+### Repair and clean-checkout proof
+
+Repair commit `d653c579aa89778a339ef980e76eaa2964a93a0d` explicitly added:
+
+- `src/dirty_data_to_olap/application/review_readiness.py`, the shared
+  server-owned readiness evaluator used by backend action eligibility and
+  worker resume eligibility.
+- `tests/architecture/test_prompt04_repository_completeness.py`, a focused
+  import-path regression that requires the evaluator to resolve from this
+  repository's `src` tree.
+
+A second clean detached worktree was created at:
+
+`D:\_C_DRIVE_OFFLOAD\temp\ddo-prompt04-r2-repaired-20260926`
+
+from repair commit `d653c579aa89778a339ef980e76eaa2964a93a0d`. The clean import
+smoke test passed for `backend`, `jobs`, `product_runtime`, and
+`review_readiness`; every reported `__file__` path was inside that worktree.
+Clean `compileall` and `git diff --check` also passed.
+
+The clean checkout ran the Prompt04-R1 tests and the real local-provider
+override. Its real run was `run_88cc5be2286cbd79798ce14616f11ac9`:
+
+- Prompt04 action, lifecycle, readiness, and real override tests: `13 passed`
+- Repository completeness regression: `1 passed`
+- Step35 lost-wakeup regression: `1 passed`
+- Prompt03 regression subset: `18 passed`
+- Real downstream chain: materialization succeeded; unchanged-oracle G6 guard returned `FAIL` as expected
+
+The final self-contained implementation commit is `d653c579aa89778a339ef980e76eaa2964a93a0d`.
+The subsequent documentation/state commit is intentionally separate and is
+the final branch HEAD reported by the post-push verification; no implementation
+files are changed by that follow-up.

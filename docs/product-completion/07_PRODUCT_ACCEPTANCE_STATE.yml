@@ -74,6 +74,10 @@ product_acceptance:
   prompt04_r1_real_run: "run_23e07b110bf774b8377c738b644ef6de"
   prompt04_r1_evidence: "PROMPT04_R1_DOWNSTREAM_CLOSURE.md"
   prompt04_r1_g6_guard: "PASS_MATERIALIZATION_REACHED_G6_REJECTED_EXCLUDE_OVERRIDE_AGAINST_UNCHANGED_ORACLE"
+  prompt04_r2_status: "PASS_SELF_CONTAINED_REMOTE_PUBLICATION_VERIFIED"
+  prompt04_r2_repair_commit: "d653c579aa89778a339ef980e76eaa2964a93a0d"
+  prompt04_r2_clean_real_run: "run_88cc5be2286cbd79798ce14616f11ac9"
+  prompt04_r2_readiness_module_tracked: true
   safe_export_acceptance_executed: false
   final_product_acceptance: "PENDING"
 next_product_completion_prompt:
@@ -107,6 +111,9 @@ evidence_boundary:
   prompt04_r1_real_run: "run_23e07b110bf774b8377c738b644ef6de"
   prompt04_r1_evidence: "PROMPT04_R1_DOWNSTREAM_CLOSURE.md"
   prompt04_r1_ci: "NOT_RUN_BY_SCOPE"
+  prompt04_r2_repair_commit: "d653c579aa89778a339ef980e76eaa2964a93a0d"
+  prompt04_r2_clean_checkout: "PASS_IMPORTS_TESTS_REAL_OVERRIDE"
+  prompt04_r2_ci: "NOT_RUN_BY_SCOPE"
   production_readiness: "NOT_CLAIMED"
   oracle_support: "NOT_CLAIMED"
   calibrated_probability_support: "NOT_CLAIMED"
